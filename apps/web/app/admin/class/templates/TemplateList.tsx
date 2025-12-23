@@ -340,18 +340,6 @@ function TemplateListHeader({
             >
               Clear selection
             </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem onSelect={() => {}}>View</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => {}}>Edit</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onSelect={() => {}}
-            >
-              Delete
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
