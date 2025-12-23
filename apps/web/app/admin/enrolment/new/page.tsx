@@ -1,26 +1,32 @@
-
 import EnrolmentNewForm from "./EnrolmentNewForm";
 import { getEnrolmentNewPageData } from "@/server/enrolment/getEnrolmentNewPageData";
 
+type SearchParams = {
+  studentId?: string;
+  templateId?: string;
+  startDate?: string;
+};
+
 type PageProps = {
-  searchParams?: {
-    studentId?: string;
-    templateId?: string;
-    startDate?: string;
-  };
+  searchParams?: SearchParams | Promise<SearchParams>;
 };
 
 export default async function NewEnrolmentPage({ searchParams }: PageProps) {
-  const studentId = searchParams?.studentId;
-  const templateId = searchParams?.templateId;
+  const sp = (await searchParams) ?? {};
+
+  const studentId = sp.studentId;
+  const templateId = sp.templateId;
+  const startDate = sp.startDate;
 
   if (!studentId || !templateId) return null;
 
   const data = await getEnrolmentNewPageData({
     studentId,
     templateId,
-    startDate: searchParams?.startDate,
+    startDate,
   });
+
+  console.l
 
   if (!data) return null;
 

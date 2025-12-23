@@ -85,9 +85,16 @@ export async function createEnrolmentFromTemplate(input: {
 
       const enrolment = await tx.enrolment.create({
         data: {
-          studentId: input.studentId,
-          planId: plan.id,
+          student: {
+            connect: { id: input.studentId },
+          },
           startDate,
+          template: {
+            connect: { id : input.templateId }
+          },
+          plan: {
+            connect : { id : plan.id }
+          }
         },
       });
 
@@ -96,6 +103,7 @@ export async function createEnrolmentFromTemplate(input: {
         data: instances.map((ci) => ({
           enrolmentId: enrolment.id,
           classId: ci.id,
+          studentId : enrolment.studentId
         })),
       });
 

@@ -49,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Schedule", href: "/admin/schedule", icon: CalendarDays },
   { label: "Families", href: "/admin/family", icon: Users },
   { label: "Classes", href: "/admin/class", icon: GraduationCap },
-  { label: "Enrolments", href: "/admin/enrolment/new", icon: GraduationCap },
+  { label: "Enrolments", href: "/admin/enrolment", icon: GraduationCap },
   { label: "Messages", href: "/admin/messages", icon: MessageSquare },
   { label: "Billing", href: "/admin/billing", icon: CreditCard },
   { label: "Settings", href: "/admin/settings", icon: Settings },
