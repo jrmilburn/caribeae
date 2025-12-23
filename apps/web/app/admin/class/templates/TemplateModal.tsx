@@ -15,14 +15,18 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { ClientTemplate } from "@/server/classTemplate/types";
+import { ChevronLeft, ChevronRight, Pencil, XIcon } from "lucide-react";
+
+import type { ClientTemplate } from "@/server/classTemplate/types";
+
+// --- constants / types ---
+type FieldMode = "default" | "custom";
 
 type TemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
   template?: ClassTemplate | null;
-
   levels: Level[];
 
   onSave: (payload: ClientTemplate) => Promise<any>;
@@ -32,10 +36,12 @@ type FormState = {
   name: string;
   levelId: string;
 
+  // schedule
   dayOfWeek: string; // "" or "0".."6"
   startTime: string; // "" or "HH:MM"
-  endTime: string;   // "" or "HH:MM"
+  endTime: string; // "" or "HH:MM"
 
+  // rules
   capacity: string; // "" or "8"
   active: boolean;
 };
@@ -50,6 +56,47 @@ const DAYS: Array<{ value: string; label: string }> = [
   { value: "6", label: "Sun" },
 ];
 
+const CAPACITY_PRESETS = [6, 8, 10] as const;
+
+type DurationOption = 20 | 30 | 45 | 60 | 90 | 120;
+const DURATION_OPTIONS: DurationOption[] = [20, 30, 45, 60, 90, 120];
+
+function clampToAllowedDuration(min: number): DurationOption {
+  if (DURATION_OPTIONS.includes(min as DurationOption)) return min as DurationOption;
+
+  let best = DURATION_OPTIONS[0];
+  let bestDist = Math.abs(best - min);
+
+  for (const o of DURATION_OPTIONS) {
+    const d = Math.abs(o - min);
+    if (d < bestDist) {
+      best = o;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+function inferDurationMin(
+  startMin: number | null,
+  endMin: number | null,
+  fallback: DurationOption
+): DurationOption {
+  if (startMin === null || endMin === null) return fallback;
+  const diff = endMin - startMin;
+  if (diff <= 0) return fallback;
+  return clampToAllowedDuration(diff);
+}
+
+function addMinutesToTimeInput(startHHMM: string, minutes: number): string | null {
+  const startMin = timeInputToMinutes(startHHMM);
+  if (startMin === null) return null;
+  const end = startMin + minutes;
+  if (end > 24 * 60) return null; // keep MVP simple: don’t allow crossing midnight
+  return minutesToTimeInput(end);
+}
+
+
 export function TemplateModal({
   open,
   onOpenChange,
@@ -57,85 +104,144 @@ export function TemplateModal({
   levels,
   onSave,
 }: TemplateModalProps) {
-  const mode: "create" | "edit" = template ? "edit" : "create";
+  const isEditMode = Boolean(template);
+
+  // wizard step: 0 = basics, 1 = schedule/rules
+  const [step, setStep] = React.useState<0 | 1>(0);
+  const [lengthMode, setLengthMode] = React.useState<FieldMode>("default");
+    const [durationMin, setDurationMin] = React.useState<DurationOption>(45);
+
 
   const [form, setForm] = React.useState<FormState>({
     name: "",
     levelId: levels?.[0]?.id ?? "",
+
     dayOfWeek: "",
     startTime: "",
     endTime: "",
+
     capacity: "",
     active: true,
   });
+
+  // schedule modes (optional)
+  const [scheduleMode, setScheduleMode] = React.useState<FieldMode>("custom");
+
+  // capacity modes
+  const [capacityMode, setCapacityMode] = React.useState<FieldMode>("default");
+  const [capacityCustomOpen, setCapacityCustomOpen] = React.useState(false);
+  const customCapacityRef = React.useRef<HTMLInputElement | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [touched, setTouched] = React.useState<{ levelId?: boolean }>({});
   const [error, setError] = React.useState<string>("");
 
-  React.useEffect(() => {
-    if (!open) return;
+  const selectedLevel = React.useMemo(
+    () => levels.find((l) => l.id === form.levelId) ?? null,
+    [levels, form.levelId]
+  );
 
-    if (template) {
-      setForm({
-        name: template.name ?? "",
-        levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
-        dayOfWeek:
-          template.dayOfWeek === null || template.dayOfWeek === undefined
-            ? ""
-            : String(template.dayOfWeek),
-        startTime:
-          typeof template.startTime === "number"
-            ? minutesToTimeInput(template.startTime)
-            : "",
-        endTime:
-          typeof template.endTime === "number"
-            ? minutesToTimeInput(template.endTime)
-            : "",
-        capacity:
-          template.capacity === null || template.capacity === undefined
-            ? ""
-            : String(template.capacity),
-        active: template.active ?? true,
-      });
-    } else {
-      setForm({
-        name: "",
-        levelId: levels?.[0]?.id ?? "",
-        dayOfWeek: "",
-        startTime: "",
-        endTime: "",
-        capacity: "",
-        active: true,
-      });
-    }
+React.useEffect(() => {
+  if (!open) return;
 
-    setTouched({});
-    setError("");
-    setSubmitting(false);
-  }, [open, template, levels]);
+  if (template) {
+    const start = typeof template.startTime === "number" ? template.startTime : null;
+    const end = typeof template.endTime === "number" ? template.endTime : null;
+
+    const inferred = inferDurationMin(start, end, 45);
+
+    setForm({
+      name: template.name ?? "",
+      levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
+      dayOfWeek:
+        template.dayOfWeek === null || template.dayOfWeek === undefined
+          ? ""
+          : String(template.dayOfWeek),
+      startTime: typeof start === "number" ? minutesToTimeInput(start) : "",
+      endTime: "", // no longer used in UI (keep in FormState if you want, but ignore it)
+      capacity:
+        template.capacity === null || template.capacity === undefined
+          ? ""
+          : String(template.capacity),
+      active: template.active ?? true,
+    });
+
+    setDurationMin(inferred);
+
+    // decide default/custom for duration based on level default
+    const lvl = levels.find((l) => l.id === (template.levelId ?? "")) ?? null;
+    const defaultLen = lvl ? clampToAllowedDuration(lvl.defaultLengthMin) : (45 as DurationOption);
+    setLengthMode(inferred === defaultLen ? "default" : "custom");
+
+    setStep(isEditMode ? 1 : 0); // if you want edit to land on schedule step
+  } else {
+    setForm({
+      name: "",
+      levelId: levels?.[0]?.id ?? "",
+      dayOfWeek: "",
+      startTime: "",
+      endTime: "",
+      capacity: "",
+      active: true,
+    });
+
+    const lvl = levels?.[0] ?? null;
+    setDurationMin(lvl ? clampToAllowedDuration(lvl.defaultLengthMin) : 45);
+    setLengthMode("default");
+
+    setStep(isEditMode ? 1 : 0);
+  }
+
+  setTouched({});
+  setError("");
+  setSubmitting(false);
+}, [open, template, levels]);
+
+React.useEffect(() => {
+  const lvl = selectedLevel;
+  if (!lvl) return;
+
+  const defaultLen = clampToAllowedDuration(lvl.defaultLengthMin);
+
+  if (lengthMode === "default") {
+    setDurationMin(defaultLen);
+  }
+
+  if (isEditMode) {
+    setLengthMode(durationMin === defaultLen ? "default" : "custom");
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedLevel?.id]);
+
+
 
   const close = () => onOpenChange(false);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const levelError =
-    touched.levelId && !form.levelId ? "Level is required." : "";
+  // --- validation (same as before) ---
+  const levelError = touched.levelId && !form.levelId ? "Level is required." : "";
 
-  const timeError = (() => {
-    if (!form.startTime && !form.endTime) return "";
-    if (!!form.startTime !== !!form.endTime) return "Start and end time must both be set.";
-    if (!form.startTime || !form.endTime) return "";
+ const timeError = (() => {
+    if (scheduleMode === "default") return "";
+    if (!form.startTime && !form.dayOfWeek) return ""; // schedule optional
+
+    if (!form.dayOfWeek) return "Day of week is required when setting a schedule.";
+    if (!form.startTime) return "Start time is required when setting a schedule.";
 
     const startMin = timeInputToMinutes(form.startTime);
-    const endMin = timeInputToMinutes(form.endTime);
-    if (startMin === null || endMin === null) return "Invalid time.";
-    if (endMin <= startMin) return "End time must be after start time.";
+    if (startMin === null) return "Invalid start time.";
+
+    const endMin = startMin + durationMin;
+    if (endMin > 24 * 60) return "Class cannot end after midnight (adjust start time or duration).";
+
     return "";
-  })();
+    })();
+
 
   const capacityError = (() => {
+    if (capacityMode === "default") return "";
     if (!form.capacity.trim()) return "";
     const n = Number(form.capacity);
     if (!Number.isFinite(n) || n <= 0) return "Capacity must be a positive number.";
@@ -143,12 +249,9 @@ export function TemplateModal({
     return "";
   })();
 
+  const canGoNext = Boolean(form.levelId);
   const canSubmit =
-    !!form.levelId &&
-    !levelError &&
-    !timeError &&
-    !capacityError &&
-    !submitting;
+    !!form.levelId && !levelError && !timeError && !capacityError && !submitting;
 
   const handleSubmit = async () => {
     setTouched({ levelId: true });
@@ -157,17 +260,24 @@ export function TemplateModal({
     if (!form.levelId) return;
     if (timeError || capacityError) return;
 
+    const startMin =
+      scheduleMode === "default" || !form.startTime ? null : timeInputToMinutes(form.startTime);
+    
+    const endMin =
+      startMin === null ? null : startMin + durationMin;
+    
     const payload: ClientTemplate = {
       name: form.name.trim() || undefined,
       levelId: form.levelId,
-
-      dayOfWeek: form.dayOfWeek === "" ? null : Number(form.dayOfWeek),
-      startTime: form.startTime ? timeInputToMinutes(form.startTime) : null,
-      endTime: form.endTime ? timeInputToMinutes(form.endTime) : null,
-
-      capacity: form.capacity.trim() ? Number(form.capacity) : null,
+    
+      dayOfWeek: scheduleMode === "default" ? null : form.dayOfWeek === "" ? null : Number(form.dayOfWeek),
+      startTime: scheduleMode === "default" ? null : startMin,
+      endTime: scheduleMode === "default" ? null : endMin,
+    
+      capacity: capacityMode === "default" ? null : form.capacity.trim() ? Number(form.capacity) : null,
       active: form.active,
     };
+
 
     try {
       setSubmitting(true);
@@ -175,198 +285,448 @@ export function TemplateModal({
       close();
     } catch (e) {
       console.error(e);
+      setError("Something went wrong.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  // --- helpers for “defaults” display ---
+  const levelDefaultCap =
+    selectedLevel?.defaultCapacity === null || typeof selectedLevel?.defaultCapacity === "undefined"
+      ? null
+      : selectedLevel.defaultCapacity;
+
+  const shownCapacity =
+    capacityMode === "default"
+      ? formatCapacity(levelDefaultCap)
+      : form.capacity.trim()
+      ? String(form.capacity)
+      : "—";
+
+  const scheduleSummary = (() => {
+    if (scheduleMode === "default") return "Not set";
+    const day = form.dayOfWeek === "" ? "—" : DAYS.find((d) => d.value === form.dayOfWeek)?.label ?? "—";
+    const start = form.startTime ? form.startTime : "—";
+    const end = form.endTime ? form.endTime : "—";
+    if (day === "—" && start === "—" && end === "—") return "Not set";
+    return `${day} ${start}–${end}`;
+  })();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "New template" : "Edit template"}
+      <DialogContent className="max-w-md overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 py-4">
+          <DialogTitle className="flex items-center justify-between w-[70%]">
+            <span>{isEditMode ? "Edit template" : "New template"}</span>
+
+            <div className="flex items-center gap-1">
+              <span className={dotClass(step === 0)} />
+              <span className={dotClass(step === 1)} />
+            </div>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Basics */}
-          <div className="space-y-3">
-            <SectionTitle>Basics</SectionTitle>
-
-            <FieldRow label="Name (optional)">
-              <Input
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="e.g. Squad - Lane 1"
-              />
-            </FieldRow>
-
-            <FieldRow label="Level">
-              <div className="space-y-1">
-                <select
-                  value={form.levelId}
-                  onChange={(e) => setField("levelId", e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, levelId: true }))}
-                  className={cn(
-                    "h-10 w-full rounded-md border border-input bg-background px-3 text-sm",
-                    levelError && "border-destructive focus-visible:ring-destructive"
-                  )}
-                >
-                  {levels?.length === 0 ? (
-                    <option value="">No levels found</option>
-                  ) : null}
-                  {levels?.map((lvl) => (
-                    <option key={lvl.id} value={lvl.id}>
-                      {lvl.name}
-                    </option>
-                  ))}
-                </select>
-
-                {levelError && (
-                  <p className="text-xs text-destructive">{levelError}</p>
-                )}
-              </div>
-            </FieldRow>
-          </div>
-
-          {/* Schedule */}
-          <div className="space-y-3">
-            <SectionTitle>Schedule (optional)</SectionTitle>
-
-            <FieldRow label="Day of week">
-              <select
-                value={form.dayOfWeek}
-                onChange={(e) => setField("dayOfWeek", e.target.value)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Not set</option>
-                {DAYS.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-            </FieldRow>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">Start time</label>
-                <Input
-                  type="time"
-                  value={form.startTime}
-                  onChange={(e) => setField("startTime", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">End time</label>
-                <Input
-                  type="time"
-                  value={form.endTime}
-                  onChange={(e) => setField("endTime", e.target.value)}
-                />
-              </div>
-            </div>
-
-            {timeError ? (
-              <p className="text-xs text-destructive">{timeError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Used for generating class instances.
-              </p>
-            )}
-          </div>
-
-          {/* Capacity + Active */}
-          <div className="space-y-3">
-            <SectionTitle>Rules</SectionTitle>
-
-            <FieldRow label="Capacity (optional)">
-              <div className="space-y-1">
-                <Input
-                  inputMode="numeric"
-                  value={form.capacity}
-                  onChange={(e) => setField("capacity", e.target.value)}
-                  placeholder="e.g. 8"
-                  className={cn(
-                    capacityError && "border-destructive focus-visible:ring-destructive"
-                  )}
-                />
-                {capacityError ? (
-                  <p className="text-xs text-destructive">{capacityError}</p>
-                ) : (
+        {/* Slider */}
+        <div className="relative">
+          <div
+            className={[
+              "flex w-[200%] transition-transform duration-300 ease-out",
+              "motion-reduce:transition-none",
+              step === 0 ? "translate-x-0" : "-translate-x-1/2",
+            ].join(" ")}
+          >
+            {/* STEP 0: Basics */}
+            <div className="w-1/2 px-6 py-5">
+              <div className="space-y-5">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Template name</label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setField("name", e.target.value)}
+                    placeholder="e.g. Squad - Lane 1"
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Leave blank to use level default capacity.
+                    Optional. Helps staff identify the recurring class.
                   </p>
-                )}
-              </div>
-            </FieldRow>
+                </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                id="active"
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) => setField("active", e.target.checked)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <label htmlFor="active" className="text-sm">
-                Active
-              </label>
-              <span className="text-xs text-muted-foreground">
-                Inactive templates won’t be used for new enrolments or generation.
-              </span>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Level</label>
+                  <select
+                    value={form.levelId}
+                    onChange={(e) => setField("levelId", e.target.value)}
+                    onBlur={() => setTouched((t) => ({ ...t, levelId: true }))}
+                    className={cn(
+                      "h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40",
+                      levelError && "border-destructive focus-visible:ring-destructive"
+                    )}
+                  >
+                    <option value="" disabled>
+                      Select a level…
+                    </option>
+                    {levels?.map((lvl) => (
+                      <option key={lvl.id} value={lvl.id}>
+                        {lvl.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {levelError ? (
+                    <p className="text-xs text-destructive">{levelError}</p>
+                  ) : selectedLevel ? (
+                    <p className="text-xs text-muted-foreground">
+                      Defaults: {selectedLevel.defaultLengthMin} min • Capacity{" "}
+                      {formatCapacity(levelDefaultCap)}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Schedule</span>
+                    <span className="font-medium">{scheduleSummary}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-muted-foreground">Capacity</span>
+                    <span className="font-medium">{shownCapacity}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <Button variant="ghost" onClick={close}>
+                    Cancel
+                  </Button>
+
+                  <Button
+                    onClick={() => setStep(1)}
+                    disabled={!canGoNext}
+                    className="inline-flex items-center gap-2"
+                  >
+                    Next <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* STEP 1: Schedule + Rules */}
+            <div className="w-1/2 px-6 py-5">
+              <div className="space-y-5">
+                {/* Schedule */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Class duration</label>
+
+                    <button
+                      type="button"
+                      onClick={() => setLengthMode((m) => (m === "default" ? "custom" : "default"))}
+                      className="inline-flex w-[112px] items-center justify-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                      title={lengthMode === "default" ? "Customise duration" : "Use default duration"}
+                      disabled={!selectedLevel}
+                    >
+                      {lengthMode === "default" ? (
+                        <>
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Customise</span>
+                        </>
+                      ) : (
+                        <>
+                          <XIcon className="h-3.5 w-3.5" />
+                          <span>Default</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-md border border-border px-2 py-1 text-sm">
+                      {durationMin} min
+                    </span>
+                  
+                    {selectedLevel ? (
+                      <span className="text-xs text-muted-foreground">
+                        {lengthMode === "default"
+                          ? `Default for ${selectedLevel.name}`
+                          : `Default: ${clampToAllowedDuration(selectedLevel.defaultLengthMin)} min`}
+                      </span>
+                    ) : null}
+                  </div>
+                
+                  <SmoothCollapse open={lengthMode === "custom"}>
+                    <div className="pt-1">
+                      <div className="grid grid-cols-3 gap-2">
+                        {DURATION_OPTIONS.map((m) => {
+                          const active = durationMin === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setDurationMin(m)}
+                              className={[
+                                "rounded-md border px-3 py-2 text-sm transition-colors",
+                                active
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:bg-accent/40",
+                              ].join(" ")}
+                            >
+                              {m} min
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </SmoothCollapse>
+                    
+                  <div className="text-xs text-muted-foreground">
+                    Ends at:{" "}
+                    <span className="font-medium text-foreground">
+                      {form.startTime ? addMinutesToTimeInput(form.startTime, durationMin) ?? "—" : "—"}
+                    </span>
+                  </div>
+                </div>
+
+
+                {/* Capacity */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Capacity</label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCapacityMode((m) => (m === "default" ? "custom" : "default"));
+
+                        // when switching back to default, clear custom UI
+                        if (capacityMode === "custom") {
+                          setCapacityCustomOpen(false);
+                          setField("capacity", "");
+                        } else {
+                          setCapacityCustomOpen(false);
+                        }
+                      }}
+                      className="inline-flex w-[112px] items-center justify-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                      title={capacityMode === "default" ? "Customise capacity" : "Use default capacity"}
+                      disabled={!selectedLevel}
+                    >
+                      <span className="inline-flex items-center gap-1 transition-opacity duration-200">
+                        {capacityMode === "default" ? (
+                          <>
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>Customise</span>
+                          </>
+                        ) : (
+                          <>
+                            <XIcon className="h-3.5 w-3.5" />
+                            <span>Default</span>
+                          </>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-md border border-border px-2 py-1 text-sm">
+                      {capacityMode === "default"
+                        ? formatCapacity(levelDefaultCap)
+                        : form.capacity.trim()
+                        ? form.capacity
+                        : "—"}
+                    </span>
+
+                    {selectedLevel ? (
+                      <span className="text-xs text-muted-foreground">
+                        {capacityMode === "default"
+                          ? `Default for ${selectedLevel.name}`
+                          : `Default: ${formatCapacity(levelDefaultCap)}`}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <SmoothCollapse open={capacityMode === "custom"}>
+                    <div className="pt-1 space-y-2">
+                      <div className="grid grid-cols-5 gap-2">
+                        {CAPACITY_PRESETS.map((n) => {
+                          const active = form.capacity === String(n);
+                          return (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => {
+                                setField("capacity", String(n));
+                                setCapacityCustomOpen(false);
+                              }}
+                              className={[
+                                "rounded-md border px-3 py-2 text-sm transition-colors",
+                                active
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:bg-accent/40",
+                              ].join(" ")}
+                            >
+                              {n}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCapacityCustomOpen(true);
+                            setTimeout(() => customCapacityRef.current?.focus(), 200);
+                          }}
+                          className={[
+                            "rounded-md border px-3 py-2 text-sm transition-colors",
+                            capacityCustomOpen
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border hover:bg-accent/40",
+                          ].join(" ")}
+                        >
+                          Custom
+                        </button>
+                      </div>
+
+                      <SmoothCollapse open={capacityCustomOpen}>
+                        <div className="pt-1">
+                          <Input
+                            ref={customCapacityRef}
+                            type="number"
+                            min={1}
+                            placeholder="Enter capacity…"
+                            value={form.capacity}
+                            onChange={(e) => setField("capacity", e.target.value)}
+                            className={cn(
+                              capacityError && "border-destructive focus-visible:ring-destructive"
+                            )}
+                          />
+                          {capacityError ? (
+                            <p className="mt-1 text-xs text-destructive">{capacityError}</p>
+                          ) : (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Leave blank to use level default.
+                            </p>
+                          )}
+                        </div>
+                      </SmoothCollapse>
+                    </div>
+                  </SmoothCollapse>
+                </div>
+
+                {/* Active */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Status</label>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="active"
+                      type="checkbox"
+                      checked={form.active}
+                      onChange={(e) => setField("active", e.target.checked)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    <label htmlFor="active" className="text-sm">
+                      Active
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      Inactive templates won’t be used for new enrolments or generation.
+                    </span>
+                  </div>
+                </div>
+
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+                <DialogFooter className="pt-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setStep(0)}
+                    className="inline-flex items-center gap-2"
+                    disabled={submitting}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+
+                  <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
+                    {submitting
+                      ? isEditMode
+                        ? "Saving…"
+                        : "Creating…"
+                      : isEditMode
+                      ? "Save changes"
+                      : "Create template"}
+                  </Button>
+                </DialogFooter>
+              </div>
             </div>
           </div>
-
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
-
-        <DialogFooter className="mt-2">
-          <Button type="button" variant="outline" onClick={close} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting
-              ? mode === "create"
-                ? "Creating…"
-                : "Saving…"
-              : mode === "create"
-              ? "Create template"
-              : "Save changes"}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function FieldRow({
-  label,
+// --- shared UI helpers (copied vibe from your class modal) ---
+function SmoothCollapse({
+  open,
   children,
+  durationMs = 260,
 }: {
-  label: string;
+  open: boolean;
   children: React.ReactNode;
+  durationMs?: number;
 }) {
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const [height, setHeight] = React.useState<number>(0);
+
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const measure = () => setHeight(el.scrollHeight);
+
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [children, open]);
+
   return (
-    <div className="grid gap-2 sm:grid-cols-3 sm:items-center">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="sm:col-span-2">{children}</div>
+    <div
+      className="overflow-hidden motion-reduce:transition-none"
+      style={{
+        height: open ? height : 0,
+        transition: `height ${durationMs}ms cubic-bezier(0.2, 0.8, 0.2, 1)`,
+      }}
+      aria-hidden={!open}
+    >
+      <div
+        ref={ref}
+        style={{
+          opacity: open ? 1 : 0,
+          transform: open ? "translateY(0px)" : "translateY(-4px)",
+          transition: `opacity ${durationMs}ms ease, transform ${durationMs}ms ease`,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {children}
-    </div>
-  );
+function dotClass(active: boolean) {
+  return [
+    "h-1.5 w-1.5 rounded-full transition-colors",
+    active ? "bg-foreground/70" : "bg-foreground/20",
+  ].join(" ");
 }
 
+function formatCapacity(v: number | null | undefined) {
+  if (v === null || typeof v === "undefined") return "N/A";
+  return String(v);
+}
+
+// --- time helpers (unchanged logic) ---
 function timeInputToMinutes(value: string): number | null {
-  // "HH:MM" -> minutes since midnight
   const [hStr, mStr] = value.split(":");
   const h = Number(hStr);
   const m = Number(mStr);
