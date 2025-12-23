@@ -21,6 +21,8 @@ export type ScheduleViewProps = {
   dataAdapter?: ScheduleDataAdapter;
   /** Optional endpoint used to build a client-safe adapter without passing functions from server components. */
   dataEndpoint?: string;
+  /** Optional server action to persist moves without going through the API route. */
+  moveClassInstanceAction?: ScheduleDataAdapter["moveClassInstance"];
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
 };
@@ -29,6 +31,7 @@ export function ScheduleView({
   levels,
   dataAdapter,
   dataEndpoint = "/api/admin/class-instances",
+  moveClassInstanceAction,
   defaultViewMode = "week",
   showHeader = true,
 }: ScheduleViewProps) {
@@ -42,10 +45,13 @@ export function ScheduleView({
 
   const [error, setError] = useState<string | null>(null);
 
-  const adapter = React.useMemo(
-    () => dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint),
-    [dataAdapter, dataEndpoint]
-  );
+  const adapter = React.useMemo(() => {
+    const base = dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint);
+    if (moveClassInstanceAction) {
+      return { ...base, moveClassInstance: moveClassInstanceAction };
+    }
+    return base;
+  }, [dataAdapter, dataEndpoint, moveClassInstanceAction]);
 
   const weekStart = useMemo(
     () => startOfWeek(currentWeek, { weekStartsOn: 1 }),

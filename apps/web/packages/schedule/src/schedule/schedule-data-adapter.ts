@@ -70,6 +70,31 @@ export function createApiScheduleDataAdapter(
       const payload = (await response.json()) as { classInstances?: ClassInstance[] };
       return Array.isArray(payload.classInstances) ? payload.classInstances : [];
     },
+
+    async moveClassInstance(input) {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(input.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          startTime: input.startTime.toISOString(),
+          endTime: input.endTime.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to move class instance");
+      }
+
+      const payload = (await response.json()) as { classInstance?: ClassInstance };
+      if (!payload.classInstance) {
+        throw new Error("Invalid response from server");
+      }
+      return payload.classInstance;
+    },
   };
 }
 
