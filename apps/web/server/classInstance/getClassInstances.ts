@@ -1,15 +1,32 @@
-import type { ClassInstance } from "@prisma/client"
+import type { ClassInstance } from "@prisma/client";
 
-import { prisma } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma";
 
-export default async function getClassInstances() {
+export type GetClassInstancesParams = {
+  from: Date;
+  to: Date;
+};
 
-    const classInstances = await prisma.classInstance.findMany({
-        orderBy: {
-            
-        }
-    })
+export default async function getClassInstances(
+  params: GetClassInstancesParams
+): Promise<ClassInstance[]> {
+  const { from, to } = params;
 
-    return
+  const classInstances = await prisma.classInstance.findMany({
+    where: {
+      startTime: {
+        gte: from,
+        lte: to,
+      },
+    },
+    orderBy: {
+      startTime: "asc",
+    },
+    include: {
+      level: true,
+      template: true,
+    },
+  });
 
+  return classInstances;
 }
