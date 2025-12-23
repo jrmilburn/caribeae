@@ -11,7 +11,7 @@ export default async function AdminSchedule() {
     return(
         <ScheduleView
             levels={levels}
-            dataAdapter={}
+            dataEndpoint="/api/admin/class-instances"
         />
     )
 
