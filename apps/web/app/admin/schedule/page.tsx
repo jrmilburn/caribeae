@@ -1,4 +1,4 @@
-import { ScheduleView } from "@/packages/schedule"
+import { ScheduleView, createApiScheduleDataAdapter } from "@/packages/schedule"
 import { getLevels } from "@/server/level/getLevels"
 import { requireAdmin } from "@/lib/requireAdmin";
 import { moveClassInstanceAction } from "./actions";

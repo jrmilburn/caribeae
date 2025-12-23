@@ -1,3 +1,5 @@
+"use server"
+
 import type { ClassInstance } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
