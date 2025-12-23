@@ -43,6 +43,61 @@ export const placeholderScheduleDataAdapter: ScheduleDataAdapter = {
   },
 };
 
+/**
+ * API-backed adapter for fetching class instances through a Next.js route handler.
+ * Keeps credentials for authenticated access and uses no-store caching to avoid stale data.
+ */
+export function createApiScheduleDataAdapter(
+  endpoint: string = "/api/admin/class-instances"
+): ScheduleDataAdapter {
+  return {
+    async fetchClassInstances({ from, to }) {
+      const params = new URLSearchParams({
+        from: from.toISOString(),
+        to: to.toISOString(),
+      });
+
+      const response = await fetch(`${endpoint}?${params.toString()}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to load class instances");
+      }
+
+      const payload = (await response.json()) as { classInstances?: ClassInstance[] };
+      return Array.isArray(payload.classInstances) ? payload.classInstances : [];
+    },
+
+    async moveClassInstance(input) {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(input.id)}`, {
+        method: "PATCH",
+        credentials: "include",
+        cache: "no-store",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          startTime: input.startTime.toISOString(),
+          endTime: input.endTime.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to move class instance");
+      }
+
+      const payload = (await response.json()) as { classInstance?: ClassInstance };
+      if (!payload.classInstance) {
+        throw new Error("Invalid response from server");
+      }
+      return payload.classInstance;
+    },
+  };
+}
+
 // Simple demo adapter that produces in-memory sample data so the component can render
 // in isolation or storybook-like environments. Consumers should replace this with
 // real implementations against their own API.

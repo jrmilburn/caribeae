@@ -1,6 +1,7 @@
 import { ScheduleView } from "@/packages/schedule"
 import { getLevels } from "@/server/level/getLevels"
 import { requireAdmin } from "@/lib/requireAdmin";
+import { moveClassInstanceAction } from "./actions";
 
 export default async function AdminSchedule() {
 
@@ -11,7 +12,8 @@ export default async function AdminSchedule() {
     return(
         <ScheduleView
             levels={levels}
-            dataAdapter={}
+            dataEndpoint="/api/admin/class-instances"
+            moveClassInstanceAction={moveClassInstanceAction}
         />
     )
 

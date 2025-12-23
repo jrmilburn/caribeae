@@ -10,7 +10,7 @@ import ScheduleGrid from "./schedule-grid";
 import type { NormalizedClassInstance, ClassInstance } from "./schedule-types";
 import { normalizeClassInstance } from "./schedule-types";
 import {
-  placeholderScheduleDataAdapter,
+  createApiScheduleDataAdapter,
   type ScheduleDataAdapter,
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
@@ -19,13 +19,19 @@ export type ScheduleViewProps = {
   /** Required adapter for real projects; defaults to a demo adapter for local usage. */
   levels: Level[];
   dataAdapter?: ScheduleDataAdapter;
+  /** Optional endpoint used to build a client-safe adapter without passing functions from server components. */
+  dataEndpoint?: string;
+  /** Optional server action to persist moves without going through the API route. */
+  moveClassInstanceAction?: ScheduleDataAdapter["moveClassInstance"];
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
 };
 
 export function ScheduleView({
-    levels,
-  dataAdapter = placeholderScheduleDataAdapter,
+  levels,
+  dataAdapter,
+  dataEndpoint = "/api/admin/class-instances",
+  moveClassInstanceAction,
   defaultViewMode = "week",
   showHeader = true,
 }: ScheduleViewProps) {
@@ -34,32 +40,53 @@ export function ScheduleView({
     normalizeWeekAnchor(new Date())
   );
   const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
-
-  const normalised = normalizeClassInstance({
-    id: "clx9k2a3b0001l7089w3f8abc",
-
-    templateId: "tmpl_swim_beginner_001",
-
-    startTime: new Date("2025-12-20T12:00:00.000Z"),
-    endTime: new Date("2025-12-20T12:45:00.000Z"),
-
-    status: "scheduled",
-    capacity: 6,
-
-    levelId: "level_beginner",
-    })
-
-  // ✅ For now, just keep this empty (no fetch / no effect)
-  const [instances, setInstances] = useState<NormalizedClassInstance[]>([normalised]);
+  const [instances, setInstances] = useState<NormalizedClassInstance[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [error, setError] = useState<string | null>(null);
 
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-  const displayWeekEnd = addDays(weekStart, 6);
+  const adapter = React.useMemo(() => {
+    const base = dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint);
+    if (moveClassInstanceAction) {
+      return { ...base, moveClassInstance: moveClassInstanceAction };
+    }
+    return base;
+  }, [dataAdapter, dataEndpoint, moveClassInstanceAction]);
+
+  const weekStart = useMemo(
+    () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
+    [currentWeek]
+  );
+  const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
   const weekDates = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadInstances() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await adapter.fetchClassInstances({
+          from: weekStart,
+          to: displayWeekEnd,
+        });
+        if (cancelled) return;
+        setInstances(data.map(normalizeClassInstance));
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Unable to load schedule");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadInstances();
+    return () => {
+      cancelled = true;
+    };
+  }, [adapter, weekStart, displayWeekEnd]);
 
   const onMoveInstance = React.useCallback(
     async (id: string, nextStart: Date) => {
@@ -77,10 +104,10 @@ export function ScheduleView({
 
       setInstances((prev) => prev.map((c) => (c.id === id ? optimistic : c)));
 
-      if (!dataAdapter.moveClassInstance) return;
+      if (!adapter.moveClassInstance) return;
 
       try {
-        const persisted = await dataAdapter.moveClassInstance({
+        const persisted = await adapter.moveClassInstance({
           id,
           startTime: nextStart,
           endTime: nextEnd,
@@ -95,7 +122,7 @@ export function ScheduleView({
         setInstances((prev) => prev.map((c) => (c.id === id ? existing : c)));
       }
     },
-    [instances, dataAdapter]
+    [instances, adapter]
   );
 
   return (
@@ -149,7 +176,7 @@ export function ScheduleView({
 
       <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
         <ScheduleGrid
-          loading={false}
+          loading={loading}
           classInstances={instances}
           weekDates={weekDates}
           onMoveInstance={onMoveInstance}
