@@ -1,0 +1,153 @@
+"use client";
+
+import * as React from "react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+
+import type { DayOfWeek, NormalizedClassInstance } from "./schedule-types";
+
+const GRID_START_HOUR = 5;
+const GRID_START_MIN = GRID_START_HOUR * 60;
+const SLOT_HEIGHT_PX = 16;
+
+type TimeSlot = { time24: string; time12: string; isHour: boolean };
+
+type DayViewProps = {
+  TIME_SLOTS: TimeSlot[];
+  dayName: DayOfWeek;
+  dayDate: Date;
+  classes: Array<NormalizedClassInstance & { column: number; columns: number }>;
+  onBack: () => void;
+  onDropInstance: (id: string, timeLabel: string) => void;
+  hoveredSlot: { day?: DayOfWeek; time?: string } | null;
+  setHoveredSlot: React.Dispatch<React.SetStateAction<{ day?: DayOfWeek; time?: string } | null>>;
+  getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
+};
+
+export default function DayView(props: DayViewProps) {
+  const {
+    TIME_SLOTS,
+    dayName,
+    dayDate,
+    classes,
+    onBack,
+    onDropInstance,
+    hoveredSlot,
+    setHoveredSlot,
+    getTeacherColor,
+  } = props;
+
+  const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
+  const minuteHeight = SLOT_HEIGHT_PX / 15;
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
+        <div className="text-sm font-medium text-muted-foreground">
+          {dayName} • {format(dayDate, "MMM d, yyyy")}
+        </div>
+        <button
+          type="button"
+          className="text-sm text-primary underline-offset-2 hover:underline"
+          onClick={onBack}
+        >
+          Back to week
+        </button>
+      </div>
+
+      <div className="grid relative border-r border-b" style={{ gridTemplateColumns: "minmax(32px,1fr) minmax(64px,4fr)" }}>
+        {/* Gutter */}
+        <div className="border-r border-border">
+          {TIME_SLOTS.map((slot) => (
+            <div
+              key={`gutter-${slot.time12}`}
+              className={cn(
+                "relative bg-muted/30 flex items-center justify-start",
+                slot.isHour ? "border-t border-border" : ""
+              )}
+              style={{ height: `${SLOT_HEIGHT_PX}px` }}
+            >
+              {slot.isHour ? (
+                <div className="pl-2 text-sm font-medium text-muted-foreground pt-2">
+                  {slot.time12.split(":")[0]} {slot.time12.split(" ")[1]}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="relative" style={{ height: `${totalGridHeight}px` }}>
+          {TIME_SLOTS.map((slot) => {
+            const isHovered = hoveredSlot?.time === slot.time12;
+            return (
+              <div
+                key={`${dayName}-${slot.time12}`}
+                className={cn("border-b border-border relative transition-colors", isHovered && "bg-accent/50")}
+                style={{ height: `${SLOT_HEIGHT_PX}px` }}
+                onMouseEnter={() => setHoveredSlot({ day: dayName, time: slot.time12 })}
+                onMouseLeave={() => setHoveredSlot(null)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setHoveredSlot({ day: dayName, time: slot.time12 });
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setHoveredSlot(null);
+                  const draggedId = e.dataTransfer.getData("text/plain");
+                  if (draggedId) onDropInstance(draggedId, slot.time12);
+                }}
+              />
+            );
+          })}
+
+          {classes.map((c) => {
+            const colors = getTeacherColor(c.teacher?.id);
+            const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
+            const top = (startMinutes - GRID_START_MIN) * minuteHeight;
+            const widthPct = 100 / c.columns;
+
+            return (
+              <div
+                key={c.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", c.id);
+                }}
+                onDragEnd={() => setHoveredSlot(null)}
+                className={cn(
+                  "absolute rounded p-2 pr-3 cursor-move z-30 group overflow-hidden border",
+                  colors.bg,
+                  colors.border
+                )}
+                style={{
+                  top: `${Math.max(0, top)}px`,
+                  height: `${c.durationMin * minuteHeight}px`,
+                  width: `calc(${widthPct}% - 6px)`,
+                  left: `calc(${c.column * widthPct}% + 3px)`,
+                }}
+                title={c.level?.name ?? "Class"}
+              >
+                <div className="flex flex-col gap-1 overflow-hidden leading-tight text-xs">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <div className={cn("font-medium truncate", colors.text)}>
+                      {c.level?.name ?? "Class"}
+                    </div>
+                    <div className="ml-auto whitespace-nowrap text-muted-foreground">
+                      {format(c.startTime, "h:mm a")} – {format(c.endTime, "h:mm a")}
+                    </div>
+                  </div>
+                  {c.teacher && (
+                    <div className={cn("text-[11px] truncate", colors.text)}>
+                      {c.teacher.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

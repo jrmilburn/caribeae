@@ -1,0 +1,228 @@
+"use client";
+
+import * as React from "react";
+import type { Student } from "@prisma/client";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { StudentModal } from "./StudentModal";
+import type { ClientStudent } from "@/server/student/types";
+
+import { MoreVertical, Trash2 } from "lucide-react";
+
+import { createStudent } from "@/server/student/createStudent";
+import { updateStudent } from "@/server/student/updateStudent";
+import { deleteStudent } from "@/server/student/deleteStudent";
+
+import { useRouter } from "next/navigation";
+
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
+import type { EnrolContext } from "./FamilyForm";
+
+type Props = {
+  students: Student[];
+  familyId: string;
+  enrolContext?: EnrolContext | null;
+};
+
+export default function StudentDetails({ students, familyId, enrolContext }: Props) {
+  const router = useRouter();
+
+  const [open, setOpen] = React.useState(false);
+  const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
+
+  const handleAdd = () => {
+    setEditingStudent(null);
+    setOpen(true);
+  };
+
+  const handleEdit = (student: Student) => {
+    setEditingStudent(student);
+    setOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    const ok = window.confirm(`Delete student?`);
+    if (!ok) return;
+    await deleteStudent(id);
+    router.refresh();
+  };
+
+  const onSave = async (payload: ClientStudent & { familyId: string; id?: string }) => {
+    try {
+      if (payload.id) {
+        await updateStudent(payload, payload.id);
+      } else {
+        await createStudent(payload);
+      }
+      return { success: true };
+    } catch (e) {
+      console.error(e);
+      return { success: false };
+    } finally {
+      router.refresh();
+    }
+  };
+
+  return (
+    <>
+      <section className="md:col-span-2 border-l border-t border-b bg-background p-5">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Students</h2>
+            <p className="text-sm text-muted-foreground">
+              {students.length} student{students.length === 1 ? "" : "s"}
+            </p>
+
+            {enrolContext ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Select a student to enrol in the class.
+              </p>
+            ) : null}
+          </div>
+
+          <Button size="sm" onClick={handleAdd}>
+            Add
+          </Button>
+        </div>
+
+        {students.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {students.map((student) => (
+              <StudentCard
+                key={student.id}
+                student={student}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                enrolContext={enrolContext ?? null}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <StudentModal
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setEditingStudent(null);
+        }}
+        familyId={familyId}
+        student={editingStudent}
+        onSave={onSave}
+      />
+    </>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+      No students yet.
+    </div>
+  );
+}
+
+function StudentCard({
+  student,
+  onEdit,
+  onDelete,
+  enrolContext,
+}: {
+  student: Student;
+  onEdit: (student: Student) => void;
+  onDelete: (id: string) => void;
+  enrolContext?: { templateId: string; startDate?: string } | null;
+}) {
+  const router = useRouter();
+
+  const goToManage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    router.push(`/admin/student/${student.id}`); // note: if your route is /admin/students/[id], update this
+  };
+
+  const goToEnrol = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!enrolContext?.templateId) return;
+
+    const qs = new URLSearchParams();
+    qs.set("studentId", student.id);
+    qs.set("templateId", enrolContext.templateId);
+    if (enrolContext.startDate) qs.set("startDate", enrolContext.startDate);
+
+    // MVP: just navigate to a dedicated "new enrolment" page
+    router.push(`/admin/enrolments/new?${qs.toString()}`);
+  };
+
+  const doDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await onDelete(student.id);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => onEdit(student)}
+      className="w-full rounded-xl border p-3 text-left transition hover:bg-muted/40"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{student.name}</p>
+          <p className="text-xs text-muted-foreground">
+            DOB: {format(student.dateOfBirth, "dd MMM yyyy")}
+          </p>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Student actions"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-44">
+            {enrolContext ? (
+              <>
+                <DropdownMenuItem onClick={goToEnrol}>
+                  Enrol in class
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+
+            <DropdownMenuItem onClick={goToManage}>
+              Manage Student
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={doDelete} className="text-destructive">
+              <Trash2 className="mr-2 h-4 w-4 text-red" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {student.medicalNotes ? (
+        <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+          {student.medicalNotes}
+        </p>
+      ) : null}
+    </button>
+  );
+}
