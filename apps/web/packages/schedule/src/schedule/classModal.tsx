@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pencil, XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
+import { createClassInstance } from "@/server/classInstance/createClassInstance";
+import { updateClassInstance } from "@/server/classInstance/updateClassInstance";
+import { deletedClassInstance } from "@/server/classInstance/deleteClassInstance";
+
+import { useRouter } from "next/navigation";
+
 import type { ClassInstance } from "./schedule-types";
 
 // --- Types / constants ---
@@ -45,6 +51,8 @@ export default function ClassModal({
   levels,
 }: ClassModalProps) {
   const isEditMode = Boolean(initialData);
+
+  const router = useRouter();
 
   // wizard step: 0 = pick level/start, 1 = length/capacity
   const [step, setStep] = React.useState<0 | 1>(0);
@@ -92,7 +100,7 @@ export default function ClassModal({
       const end = initialData.endTime ?? null;
 
       setStartTime(start);
-      setLevelId((initialData as any).levelId ?? "");
+      setLevelId((initialData).levelId ?? "");
 
       const cap = (initialData.capacity ?? null) as number | null;
       setCapacity(cap);
@@ -145,21 +153,29 @@ export default function ClassModal({
   const canGoNext = Boolean(levelId && startTime);
   const canSubmit = Boolean(levelId && startTime && endTime);
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
     if (!levelId || !startTime || !endTime) return;
 
-    const payload: Partial<ClassInstance> & { levelId: string; capacity: number | null } = {
-      levelId,
-      startTime,
-      endTime,
-      capacity,
-    };
-
     if (isEditMode) {
-      console.log("UPDATE class instance", { id: initialData!.id, ...payload });
+
+      if(!initialData) return
+
+      await updateClassInstance({
+        levelId,
+        startTime,
+        endTime,
+        capacity
+      }, initialData?.id)
     } else {
-      console.log("CREATE class instance", payload);
+      await createClassInstance({
+        levelId,
+        startTime,
+        endTime,
+        capacity
+      })
     }
+
+      router.refresh();
 
     setOpen(false);
   };
