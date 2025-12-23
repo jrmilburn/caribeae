@@ -11,7 +11,6 @@ export default async function AdminSchedule() {
     return(
         <ScheduleView
             levels={levels}
-            dataAdapter={}
         />
     )
 
