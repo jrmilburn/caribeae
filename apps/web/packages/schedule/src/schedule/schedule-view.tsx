@@ -24,7 +24,7 @@ export type ScheduleViewProps = {
 };
 
 export function ScheduleView({
-    levels,
+  levels,
   dataAdapter = placeholderScheduleDataAdapter,
   defaultViewMode = "week",
   showHeader = true,
@@ -34,23 +34,8 @@ export function ScheduleView({
     normalizeWeekAnchor(new Date())
   );
   const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
-
-  const normalised = normalizeClassInstance({
-    id: "clx9k2a3b0001l7089w3f8abc",
-
-    templateId: "tmpl_swim_beginner_001",
-
-    startTime: new Date("2025-12-20T12:00:00.000Z"),
-    endTime: new Date("2025-12-20T12:45:00.000Z"),
-
-    status: "scheduled",
-    capacity: 6,
-
-    levelId: "level_beginner",
-    })
-
-  // ✅ For now, just keep this empty (no fetch / no effect)
-  const [instances, setInstances] = useState<NormalizedClassInstance[]>([normalised]);
+  const [instances, setInstances] = useState<NormalizedClassInstance[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +45,31 @@ export function ScheduleView({
   const weekDates = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadInstances() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await dataAdapter.fetchClassInstances({
+          from: weekStart,
+          to: displayWeekEnd,
+        });
+        if (cancelled) return;
+        setInstances(data.map(normalizeClassInstance));
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Unable to load schedule");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadInstances();
+    return () => {
+      cancelled = true;
+    };
+  }, [dataAdapter, weekStart, displayWeekEnd]);
 
   const onMoveInstance = React.useCallback(
     async (id: string, nextStart: Date) => {
@@ -149,7 +159,7 @@ export function ScheduleView({
 
       <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
         <ScheduleGrid
-          loading={false}
+          loading={loading}
           classInstances={instances}
           weekDates={weekDates}
           onMoveInstance={onMoveInstance}
