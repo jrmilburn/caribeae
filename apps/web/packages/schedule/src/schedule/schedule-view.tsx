@@ -47,8 +47,11 @@ export function ScheduleView({
     [dataAdapter, dataEndpoint]
   );
 
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-  const displayWeekEnd = addDays(weekStart, 6);
+  const weekStart = useMemo(
+    () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
+    [currentWeek]
+  );
+  const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
   const weekDates = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
