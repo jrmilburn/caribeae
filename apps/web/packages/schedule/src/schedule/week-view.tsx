@@ -8,6 +8,27 @@ const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
 const SLOT_HEIGHT_PX = 16;
 
+// Combines a date (YYYY-MM-DD) with a "6:15 AM" style time in the user's local TZ
+function combineDateAndTime12(date: Date, time12: string) {
+  const { hours24, minutes } = parseTime12(time12);
+  const d = new Date(date);
+  d.setHours(hours24, minutes, 0, 0);
+  return d;
+}
+
+function parseTime12(time12: string) {
+  const [hm, ampmRaw] = time12.trim().split(/\s+/);
+  const [hStr, mStr] = hm.split(":");
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const ampm = ampmRaw.toUpperCase();
+
+  if (ampm === "PM" && h !== 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+
+  return { hours24: h, minutes: m };
+}
+
 type TimeSlot = { time24: string; time12: string; isHour: boolean };
 type DurationOption = 20 | 30 | 45 | 60 | 90 | 120;
 
