@@ -6,7 +6,7 @@ import { differenceInMinutes } from "date-fns";
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   await requireAdmin();
 
-  const id = params.id;
+  const { id } = await params;
   if (!id) return NextResponse.json({ error: "Missing template id" }, { status: 400 });
 
   const body = (await request.json()) as { startTime?: string; endTime?: string };
