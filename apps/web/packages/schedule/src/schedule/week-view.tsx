@@ -40,8 +40,6 @@ type WeekViewProps = {
   onDayHeaderClick: (day: DayOfWeek) => void;
   onSlotClick?: (date: Date) => void;
   onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
-  draggingId: string | null;
-  setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -54,8 +52,6 @@ export default function WeekView(props: WeekViewProps) {
     onDayHeaderClick,
     onSlotClick,
     onMoveClass,
-    draggingId,
-    setDraggingId,
     getTeacherColor,
   } = props;
 
@@ -169,14 +165,10 @@ export default function WeekView(props: WeekViewProps) {
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";
-                      const dragId = c.templateId ?? c.id;
-                      e.dataTransfer.setData("text/plain", dragId);
-                      setDraggingId(dragId);
+                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
                     }}
-                    onDragEnd={() => setDraggingId(null)}
                     className={cn(
                       "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
-                      draggingId === (c.templateId ?? c.id) && "opacity-0",
                       colors.bg,
                       colors.border
                     )}

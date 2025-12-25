@@ -57,7 +57,6 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     [classes, levelLookup]
   );
   const normalized = useMemo(() => attachLayout(classesWithLevels), [classesWithLevels]);
-  const [draggingId, setDraggingId] = React.useState<string | null>(null);
 
   const selectedDayName = DAYS_OF_WEEK[selectedDay] ?? "Monday";
 
@@ -79,8 +78,6 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           }}
           onSlotClick={onSlotClick}
           onMoveClass={onMoveClass}
-          draggingId={draggingId}
-          setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
         />
       ) : (
@@ -92,8 +89,6 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           onBack={() => setViewMode("week")}
           onSlotClick={onSlotClick}
           onMoveClass={onMoveClass}
-          draggingId={draggingId}
-          setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
         />
       )}
