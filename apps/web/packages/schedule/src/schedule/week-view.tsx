@@ -103,19 +103,17 @@ export default function WeekView(props: WeekViewProps) {
                 >
                   {/* Slots */}
                   {TIME_SLOTS.map((slot) => {
-                const isHovered = hoveredSlot?.day === day && hoveredSlot?.time === slot.time12;
-
-                return (
-                  <div
-                    key={`${day}-${slot.time12}`}
-                    className={cn(
-                      "border-b border-border relative cursor-pointer transition-colors",
-                      "hover:bg-accent/40"
-                    )}
-                    style={{ height: `${SLOT_HEIGHT_PX}px` }}
-                  />
-                );
-              })}
+                    return (
+                      <div
+                        key={`${day}-${slot.time12}`}
+                        className={cn(
+                          "border-b border-border relative cursor-pointer transition-colors",
+                          "hover:bg-accent/40"
+                        )}
+                        style={{ height: `${SLOT_HEIGHT_PX}px` }}
+                      />
+                    );
+                  })}
 
               {/* Class blocks */}
               {dayClasses.map((c) => {
