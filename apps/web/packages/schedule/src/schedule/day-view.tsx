@@ -38,6 +38,34 @@ export default function DayView(props: DayViewProps) {
     getTeacherColor,
   } = props;
 
+  const dragImageRef = React.useRef<HTMLElement | null>(null);
+
+  const clearDragImage = () => {
+    if (dragImageRef.current) {
+      document.body.removeChild(dragImageRef.current);
+      dragImageRef.current = null;
+    }
+  };
+
+  const createDragImage = (e: React.DragEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    const clone = el.cloneNode(true) as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    clone.style.position = "absolute";
+    clone.style.top = "-9999px";
+    clone.style.left = "-9999px";
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.opacity = "1";
+    clone.style.pointerEvents = "none";
+    document.body.appendChild(clone);
+
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    e.dataTransfer?.setDragImage(clone, offsetX, offsetY);
+    dragImageRef.current = clone;
+  };
+
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
   const minuteHeight = SLOT_HEIGHT_PX / 15;
 
@@ -112,9 +140,13 @@ export default function DayView(props: DayViewProps) {
                   e.dataTransfer.effectAllowed = "move";
                   const dragId = c.templateId ?? c.id;
                   e.dataTransfer.setData("text/plain", dragId);
+                  createDragImage(e);
                   setDraggingId(dragId);
                 }}
-                onDragEnd={() => setDraggingId(null)}
+                onDragEnd={() => {
+                  clearDragImage();
+                  setDraggingId(null);
+                }}
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   draggingId === (c.templateId ?? c.id) && "opacity-0",
