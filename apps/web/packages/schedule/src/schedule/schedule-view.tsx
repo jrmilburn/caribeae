@@ -7,8 +7,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
 
 import ScheduleGrid from "./schedule-grid";
-import type { NormalizedClassInstance, ClassInstance } from "./schedule-types";
-import { normalizeClassInstance } from "./schedule-types";
+import type { NormalizedScheduleClass } from "./schedule-types";
+import { normalizeScheduleClass } from "./schedule-types";
 import {
   createApiScheduleDataAdapter,
   type ScheduleDataAdapter,
@@ -21,8 +21,8 @@ export type ScheduleViewProps = {
   dataAdapter?: ScheduleDataAdapter;
   /** Optional endpoint used to build a client-safe adapter without passing functions from server components. */
   dataEndpoint?: string;
-  /** Optional server action to persist moves without going through the API route. */
-  moveClassInstanceAction?: ScheduleDataAdapter["moveClassInstance"];
+  /** Optional callback when a schedule slot is clicked. */
+  onSlotClick?: (date: Date) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
 };
@@ -30,8 +30,8 @@ export type ScheduleViewProps = {
 export function ScheduleView({
   levels,
   dataAdapter,
-  dataEndpoint = "/api/admin/class-instances",
-  moveClassInstanceAction,
+  dataEndpoint = "/api/admin/class-templates",
+  onSlotClick,
   defaultViewMode = "week",
   showHeader = true,
 }: ScheduleViewProps) {
@@ -40,18 +40,15 @@ export function ScheduleView({
     normalizeWeekAnchor(new Date())
   );
   const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
-  const [instances, setInstances] = useState<NormalizedClassInstance[]>([]);
+  const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const [error, setError] = useState<string | null>(null);
 
-  const adapter = React.useMemo(() => {
-    const base = dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint);
-    if (moveClassInstanceAction) {
-      return { ...base, moveClassInstance: moveClassInstanceAction };
-    }
-    return base;
-  }, [dataAdapter, dataEndpoint, moveClassInstanceAction]);
+  const adapter = React.useMemo(
+    () => dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint),
+    [dataAdapter, dataEndpoint]
+  );
 
   const weekStart = useMemo(
     () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
@@ -65,16 +62,16 @@ export function ScheduleView({
 
   React.useEffect(() => {
     let cancelled = false;
-    async function loadInstances() {
+    async function loadClasses() {
       setLoading(true);
       setError(null);
       try {
-        const data = await adapter.fetchClassInstances({
+        const data = await adapter.fetchClasses({
           from: weekStart,
           to: displayWeekEnd,
         });
         if (cancelled) return;
-        setInstances(data.map(normalizeClassInstance));
+        setClasses(data.map(normalizeScheduleClass));
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Unable to load schedule");
@@ -82,48 +79,11 @@ export function ScheduleView({
         if (!cancelled) setLoading(false);
       }
     }
-    void loadInstances();
+    void loadClasses();
     return () => {
       cancelled = true;
     };
   }, [adapter, weekStart, displayWeekEnd]);
-
-  const onMoveInstance = React.useCallback(
-    async (id: string, nextStart: Date) => {
-      const existing = instances.find((c) => c.id === id);
-      if (!existing) return;
-
-      const duration = existing.durationMin;
-      const nextEnd = addMinutes(nextStart, duration);
-
-      const optimistic: NormalizedClassInstance = normalizeClassInstance({
-        ...existing,
-        startTime: nextStart,
-        endTime: nextEnd,
-      } as ClassInstance);
-
-      setInstances((prev) => prev.map((c) => (c.id === id ? optimistic : c)));
-
-      if (!adapter.moveClassInstance) return;
-
-      try {
-        const persisted = await adapter.moveClassInstance({
-          id,
-          startTime: nextStart,
-          endTime: nextEnd,
-        });
-
-        setInstances((prev) =>
-          prev.map((c) => (c.id === id ? normalizeClassInstance(persisted) : c))
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to move class");
-        // revert
-        setInstances((prev) => prev.map((c) => (c.id === id ? existing : c)));
-      }
-    },
-    [instances, adapter]
-  );
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -177,9 +137,9 @@ export function ScheduleView({
       <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
         <ScheduleGrid
           loading={loading}
-          classInstances={instances}
+          classes={classes}
           weekDates={weekDates}
-          onMoveInstance={onMoveInstance}
+          onSlotClick={onSlotClick}
           viewMode={viewMode}
           setViewMode={setViewMode}
           selectedDay={selectedDay}
@@ -195,12 +155,6 @@ function normalizeWeekAnchor(date: Date): Date {
   const normalized = new Date(date);
   normalized.setHours(12, 0, 0, 0);
   return normalized;
-}
-
-function addMinutes(date: Date, minutes: number): Date {
-  const copy = new Date(date);
-  copy.setMinutes(copy.getMinutes() + minutes);
-  return copy;
 }
 
 function toMondayIndex(date: Date): number {
