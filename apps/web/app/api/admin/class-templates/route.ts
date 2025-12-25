@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/requireAdmin";
-import getClassInstances from "@/server/classInstance/getClassInstances";
+import { getTemplateOccurrences } from "@/server/classTemplate/getTemplateOccurrences";
 
 export async function GET(request: Request) {
   await requireAdmin();
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
   }
 
-  const classInstances = await getClassInstances({ from: fromDate, to: toDate });
+  const classes = await getTemplateOccurrences({ from: fromDate, to: toDate });
 
-  return NextResponse.json({ classInstances });
+  return NextResponse.json({ classes });
 }
