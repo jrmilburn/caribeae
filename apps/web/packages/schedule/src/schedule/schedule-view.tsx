@@ -60,6 +60,8 @@ export function ScheduleView({
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [weekStart]);
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   React.useEffect(() => {
     let cancelled = false;
     async function loadClasses() {
@@ -83,7 +85,42 @@ export function ScheduleView({
     return () => {
       cancelled = true;
     };
-  }, [adapter, weekStart, displayWeekEnd]);
+  }, [adapter, weekStart, displayWeekEnd, reloadKey]);
+
+  const onMoveClass = React.useCallback(
+    async (templateId: string, nextStart: Date) => {
+      const existing = classes.find((c) => c.templateId === templateId);
+      if (!existing) return;
+
+      const duration = existing.durationMin;
+      const nextEnd = addMinutes(nextStart, duration);
+
+      const optimistic = normalizeScheduleClass({
+        ...existing,
+        startTime: nextStart,
+        endTime: nextEnd,
+      });
+
+      setClasses((prev) =>
+        prev.map((c) => (c.templateId === templateId ? optimistic : c))
+      );
+
+      if (!adapter.moveTemplate) return;
+
+      try {
+        await adapter.moveTemplate({
+          templateId,
+          startTime: nextStart,
+          endTime: nextEnd,
+        });
+        setReloadKey((k) => k + 1);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to move class");
+        setClasses((prev) => prev.map((c) => (c.templateId === templateId ? existing : c)));
+      }
+    },
+    [adapter, classes]
+  );
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -140,6 +177,7 @@ export function ScheduleView({
           classes={classes}
           weekDates={weekDates}
           onSlotClick={onSlotClick}
+          onMoveClass={onMoveClass}
           viewMode={viewMode}
           setViewMode={setViewMode}
           selectedDay={selectedDay}
@@ -160,4 +198,10 @@ function normalizeWeekAnchor(date: Date): Date {
 function toMondayIndex(date: Date): number {
   const js = date.getDay(); // 0=Sun
   return js === 0 ? 6 : js - 1; // Monday=0
+}
+
+function addMinutes(date: Date, minutes: number): Date {
+  const copy = new Date(date);
+  copy.setMinutes(copy.getMinutes() + minutes);
+  return copy;
 }

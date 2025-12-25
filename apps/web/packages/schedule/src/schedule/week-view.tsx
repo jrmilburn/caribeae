@@ -39,6 +39,7 @@ type WeekViewProps = {
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onDayHeaderClick: (day: DayOfWeek) => void;
   onSlotClick?: (date: Date) => void;
+  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -50,6 +51,7 @@ export default function WeekView(props: WeekViewProps) {
     classes,
     onDayHeaderClick,
     onSlotClick,
+    onMoveClass,
     getTeacherColor,
   } = props;
 
@@ -138,6 +140,14 @@ export default function WeekView(props: WeekViewProps) {
                           if (!onSlotClick) return;
                           onSlotClick(combineDateAndTime12(weekDates[dayIndex], slot.time12));
                         }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          if (!onMoveClass) return;
+                          e.preventDefault();
+                          const templateId = e.dataTransfer.getData("text/plain");
+                          if (!templateId) return;
+                          onMoveClass(templateId, combineDateAndTime12(weekDates[dayIndex], slot.time12));
+                        }}
                       />
                     );
                   })}
@@ -152,6 +162,11 @@ export default function WeekView(props: WeekViewProps) {
                 return (
                   <div
                     key={c.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                    }}
                     className={cn(
                       "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                       colors.bg,

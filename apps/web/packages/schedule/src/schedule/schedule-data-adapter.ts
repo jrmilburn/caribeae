@@ -14,6 +14,12 @@ export type FetchClassesParams = {
 export type ScheduleDataAdapter = {
   /** Load projected class occurrences from templates. */
   fetchClasses: (params: FetchClassesParams) => Promise<ScheduleClass[]>;
+  /** Persist a drag-and-drop move for a template occurrence. */
+  moveTemplate?: (input: {
+    templateId: string;
+    startTime: Date;
+    endTime: Date;
+  }) => Promise<ScheduleClass>;
   /** Optional: load supporting metadata (teachers/levels) for labels. */
   fetchTeachers?: () => Promise<Teacher[]>;
   fetchLevels?: () => Promise<Level[]>;
@@ -52,6 +58,29 @@ export function createApiScheduleDataAdapter(
 
       const payload = (await response.json()) as { classes?: ScheduleClass[] };
       return Array.isArray(payload.classes) ? payload.classes : [];
+    },
+
+    async moveTemplate(input) {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(input.templateId)}`, {
+        method: "PATCH",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          startTime: input.startTime.toISOString(),
+          endTime: input.endTime.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to move class template");
+      }
+
+      const payload = (await response.json()) as { template?: ScheduleClass };
+      if (!payload.template) {
+        throw new Error("Invalid response from server");
+      }
+      return payload.template;
     },
   };
 }

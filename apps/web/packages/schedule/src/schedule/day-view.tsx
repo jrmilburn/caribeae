@@ -18,6 +18,7 @@ type DayViewProps = {
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onBack: () => void;
   onSlotClick?: (date: Date) => void;
+  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -29,6 +30,7 @@ export default function DayView(props: DayViewProps) {
     classes,
     onBack,
     onSlotClick,
+    onMoveClass,
     getTeacherColor,
   } = props;
 
@@ -81,6 +83,14 @@ export default function DayView(props: DayViewProps) {
                 if (!onSlotClick) return;
                 onSlotClick(combineDateAndTime(dayDate, slot.time12));
               }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                if (!onMoveClass) return;
+                e.preventDefault();
+                const templateId = e.dataTransfer.getData("text/plain");
+                if (!templateId) return;
+                onMoveClass(templateId, combineDateAndTime(dayDate, slot.time12));
+              }}
             />
           ))}
 
@@ -93,6 +103,11 @@ export default function DayView(props: DayViewProps) {
             return (
               <div
                 key={c.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                }}
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   colors.bg,
