@@ -1,7 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { MoreVertical, Pencil, Trash2, CalendarPlus } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -17,19 +16,12 @@ import type { TemplateWithLevel } from "./TemplateList";
 
 export default function TemplateListItem({
   template,
-  checked,
-  onCheckedChange,
   onEdit,
   onDelete,
-  onGenerate,
 }: {
   template: TemplateWithLevel;
-  checked: boolean;
-  onCheckedChange: (next: boolean) => void;
-
   onEdit: (template: TemplateWithLevel) => void;
   onDelete: (template: TemplateWithLevel) => void;
-  onGenerate: (template: TemplateWithLevel) => void;
 }) {
   const name = template.name?.trim() || "Untitled";
 
@@ -50,20 +42,7 @@ export default function TemplateListItem({
       className="w-full border-b px-4 py-3 text-left transition hover:bg-muted/40"
     >
       <div className="flex items-center justify-between gap-3">
-        {/* checkbox */}
-        <div className="flex w-10 items-center justify-center">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => onCheckedChange(e.target.checked)}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            aria-label={`Select ${name}`}
-            className="h-4 w-4"
-          />
-        </div>
-
-        <div className="truncate text-sm font-medium flex-1">
+        <div className="truncate text-sm font-medium flex-[1.2]">
           <div className="flex items-center gap-2">
             <span className="truncate">{name}</span>
             {!template.active ? (
@@ -92,18 +71,6 @@ export default function TemplateListItem({
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onGenerate(template);
-              }}
-            >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Generate instances
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
