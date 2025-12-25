@@ -169,24 +169,3 @@ export default function WeekView(props: WeekViewProps) {
     </>
   );
 }
-
-// Combines a date (YYYY-MM-DD) with a "6:15 AM" style time in the user's local TZ
-function combineDateAndTime12(date: Date, time12: string) {
-  const { hours24, minutes } = parseTime12(time12);
-  const d = new Date(date);
-  d.setHours(hours24, minutes, 0, 0);
-  return d;
-}
-
-function parseTime12(time12: string) {
-  const [hm, ampmRaw] = time12.trim().split(/\s+/);
-  const [hStr, mStr] = hm.split(":");
-  let h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  const ampm = ampmRaw.toUpperCase();
-
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-
-  return { hours24: h, minutes: m };
-}
