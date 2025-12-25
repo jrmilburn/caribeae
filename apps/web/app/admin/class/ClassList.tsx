@@ -163,7 +163,7 @@ export default function ClassList({
         onSave={handleSave}
       />
 
-      <div className="max-h-[calc(100vh-]">
+      <div className="max-h-[calc(100vh]">
         {filteredInstances.map((i) => (
           <ClassListItem
             key={i.id}

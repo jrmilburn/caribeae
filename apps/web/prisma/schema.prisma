@@ -63,7 +63,6 @@ model Student {
   updatedAt       DateTime        @updatedAt
   enrolments      Enrolment[]
   attendances     Attendance[]
-  waitlistEntries WaitlistEntry[]
 }
 
 model ClassTemplate {
@@ -85,7 +84,6 @@ model ClassTemplate {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   enrolments      Enrolment[]
-  waitlistEntries WaitlistEntry[]
 }
 
 model ClassInstance {
@@ -110,7 +108,6 @@ model ClassInstance {
 
   enrolmentLinks        EnrolmentOnClassInstance[]
   attendances           Attendance[]
-  enrolmentReservations EnrolmentReservation[]
 
   @@unique([templateId, startTime])
 }
@@ -128,7 +125,7 @@ model Enrolment {
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   templateId String
-  template   ClassTemplate @relation(fields: [templateId], references: [id])
+  template   ClassTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   startDate   DateTime
   endDate     DateTime?
@@ -137,10 +134,6 @@ model Enrolment {
 
   planId String?
   plan   EnrolmentPlan? @relation(fields: [planId], references: [id])
-
-  reservations EnrolmentReservation[]
-  purchases    EnrolmentPurchase[]
-  pauses       EnrolmentPause[]
 
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
@@ -152,135 +145,6 @@ model Enrolment {
   @@index([templateId])
 }
 
-model EnrolmentReservation {
-  id String @id @default(cuid())
-
-  enrolmentId String
-  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
-
-  classId String
-  class   ClassInstance @relation(fields: [classId], references: [id], onDelete: Cascade)
-
-  studentId String // denormalized for constraints + fast roster queries
-
-  status      ReservationStatus @default(HELD) // see below
-  cancelledAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([classId, studentId]) // prevents double booking a student in the same class instance
-  @@unique([enrolmentId, classId])
-  @@index([classId])
-  @@index([studentId])
-}
-
-enum ReservationStatus {
-  HELD
-  RELEASED
-}
-
-enum PurchaseStatus {
-  ACTIVE
-  FULLY_USED
-  REFUNDED
-}
-
-model EnrolmentPurchase {
-  id String @id @default(cuid())
-
-  enrolmentId String
-  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
-
-  // What was purchased
-  sessionsPurchased Int
-  priceCents        Int // total paid upfront
-
-  // Consumption tracking
-  sessionsConsumed Int @default(0)
-
-  // Refund tracking
-  refundedCents Int            @default(0)
-  status        PurchaseStatus @default(ACTIVE)
-
-  paymentId String?
-  payment   Payment? @relation(fields: [paymentId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([enrolmentId])
-}
-
-model EnrolmentPause {
-  id String @id @default(cuid())
-
-  enrolmentId String
-  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
-
-  startDate DateTime
-  endDate   DateTime?
-
-  holdSeat Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([enrolmentId])
-}
-
-enum WaitlistStatus {
-  WAITING
-  OFFERED
-  ENROLLED
-  CANCELLED
-}
-
-model WaitlistEntry {
-  id String @id @default(cuid())
-
-  templateId String
-  template   ClassTemplate @relation(fields: [templateId], references: [id])
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  desiredStartDate DateTime?
-  status           WaitlistStatus @default(WAITING)
-
-  priority Int @default(0) // optional: staff overrides / medical priority etc.
-
-  offeredAt DateTime?
-  expiresAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([templateId, studentId, status]) // prevents duplicate waiting entries
-  @@index([templateId, status, priority, createdAt])
-}
-
-enum PaymentProvider {
-  CASH
-  CARD
-  STRIPE
-  OTHER
-}
-
-model Payment {
-  id String @id @default(cuid())
-
-  provider    PaymentProvider
-  amountCents Int
-
-  // optional linkage
-  familyId            String?
-  enrolmentPurchaseId String?
-
-  providerRef        String?
-  createdAt          DateTime            @default(now())
-  enrolmentPurchases EnrolmentPurchase[]
-}
 
 enum EnrolmentType {
   BLOCK
@@ -318,7 +182,7 @@ model EnrolmentOnClassInstance {
   studentId   String
   classId     String
 
-  enrolment Enrolment     @relation(fields: [enrolmentId], references: [id])
+  enrolment Enrolment     @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
   class     ClassInstance @relation(fields: [classId], references: [id])
 
   createdAt DateTime @default(now())

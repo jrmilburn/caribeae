@@ -8,13 +8,19 @@ export async function deleteTemplate(id : string) {
 
     await getOrCreateUser();
 
+    const deletedEnrolments = await prisma.enrolment.deleteMany({
+        where: {
+            templateId: id
+        }
+    })
+
     const deletedTemplate = await prisma.classTemplate.delete({
         where: {
             id
         },
     })
 
-    if(!deletedTemplate) {
+    if(!deletedTemplate || !deletedEnrolments) {
         return { success: false }
     }
 
