@@ -47,6 +47,9 @@ type FormState = {
   startDate: string; // YYYY-MM-DD
   endDate: string; // "" or YYYY-MM-DD
 
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // "" or YYYY-MM-DD
+
   // schedule
   dayOfWeek: string; // "" or "0".."6"
   startTime: string; // "" or "HH:MM"

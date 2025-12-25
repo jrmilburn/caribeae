@@ -120,7 +120,6 @@ model Enrolment {
   @@index([templateId])
 }
 
-
 enum EnrolmentType {
   BLOCK
   CLASS
@@ -182,6 +181,7 @@ model Teacher {
   phone    String?
   email    String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  classTemplates ClassTemplate[]
 }
