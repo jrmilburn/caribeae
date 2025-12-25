@@ -62,7 +62,6 @@ model Student {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   enrolments      Enrolment[]
-  attendances     Attendance[]
 }
 
 model ClassTemplate {
@@ -73,43 +72,18 @@ model ClassTemplate {
   startTime Int? //Modelled as minutes since midnight
   endTime   Int? //Modelled as minutes since midnight
 
+  startDate DateTime @default(now())
+  endDate   DateTime?
+
   capacity Int?
   active   Boolean @default(true)
 
   levelId String
   level   Level  @relation(fields: [levelId], references: [id])
 
-  instances ClassInstance[]
-
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   enrolments      Enrolment[]
-}
-
-model ClassInstance {
-  id String @id @default(cuid())
-
-  templateId String?
-  template   ClassTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-
-  startTime DateTime
-  endTime   DateTime
-
-  status   String?
-  capacity Int?
-
-  levelId String
-  level   Level  @relation(fields: [levelId], references: [id])
-
-  enrolments Enrolment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  enrolmentLinks        EnrolmentOnClassInstance[]
-  attendances           Attendance[]
-
-  @@unique([templateId, startTime])
 }
 
 enum EnrolmentStatus {
@@ -137,9 +111,7 @@ model Enrolment {
 
   createdAt                 DateTime                   @default(now())
   updatedAt                 DateTime                   @updatedAt
-  classInstance             ClassInstance?             @relation(fields: [classInstanceId], references: [id])
-  classInstanceId           String?
-  enrolmentOnClassInstances EnrolmentOnClassInstance[]
+
 
   @@index([studentId])
   @@index([templateId])
@@ -175,24 +147,6 @@ model EnrolmentPlan {
   enrolments Enrolment[]
 }
 
-model EnrolmentOnClassInstance {
-  id String @id @default(cuid())
-
-  enrolmentId String
-  studentId   String
-  classId     String
-
-  enrolment Enrolment     @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
-  class     ClassInstance @relation(fields: [classId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([classId, studentId]) // prevents double booking
-  @@index([studentId])
-  @@index([classId])
-}
-
 model Level {
   id String @id @default(cuid())
 
@@ -204,7 +158,6 @@ model Level {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   classTemplates ClassTemplate[]
-  classInstances ClassInstance[]
   enrolmentPlans EnrolmentPlan[]
 }
 
@@ -228,31 +181,4 @@ model Teacher {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-  LATE
-  MAKEUP
-  EXCUSED
-}
-
-model Attendance {
-  id String @id @default(cuid())
-
-  classId String
-  class   ClassInstance @relation(fields: [classId], references: [id], onDelete: Cascade)
-
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  status AttendanceStatus
-  notes  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([classId, studentId])
-  @@index([studentId])
 }
