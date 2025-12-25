@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 import { useRouter } from "next/navigation";
 
-import type { Prisma, Level } from "@prisma/client";
+import type { Prisma, Level, Teacher } from "@prisma/client";
 
 import TemplateListItem from "./TemplateListItem";
 import { TemplateModal } from "./TemplateModal";
@@ -22,15 +22,17 @@ import { deleteTemplate } from "@/server/classTemplate/deleteTemplate";
 import type { ClientTemplate } from "@/server/classTemplate/types";
 
 export type TemplateWithLevel = Prisma.ClassTemplateGetPayload<{
-  include: { level: true };
+  include: { level: true; teacher: true };
 }>;
 
 export default function TemplateList({
   templates,
   levels,
+  teachers,
 }: {
   templates: TemplateWithLevel[];
   levels: Level[];
+  teachers: Teacher[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [newTemplateModal, setNewTemplateModal] = useState(false);
@@ -101,6 +103,7 @@ export default function TemplateList({
         }}
         template={selectedTemplate}
         levels={levels}
+        teachers={teachers}
         onSave={handleSave}
       />
 

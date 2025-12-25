@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { ClassTemplate, Level } from "@prisma/client";
+import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 
 import {
   Dialog,
@@ -28,18 +28,24 @@ type TemplateModalProps = {
 
   template?: ClassTemplate | null;
   levels: Level[];
+  teachers: Teacher[];
 
   onSave: (payload: ClientTemplate) => Promise<any>;
   prefill?: {
     date?: Date;
     startMinutes?: number;
     levelId?: string;
+    teacherId?: string;
   };
 };
 
 type FormState = {
   name: string;
   levelId: string;
+  teacherId: string;
+
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // "" or YYYY-MM-DD
 
   startDate: string; // YYYY-MM-DD
   endDate: string; // "" or YYYY-MM-DD
@@ -110,6 +116,7 @@ export function TemplateModal({
   onOpenChange,
   template,
   levels,
+  teachers,
   onSave,
   prefill,
 }: TemplateModalProps) {
@@ -123,12 +130,14 @@ export function TemplateModal({
 
   const [form, setForm] = React.useState<FormState>(() => {
     const initialLevel = prefill?.levelId ?? levels?.[0]?.id ?? "";
+    const initialTeacher = prefill?.teacherId ?? teachers?.[0]?.id ?? "";
     const initialDate = prefill?.date ?? new Date();
     const initialStart = typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
 
     return {
       name: "",
       levelId: initialLevel,
+      teacherId: initialTeacher,
       startDate: dateToInput(initialDate),
       endDate: "",
 
@@ -150,7 +159,7 @@ export function TemplateModal({
   const customCapacityRef = React.useRef<HTMLInputElement | null>(null);
 
   const [submitting, setSubmitting] = React.useState(false);
-  const [touched, setTouched] = React.useState<{ levelId?: boolean }>({});
+  const [touched, setTouched] = React.useState<{ levelId?: boolean; teacherId?: boolean }>({});
   const [error, setError] = React.useState<string>("");
 
   const selectedLevel = React.useMemo(
@@ -170,6 +179,7 @@ React.useEffect(() => {
     setForm({
       name: template.name ?? "",
       levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
+      teacherId: template.teacherId ?? (teachers?.[0]?.id ?? ""),
       startDate: dateToInput(new Date(template.startDate)),
       endDate: template.endDate ? dateToInput(new Date(template.endDate)) : "",
       dayOfWeek:
@@ -195,11 +205,13 @@ React.useEffect(() => {
     setStep(isEditMode ? 1 : 0); // if you want edit to land on schedule step
   } else {
     const initialLevel = prefill?.levelId ?? levels?.[0]?.id ?? "";
+    const initialTeacher = prefill?.teacherId ?? teachers?.[0]?.id ?? "";
     const initialDate = prefill?.date ?? new Date();
     const initialStart = typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
     setForm({
       name: "",
       levelId: initialLevel,
+      teacherId: initialTeacher,
       startDate: dateToInput(initialDate),
       endDate: "",
       dayOfWeek: initialStart !== null || prefill?.date ? toTemplateDayOfWeek(initialDate) : "",
@@ -219,7 +231,7 @@ React.useEffect(() => {
   setTouched({});
   setError("");
   setSubmitting(false);
-}, [open, template, levels, prefill]);
+}, [open, template, levels, teachers, prefill]);
 
 React.useEffect(() => {
   const lvl = selectedLevel;
@@ -246,6 +258,7 @@ React.useEffect(() => {
 
   // --- validation (same as before) ---
   const levelError = touched.levelId && !form.levelId ? "Level is required." : "";
+  const teacherError = touched.teacherId && !form.teacherId ? "Teacher is required." : "";
   const dateError = !form.startDate ? "Start date is required." : "";
   const endDateError =
     form.endDate && form.startDate && form.endDate < form.startDate
@@ -278,10 +291,12 @@ React.useEffect(() => {
     return "";
   })();
 
-  const canGoNext = Boolean(form.levelId);
+  const canGoNext = Boolean(form.levelId && form.teacherId);
   const canSubmit =
     !!form.levelId &&
+    !!form.teacherId &&
     !levelError &&
+    !teacherError &&
     !timeError &&
     !capacityError &&
     !dateError &&
@@ -289,10 +304,10 @@ React.useEffect(() => {
     !submitting;
 
   const handleSubmit = async () => {
-    setTouched({ levelId: true });
+    setTouched({ levelId: true, teacherId: true });
     setError("");
 
-    if (!form.levelId) return;
+    if (!form.levelId || !form.teacherId) return;
     if (timeError || capacityError) return;
 
     const startMin =
@@ -304,6 +319,7 @@ React.useEffect(() => {
     const payload: ClientTemplate = {
       name: form.name.trim() || undefined,
       levelId: form.levelId,
+      teacherId: form.teacherId || null,
     
       dayOfWeek:
         scheduleMode === "default" ? null : form.dayOfWeek === "" ? null : Number(form.dayOfWeek),
@@ -418,6 +434,34 @@ React.useEffect(() => {
                       {formatCapacity(levelDefaultCap)}
                     </p>
                   ) : null}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Teacher</label>
+                  <select
+                    value={form.teacherId}
+                    onChange={(e) => setField("teacherId", e.target.value)}
+                    onBlur={() => setTouched((t) => ({ ...t, teacherId: true }))}
+                    className={cn(
+                      "h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40",
+                      teacherError && "border-destructive focus-visible:ring-destructive"
+                    )}
+                  >
+                    <option value="" disabled>
+                      Select a teacher…
+                    </option>
+                    {teachers?.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {teacherError ? (
+                    <p className="text-xs text-destructive">{teacherError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Assigns the primary teacher.</p>
+                  )}
                 </div>
 
                 <div className="rounded-xl border bg-muted/20 p-3 text-sm">

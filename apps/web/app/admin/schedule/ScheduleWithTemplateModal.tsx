@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Level } from "@prisma/client";
+import type { Level, Teacher } from "@prisma/client";
 import { useRouter } from "next/navigation";
 
 import { ScheduleView } from "@/packages/schedule";
@@ -9,7 +9,7 @@ import { TemplateModal } from "../class/templates/TemplateModal";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import type { ClientTemplate } from "@/server/classTemplate/types";
 
-export default function ScheduleWithTemplateModal({ levels }: { levels: Level[] }) {
+export default function ScheduleWithTemplateModal({ levels, teachers }: { levels: Level[]; teachers: Teacher[] }) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [prefill, setPrefill] = useState<{ date: Date; startMinutes: number } | null>(null);
@@ -39,6 +39,7 @@ export default function ScheduleWithTemplateModal({ levels }: { levels: Level[] 
         onOpenChange={setModalOpen}
         template={null}
         levels={levels}
+        teachers={teachers}
         onSave={handleSave}
         prefill={prefill ? { date: prefill.date, startMinutes: prefill.startMinutes } : undefined}
       />

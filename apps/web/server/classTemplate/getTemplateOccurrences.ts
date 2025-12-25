@@ -9,8 +9,10 @@ export type TemplateOccurrence = {
   startTime: Date;
   endTime: Date;
   capacity?: number | null;
-  level?: Prisma.ClassTemplateGetPayload<{ include: { level: true } }>['level'];
+  level?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>['level'];
   levelId?: string;
+  teacher?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>['teacher'];
+  teacherId?: string | null;
 };
 
 export async function getTemplateOccurrences(params: { from: Date; to: Date }): Promise<TemplateOccurrence[]> {
@@ -22,14 +24,14 @@ export async function getTemplateOccurrences(params: { from: Date; to: Date }): 
       startDate: { lte: to },
       OR: [{ endDate: null }, { endDate: { gte: from } }],
     },
-    include: { level: true },
+    include: { level: true, teacher: true },
   });
 
   return templates.flatMap((template) => expandTemplateToRange(template, from, to));
 }
 
 function expandTemplateToRange(
-  template: Prisma.ClassTemplateGetPayload<{ include: { level: true } }>,
+  template: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>,
   from: Date,
   to: Date
 ): TemplateOccurrence[] {
@@ -74,6 +76,8 @@ function expandTemplateToRange(
       capacity: template.capacity ?? template.level?.defaultCapacity ?? null,
       level: template.level,
       levelId: template.levelId,
+      teacher: template.teacher,
+      teacherId: template.teacherId,
     });
 
     cursor = addDays(cursor, 7);

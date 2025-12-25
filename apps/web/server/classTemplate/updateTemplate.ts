@@ -22,7 +22,8 @@ export async function updateTemplate(payload : ClientTemplate, id : string) {
                 startDate: new Date(payload.startDate),
                 endDate: payload?.endDate ? new Date(payload.endDate) : null,
                 capacity: payload?.capacity,
-                active: payload?.active
+                active: payload?.active,
+                teacherId: payload?.teacherId ?? null
             }
         })
     

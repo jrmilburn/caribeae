@@ -10,4 +10,6 @@ export type ClientTemplate = {
 
   capacity?: number | null;
   active?: boolean;
+
+  teacherId?: string | null;
 };

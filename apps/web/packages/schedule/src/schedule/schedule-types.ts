@@ -38,6 +38,8 @@ export type ClassTemplate = {
   active?: boolean | null;
   level?: Level | null;
   levelId?: string;
+  teacher?: Teacher | null;
+  teacherId?: string | null;
 };
 
 export type ScheduleClass = {
@@ -51,6 +53,7 @@ export type ScheduleClass = {
   level?: Level | null;
   levelId?: string | null;
   teacher?: Teacher | null;
+  teacherId?: string | null;
 };
 
 export type NormalizedScheduleClass = ScheduleClass & {
