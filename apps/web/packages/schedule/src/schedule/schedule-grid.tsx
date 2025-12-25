@@ -1,10 +1,9 @@
 "use client";
 
-import * as React from "react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { isSameDay } from "date-fns";
 
-import type { DayOfWeek, NormalizedClassInstance } from "./schedule-types";
+import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
 import WeekView from "./week-view";
 import DayView from "./day-view";
 
@@ -12,9 +11,10 @@ import type { Level } from "@prisma/client";
 
 export type ScheduleGridProps = {
   loading: boolean;
-  classInstances: NormalizedClassInstance[];
+  classes: NormalizedScheduleClass[];
   weekDates: Date[];
-  onMoveInstance: (id: string, nextStart: Date) => Promise<void> | void;
+  onSlotClick?: (date: Date) => void;
+  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
   viewMode: "week" | "day";
   setViewMode: React.Dispatch<React.SetStateAction<"week" | "day">>;
   selectedDay: number;
@@ -37,18 +37,27 @@ const TIME_SLOTS = generateTimeSlots();
 export default function ScheduleGrid(props: ScheduleGridProps) {
   const {
     loading,
-    classInstances,
+    classes,
     weekDates,
-    onMoveInstance,
-    viewMode,
-    setViewMode,
-    selectedDay,
-    setSelectedDay,
-    levels
+    onSlotClick,
+    onMoveClass,
+  viewMode,
+  setViewMode,
+  selectedDay,
+  setSelectedDay,
+  levels
   } = props;
 
-  const normalized = useMemo(() => attachLayout(classInstances), [classInstances]);
-  const [hovered, setHovered] = useState<{ day?: DayOfWeek; time?: string } | null>(null);
+  const levelLookup = useMemo(() => new Map(levels.map((l) => [l.id, l])), [levels]);
+  const classesWithLevels = useMemo(
+    () =>
+      classes.map((c) =>
+        c.level || !c.levelId ? c : { ...c, level: levelLookup.get(c.levelId) ?? c.level }
+      ),
+    [classes, levelLookup]
+  );
+  const normalized = useMemo(() => attachLayout(classesWithLevels), [classesWithLevels]);
+  const [draggingId, setDraggingId] = React.useState<string | null>(null);
 
   const selectedDayName = DAYS_OF_WEEK[selectedDay] ?? "Monday";
 
@@ -68,16 +77,11 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
             setSelectedDay(idx);
             setViewMode("day");
           }}
-          onDropInstance={(id, day, timeLabel) => {
-            const dateForDay = weekDates[dayToIndex(day)] ?? weekDates[0];
-            const nextStart = combineDateAndTime(dateForDay, timeLabel);
-            onMoveInstance(id, nextStart);
-          }}
-          onDragEnd={() => setHovered(null)}
-          hoveredSlot={hovered}
-          setHoveredSlot={setHovered}
+          onSlotClick={onSlotClick}
+          onMoveClass={onMoveClass}
+          draggingId={draggingId}
+          setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
-          levels={levels}
         />
       ) : (
         <DayView
@@ -86,13 +90,10 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
           classes={normalized.filter((c) => isSameDay(c.startTime, weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? new Date()))}
           onBack={() => setViewMode("week")}
-          onDropInstance={(id, timeLabel) => {
-            const dayDate = weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0];
-            const nextStart = combineDateAndTime(dayDate, timeLabel);
-            onMoveInstance(id, nextStart);
-          }}
-          hoveredSlot={hovered}
-          setHoveredSlot={setHovered}
+          onSlotClick={onSlotClick}
+          onMoveClass={onMoveClass}
+          draggingId={draggingId}
+          setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
         />
       )}
@@ -120,20 +121,6 @@ function generateTimeSlots(): TimeSlot[] {
   return slots;
 }
 
-function combineDateAndTime(date: Date, timeLabel: string): Date {
-  const [hm, ampm] = timeLabel.split(" ");
-  const [hStr, mStr] = hm.split(":");
-  let hours = parseInt(hStr, 10);
-  const minutes = parseInt(mStr, 10);
-
-  if (ampm?.toUpperCase() === "PM" && hours !== 12) hours += 12;
-  if (ampm?.toUpperCase() === "AM" && hours === 12) hours = 0;
-
-  const next = new Date(date);
-  next.setHours(hours, minutes, 0, 0);
-  return next;
-}
-
 function dayToIndex(day: DayOfWeek): number {
   const ordered: DayOfWeek[] = [
     "Monday",
@@ -149,8 +136,8 @@ function dayToIndex(day: DayOfWeek): number {
 
 type LayoutInfo = { column: number; columns: number };
 
-function attachLayout(instances: NormalizedClassInstance[]): Array<NormalizedClassInstance & LayoutInfo> {
-  const byDay = new Map<DayOfWeek, NormalizedClassInstance[]>();
+function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedScheduleClass & LayoutInfo> {
+  const byDay = new Map<DayOfWeek, NormalizedScheduleClass[]>();
   for (const inst of instances) {
     if (!byDay.has(inst.dayName)) byDay.set(inst.dayName, []);
     byDay.get(inst.dayName)!.push(inst);
