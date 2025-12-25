@@ -19,6 +19,8 @@ export async function updateTemplate(payload : ClientTemplate, id : string) {
                 dayOfWeek: payload?.dayOfWeek,
                 startTime: payload?.startTime,
                 endTime: payload?.endTime,
+                startDate: new Date(payload.startDate),
+                endDate: payload?.endDate ? new Date(payload.endDate) : null,
                 capacity: payload?.capacity,
                 active: payload?.active
             }

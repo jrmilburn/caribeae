@@ -1,10 +1,9 @@
 "use client";
 
-import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-import type { DayOfWeek, NormalizedClassInstance } from "./schedule-types";
+import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -16,11 +15,8 @@ type DayViewProps = {
   TIME_SLOTS: TimeSlot[];
   dayName: DayOfWeek;
   dayDate: Date;
-  classes: Array<NormalizedClassInstance & { column: number; columns: number }>;
+  classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onBack: () => void;
-  onDropInstance: (id: string, timeLabel: string) => void;
-  hoveredSlot: { day?: DayOfWeek; time?: string } | null;
-  setHoveredSlot: React.Dispatch<React.SetStateAction<{ day?: DayOfWeek; time?: string } | null>>;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -31,9 +27,6 @@ export default function DayView(props: DayViewProps) {
     dayDate,
     classes,
     onBack,
-    onDropInstance,
-    hoveredSlot,
-    setHoveredSlot,
     getTeacherColor,
   } = props;
 
@@ -77,28 +70,13 @@ export default function DayView(props: DayViewProps) {
         </div>
 
         <div className="relative" style={{ height: `${totalGridHeight}px` }}>
-          {TIME_SLOTS.map((slot) => {
-            const isHovered = hoveredSlot?.time === slot.time12;
-            return (
-              <div
-                key={`${dayName}-${slot.time12}`}
-                className={cn("border-b border-border relative transition-colors", isHovered && "bg-accent/50")}
-                style={{ height: `${SLOT_HEIGHT_PX}px` }}
-                onMouseEnter={() => setHoveredSlot({ day: dayName, time: slot.time12 })}
-                onMouseLeave={() => setHoveredSlot(null)}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setHoveredSlot({ day: dayName, time: slot.time12 });
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setHoveredSlot(null);
-                  const draggedId = e.dataTransfer.getData("text/plain");
-                  if (draggedId) onDropInstance(draggedId, slot.time12);
-                }}
-              />
-            );
-          })}
+          {TIME_SLOTS.map((slot) => (
+            <div
+              key={`${dayName}-${slot.time12}`}
+              className={cn("border-b border-border relative transition-colors")}
+              style={{ height: `${SLOT_HEIGHT_PX}px` }}
+            />
+          ))}
 
           {classes.map((c) => {
             const colors = getTeacherColor(c.teacher?.id);
@@ -109,14 +87,8 @@ export default function DayView(props: DayViewProps) {
             return (
               <div
                 key={c.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("text/plain", c.id);
-                }}
-                onDragEnd={() => setHoveredSlot(null)}
                 className={cn(
-                  "absolute rounded p-2 pr-3 cursor-move z-30 group overflow-hidden border",
+                  "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   colors.bg,
                   colors.border
                 )}
