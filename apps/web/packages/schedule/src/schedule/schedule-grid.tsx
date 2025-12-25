@@ -13,6 +13,7 @@ export type ScheduleGridProps = {
   loading: boolean;
   classes: NormalizedScheduleClass[];
   weekDates: Date[];
+  onSlotClick?: (date: Date) => void;
   viewMode: "week" | "day";
   setViewMode: React.Dispatch<React.SetStateAction<"week" | "day">>;
   selectedDay: number;
@@ -37,6 +38,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     loading,
     classes,
     weekDates,
+    onSlotClick,
   viewMode,
   setViewMode,
   selectedDay,
@@ -72,6 +74,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
             setSelectedDay(idx);
             setViewMode("day");
           }}
+          onSlotClick={onSlotClick}
           getTeacherColor={getTeacherColor}
         />
       ) : (
@@ -81,6 +84,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
           classes={normalized.filter((c) => isSameDay(c.startTime, weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? new Date()))}
           onBack={() => setViewMode("week")}
+          onSlotClick={onSlotClick}
           getTeacherColor={getTeacherColor}
         />
       )}

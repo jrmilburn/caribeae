@@ -30,6 +30,11 @@ type TemplateModalProps = {
   levels: Level[];
 
   onSave: (payload: ClientTemplate) => Promise<any>;
+  prefill?: {
+    date?: Date;
+    startMinutes?: number;
+    levelId?: string;
+  };
 };
 
 type FormState = {
@@ -106,6 +111,7 @@ export function TemplateModal({
   template,
   levels,
   onSave,
+  prefill,
 }: TemplateModalProps) {
   const isEditMode = Boolean(template);
 
@@ -115,18 +121,24 @@ export function TemplateModal({
     const [durationMin, setDurationMin] = React.useState<DurationOption>(45);
 
 
-  const [form, setForm] = React.useState<FormState>({
-    name: "",
-    levelId: levels?.[0]?.id ?? "",
-    startDate: dateToInput(new Date()),
-    endDate: "",
+  const [form, setForm] = React.useState<FormState>(() => {
+    const initialLevel = prefill?.levelId ?? levels?.[0]?.id ?? "";
+    const initialDate = prefill?.date ?? new Date();
+    const initialStart = typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
 
-    dayOfWeek: "",
-    startTime: "",
-    endTime: "",
+    return {
+      name: "",
+      levelId: initialLevel,
+      startDate: dateToInput(initialDate),
+      endDate: "",
 
-    capacity: "",
-    active: true,
+      dayOfWeek: initialStart !== null || prefill?.date ? toTemplateDayOfWeek(initialDate) : "",
+      startTime: initialStart !== null ? minutesToTimeInput(initialStart) : "",
+      endTime: "",
+
+      capacity: "",
+      active: true,
+    };
   });
 
   // schedule modes (optional)
@@ -182,13 +194,16 @@ React.useEffect(() => {
 
     setStep(isEditMode ? 1 : 0); // if you want edit to land on schedule step
   } else {
+    const initialLevel = prefill?.levelId ?? levels?.[0]?.id ?? "";
+    const initialDate = prefill?.date ?? new Date();
+    const initialStart = typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
     setForm({
       name: "",
-      levelId: levels?.[0]?.id ?? "",
-      startDate: dateToInput(new Date()),
+      levelId: initialLevel,
+      startDate: dateToInput(initialDate),
       endDate: "",
-      dayOfWeek: "",
-      startTime: "",
+      dayOfWeek: initialStart !== null || prefill?.date ? toTemplateDayOfWeek(initialDate) : "",
+      startTime: initialStart !== null ? minutesToTimeInput(initialStart) : "",
       endTime: "",
       capacity: "",
       active: true,
@@ -204,7 +219,7 @@ React.useEffect(() => {
   setTouched({});
   setError("");
   setSubmitting(false);
-}, [open, template, levels]);
+}, [open, template, levels, prefill]);
 
 React.useEffect(() => {
   const lvl = selectedLevel;
@@ -805,4 +820,11 @@ function dateToInput(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function toTemplateDayOfWeek(date: Date): string {
+  // Template stores Monday=0 ... Sunday=6
+  const jsDay = date.getDay(); // 0 = Sunday
+  const mondayZero = jsDay === 0 ? 6 : jsDay - 1;
+  return String(mondayZero);
 }

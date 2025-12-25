@@ -17,6 +17,7 @@ type DayViewProps = {
   dayDate: Date;
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onBack: () => void;
+  onSlotClick?: (date: Date) => void;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -27,6 +28,7 @@ export default function DayView(props: DayViewProps) {
     dayDate,
     classes,
     onBack,
+    onSlotClick,
     getTeacherColor,
   } = props;
 
@@ -75,6 +77,10 @@ export default function DayView(props: DayViewProps) {
               key={`${dayName}-${slot.time12}`}
               className={cn("border-b border-border relative transition-colors")}
               style={{ height: `${SLOT_HEIGHT_PX}px` }}
+              onClick={() => {
+                if (!onSlotClick) return;
+                onSlotClick(combineDateAndTime(dayDate, slot.time12));
+              }}
             />
           ))}
 
@@ -122,4 +128,18 @@ export default function DayView(props: DayViewProps) {
       </div>
     </div>
   );
+}
+
+function combineDateAndTime(date: Date, timeLabel: string): Date {
+  const [hm, ampm] = timeLabel.split(" ");
+  const [hStr, mStr] = hm.split(":");
+  let hours = parseInt(hStr, 10);
+  const minutes = parseInt(mStr, 10);
+
+  if (ampm?.toUpperCase() === "PM" && hours !== 12) hours += 12;
+  if (ampm?.toUpperCase() === "AM" && hours === 12) hours = 0;
+
+  const next = new Date(date);
+  next.setHours(hours, minutes, 0, 0);
+  return next;
 }

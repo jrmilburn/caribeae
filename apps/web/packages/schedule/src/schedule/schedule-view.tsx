@@ -21,6 +21,8 @@ export type ScheduleViewProps = {
   dataAdapter?: ScheduleDataAdapter;
   /** Optional endpoint used to build a client-safe adapter without passing functions from server components. */
   dataEndpoint?: string;
+  /** Optional callback when a schedule slot is clicked. */
+  onSlotClick?: (date: Date) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
 };
@@ -29,6 +31,7 @@ export function ScheduleView({
   levels,
   dataAdapter,
   dataEndpoint = "/api/admin/class-templates",
+  onSlotClick,
   defaultViewMode = "week",
   showHeader = true,
 }: ScheduleViewProps) {
@@ -136,6 +139,7 @@ export function ScheduleView({
           loading={loading}
           classes={classes}
           weekDates={weekDates}
+          onSlotClick={onSlotClick}
           viewMode={viewMode}
           setViewMode={setViewMode}
           selectedDay={selectedDay}

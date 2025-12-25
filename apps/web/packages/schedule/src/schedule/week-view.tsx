@@ -17,6 +17,7 @@ type WeekViewProps = {
   weekDates: Date[];
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onDayHeaderClick: (day: DayOfWeek) => void;
+  onSlotClick?: (date: Date) => void;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
 };
 
@@ -27,6 +28,7 @@ export default function WeekView(props: WeekViewProps) {
     weekDates,
     classes,
     onDayHeaderClick,
+    onSlotClick,
     getTeacherColor,
   } = props;
 
@@ -111,6 +113,10 @@ export default function WeekView(props: WeekViewProps) {
                           "hover:bg-accent/40"
                         )}
                         style={{ height: `${SLOT_HEIGHT_PX}px` }}
+                        onClick={() => {
+                          if (!onSlotClick) return;
+                          onSlotClick(combineDateAndTime12(weekDates[dayIndex], slot.time12));
+                        }}
                       />
                     );
                   })}
