@@ -8,7 +8,8 @@ export default async function getClassTemplates() {
             dayOfWeek: "asc",
         },
         include: {
-            level: true
+            level: true,
+            teacher: true,
         }
     })
 

@@ -3,16 +3,32 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
-
-import type { DayOfWeek, NormalizedClassInstance, ClassInstance } from "./schedule-types";
-import ClassModal from "./classModal";
-
-import type { Level } from "@prisma/client";
+import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
 const SLOT_HEIGHT_PX = 16;
+
+// Combines a date (YYYY-MM-DD) with a "6:15 AM" style time in the user's local TZ
+function combineDateAndTime12(date: Date, time12: string) {
+  const { hours24, minutes } = parseTime12(time12);
+  const d = new Date(date);
+  d.setHours(hours24, minutes, 0, 0);
+  return d;
+}
+
+function parseTime12(time12: string) {
+  const [hm, ampmRaw] = time12.trim().split(/\s+/);
+  const [hStr, mStr] = hm.split(":");
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const ampm = ampmRaw.toUpperCase();
+
+  if (ampm === "PM" && h !== 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+
+  return { hours24: h, minutes: m };
+}
 
 type TimeSlot = { time24: string; time12: string; isHour: boolean };
 type DurationOption = 20 | 30 | 45 | 60 | 90 | 120;
@@ -21,14 +37,13 @@ type WeekViewProps = {
   DAYS_OF_WEEK: DayOfWeek[];
   TIME_SLOTS: TimeSlot[];
   weekDates: Date[];
-  classes: Array<NormalizedClassInstance & { column: number; columns: number }>;
+  classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onDayHeaderClick: (day: DayOfWeek) => void;
-  onDropInstance: (id: string, day: DayOfWeek, timeLabel: string) => void;
-  onDragEnd: () => void;
-  hoveredSlot: { day?: DayOfWeek; time?: string } | null;
-  setHoveredSlot: React.Dispatch<React.SetStateAction<{ day?: DayOfWeek; time?: string } | null>>;
+  onSlotClick?: (date: Date) => void;
+  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
+  draggingId: string | null;
+  setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
-  levels: Level[];
 };
 
 export default function WeekView(props: WeekViewProps) {
@@ -38,41 +53,45 @@ export default function WeekView(props: WeekViewProps) {
     weekDates,
     classes,
     onDayHeaderClick,
-    onDropInstance,
-    onDragEnd,
-    hoveredSlot,
-    setHoveredSlot,
+    onSlotClick,
+    onMoveClass,
+    draggingId,
+    setDraggingId,
     getTeacherColor,
-    levels
   } = props;
+
+  const dragImageRef = React.useRef<HTMLElement | null>(null);
+
+  const clearDragImage = () => {
+    if (dragImageRef.current) {
+      document.body.removeChild(dragImageRef.current);
+      dragImageRef.current = null;
+    }
+  };
+
+  const createDragImage = (e: React.DragEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    const clone = el.cloneNode(true) as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    clone.style.position = "absolute";
+    clone.style.top = "-9999px";
+    clone.style.left = "-9999px";
+    clone.style.width = `${rect.width}px`;
+    clone.style.height = `${rect.height}px`;
+    clone.style.opacity = "1";
+    clone.style.pointerEvents = "none";
+    document.body.appendChild(clone);
+
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    e.dataTransfer?.setDragImage(clone, offsetX, offsetY);
+    dragImageRef.current = clone;
+  };
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
   const minuteHeight = SLOT_HEIGHT_PX / 15;
 
   // modal state
-  const [classModalOpen, setClassModalOpen] = useState(false);
-
-  // EDIT: only set when the user clicks an existing class block
-  const [editInstance, setEditInstance] = useState<ClassInstance | undefined>(undefined);
-
-  // CREATE: set when the user clicks a slot
-  const [prefillStartTime, setPrefillStartTime] = useState<Date | null>(null);
-
-  const openCreateModal = (dayIndex: number, time12: string) => {
-    const start = combineDateAndTime12(weekDates[dayIndex], time12);
-
-    setEditInstance(undefined); // ✅ ensures create mode
-    setPrefillStartTime(start);
-    setClassModalOpen(true);
-  };
-
-  const openEditModal = (instance: NormalizedClassInstance) => {
-    // You may need to adjust this cast depending on your actual ClassInstance type
-    setEditInstance(instance as unknown as ClassInstance); // ✅ edit mode
-    setPrefillStartTime(null);
-    setClassModalOpen(true);
-  };
-
   return (
     <>
       <div className="flex-1 overflow-auto">
@@ -142,58 +161,57 @@ export default function WeekView(props: WeekViewProps) {
                 >
                   {/* Slots */}
                   {TIME_SLOTS.map((slot) => {
-                    const isHovered = hoveredSlot?.day === day && hoveredSlot?.time === slot.time12;
-
                     return (
                       <div
                         key={`${day}-${slot.time12}`}
-                        onClick={() => openCreateModal(dayIndex, slot.time12)}
                         className={cn(
                           "border-b border-border relative cursor-pointer transition-colors",
-                          isHovered && "bg-accent/50"
+                          "hover:bg-accent/40"
                         )}
                         style={{ height: `${SLOT_HEIGHT_PX}px` }}
-                        onMouseEnter={() => setHoveredSlot({ day, time: slot.time12 })}
-                        onMouseLeave={() => setHoveredSlot(null)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          setHoveredSlot({ day, time: slot.time12 });
+                        onClick={() => {
+                          if (!onSlotClick) return;
+                          onSlotClick(combineDateAndTime12(weekDates[dayIndex], slot.time12));
                         }}
+                        onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => {
+                          if (!onMoveClass) return;
                           e.preventDefault();
-                          setHoveredSlot(null);
-                          const draggedId = e.dataTransfer.getData("text/plain");
-                          if (draggedId) onDropInstance(draggedId, day, slot.time12);
+                          const templateId = e.dataTransfer.getData("text/plain");
+                          if (!templateId) return;
+                          onMoveClass(templateId, combineDateAndTime12(weekDates[dayIndex], slot.time12));
                         }}
                       />
                     );
                   })}
 
-                  {/* Class blocks */}
-                  {dayClasses.map((c) => {
+              {/* Class blocks */}
+              {dayClasses.map((c) => {
                     const colors = getTeacherColor(c.teacher?.id);
                     const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
                     const top = (startMinutes - GRID_START_MIN) * minuteHeight;
                     const widthPct = 100 / c.columns;
 
-                    return (
-                      <div
-                        key={c.id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = "move";
-                          e.dataTransfer.setData("text/plain", c.id);
-                        }}
-                        onDragEnd={onDragEnd}
-                        onClick={(e) => {
-                          e.stopPropagation(); // ✅ don't trigger slot click behind it
-                          openEditModal(c);
-                        }}
-                        className={cn(
-                          "absolute rounded p-2 pr-3 cursor-move z-30 group overflow-hidden border",
-                          colors.bg,
-                          colors.border
-                        )}
+                return (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                      createDragImage(e);
+                      setDraggingId(c.id);
+                    }}
+                    onDragEnd={() => {
+                      clearDragImage();
+                      setDraggingId(null);
+                    }}
+                    className={cn(
+                      "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
+                      draggingId === (c.templateId ?? c.id) && "opacity-0",
+                      colors.bg,
+                      colors.border
+                    )}
                         style={{
                           top: `${Math.max(0, top)}px`,
                           height: `${c.durationMin * minuteHeight}px`,
@@ -224,42 +242,6 @@ export default function WeekView(props: WeekViewProps) {
           </div>
         </div>
       </div>
-
-      <ClassModal
-        initialData={editInstance}                 // ✅ only set for edit
-        prefillStartTime={prefillStartTime}        // ✅ only used for create
-        open={classModalOpen}
-        setOpen={(v) => {
-          setClassModalOpen(v);
-          if (!v) {
-            // reset so next open doesn't accidentally keep mode/data
-            setEditInstance(undefined);
-            setPrefillStartTime(null);
-          }
-        }}
-        levels={levels}
-      />
     </>
   );
-}
-
-// Combines a date (YYYY-MM-DD) with a "6:15 AM" style time in the user's local TZ
-function combineDateAndTime12(date: Date, time12: string) {
-  const { hours24, minutes } = parseTime12(time12);
-  const d = new Date(date);
-  d.setHours(hours24, minutes, 0, 0);
-  return d;
-}
-
-function parseTime12(time12: string) {
-  const [hm, ampmRaw] = time12.trim().split(/\s+/);
-  const [hStr, mStr] = hm.split(":");
-  let h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  const ampm = ampmRaw.toUpperCase();
-
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-
-  return { hours24: h, minutes: m };
 }
