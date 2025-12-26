@@ -455,17 +455,6 @@ React.useEffect(() => {
                   )}
                 </div>
 
-                <div className="rounded-xl border bg-muted/20 p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Schedule</span>
-                    <span className="font-medium">{scheduleSummary}</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between">
-                    <span className="text-muted-foreground">Capacity</span>
-                    <span className="font-medium">{shownCapacity}</span>
-                  </div>
-                </div>
-
                 <div className="flex items-center justify-between pt-2">
                   <Button variant="ghost" onClick={close}>
                     Cancel
@@ -496,12 +485,8 @@ React.useEffect(() => {
                         onChange={(e) => setField("startDate", e.target.value)}
                         className={cn(dateError && "border-destructive focus-visible:ring-destructive")}
                       />
-                      {dateError ? (
+                      {dateError && (
                         <p className="text-xs text-destructive">{dateError}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Classes will start generating from this date.
-                        </p>
                       )}
                     </div>
 
@@ -514,10 +499,8 @@ React.useEffect(() => {
                         onChange={(e) => setField("endDate", e.target.value)}
                         className={cn(endDateError && "border-destructive focus-visible:ring-destructive")}
                       />
-                      {endDateError ? (
+                      {endDateError && (
                         <p className="text-xs text-destructive">{endDateError}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Leave blank to keep recurring.</p>
                       )}
                     </div>
                   </div>
@@ -537,7 +520,6 @@ React.useEffect(() => {
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-muted-foreground">Optional. Set for recurring day.</p>
                     </div>
 
                     <div className="space-y-1">
@@ -548,7 +530,6 @@ React.useEffect(() => {
                         onChange={(e) => setField("startTime", e.target.value)}
                         className={cn(timeError && form.startTime === "" && "border-destructive focus-visible:ring-destructive")}
                       />
-                      <p className="text-xs text-muted-foreground">Required when setting a schedule.</p>
                     </div>
                   </div>
 
@@ -570,7 +551,7 @@ React.useEffect(() => {
                       ) : (
                         <>
                           <XIcon className="h-3.5 w-3.5" />
-                          <span>Default</span>
+                          <span>Close</span>
                         </>
                       )}
                     </button>
@@ -580,14 +561,7 @@ React.useEffect(() => {
                     <span className="inline-flex items-center rounded-md border border-border px-2 py-1 text-sm">
                       {durationMin} min
                     </span>
-                  
-                    {selectedLevel ? (
-                      <span className="text-xs text-muted-foreground">
-                        {lengthMode === "default"
-                          ? `Default for ${selectedLevel.name}`
-                          : `Default: ${clampToAllowedDuration(selectedLevel.defaultLengthMin)} min`}
-                      </span>
-                    ) : null}
+                
                   </div>
                 
                   <SmoothCollapse open={lengthMode === "custom"}>
@@ -655,7 +629,7 @@ React.useEffect(() => {
                         ) : (
                           <>
                             <XIcon className="h-3.5 w-3.5" />
-                            <span>Default</span>
+                            <span>Close</span>
                           </>
                         )}
                       </span>
@@ -670,14 +644,6 @@ React.useEffect(() => {
                         ? form.capacity
                         : "—"}
                     </span>
-
-                    {selectedLevel ? (
-                      <span className="text-xs text-muted-foreground">
-                        {capacityMode === "default"
-                          ? `Default for ${selectedLevel.name}`
-                          : `Default: ${formatCapacity(levelDefaultCap)}`}
-                      </span>
-                    ) : null}
                   </div>
 
                   <SmoothCollapse open={capacityMode === "custom"}>
@@ -763,9 +729,6 @@ React.useEffect(() => {
                     <label htmlFor="active" className="text-sm">
                       Active
                     </label>
-                    <span className="text-xs text-muted-foreground">
-                      Inactive templates won’t be used for new enrolments or generation.
-                    </span>
                   </div>
                 </div>
 
