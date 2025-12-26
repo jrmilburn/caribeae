@@ -11,11 +11,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Student } from "@prisma/client";
 
+import type { Student, Level } from "@prisma/client";
 import type { ClientStudent } from "@/server/student/types";
 
 import { useRouter } from "next/navigation";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function FieldRow({
   label,
@@ -50,10 +57,10 @@ type StudentModalProps = {
   onSave: (
     payload: ClientStudent & { familyId: string; id?: string }
   ) => Promise<{ success: boolean }>;
+  levels: Level[];
 };
 
 function toDateInputValue(d: Date): string {
-  // local-safe YYYY-MM-DD for <input type="date" />
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -66,20 +73,24 @@ export function StudentModal({
   familyId,
   student,
   onSave,
+  levels,
 }: StudentModalProps) {
   const mode: "create" | "edit" = student ? "edit" : "create";
+  const router = useRouter();
 
-    const router = useRouter();
+  // Prefer a sensible default level on create (first in list)
+  const defaultLevelId = React.useMemo(() => levels?.[0]?.id ?? "", [levels]);
 
   const [form, setForm] = React.useState<ClientStudent>({
     name: "",
     dateOfBirth: "",
     medicalNotes: "",
-    familyId: familyId
-  });
+    familyId,
+    levelId: defaultLevelId,
+  } as ClientStudent);
 
   const [submitting, setSubmitting] = React.useState(false);
-  const [touched, setTouched] = React.useState<{ name?: boolean }>({});
+  const [touched, setTouched] = React.useState<{ name?: boolean; levelId?: boolean }>({});
 
   React.useEffect(() => {
     if (!open) return;
@@ -88,34 +99,44 @@ export function StudentModal({
       setForm({
         name: student.name ?? "",
         dateOfBirth: student.dateOfBirth ? toDateInputValue(student.dateOfBirth) : "",
-        medicalNotes: student.medicalNotes ?? "",
-        familyId: familyId
-      });
+        medicalNotes: (student).medicalNotes ?? "",
+        familyId,
+        // NOTE: assumes student has levelId
+        levelId: (student).levelId ?? defaultLevelId,
+      } as ClientStudent);
     } else {
       setForm({
         name: "",
         dateOfBirth: "",
         medicalNotes: "",
-        familyId: familyId
-      });
+        familyId,
+        levelId: defaultLevelId,
+      } as ClientStudent);
     }
 
     setTouched({});
     setSubmitting(false);
-  }, [open, student, familyId]);
+  }, [open, student, familyId, defaultLevelId]);
 
   const close = () => onOpenChange(false);
 
-  const setField = <K extends keyof ClientStudent>(
-    key: K,
-    value: ClientStudent[K]
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
+  const setField = <K extends keyof ClientStudent>(key: K, value: ClientStudent[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
-  const nameError = touched.name && !form.name.trim() ? "Student name is required." : "";
+  const nameError =
+    touched.name && !String(form.name ?? "").trim() ? "Student name is required." : "";
+
+  const levelError =
+    touched.levelId && !String((form).levelId ?? "").trim()
+      ? "Level is required."
+      : "";
 
   const handleSubmit = async () => {
-    setTouched({ name: true });
-    if (!form.name.trim()) return;
+    setTouched({ name: true, levelId: true });
+
+    const nameOk = String(form.name ?? "").trim().length > 0;
+    const levelOk = String((form).levelId ?? "").trim().length > 0;
+    if (!nameOk || !levelOk) return;
 
     try {
       setSubmitting(true);
@@ -126,6 +147,8 @@ export function StudentModal({
       router.refresh();
     }
   };
+
+  const currentLevelId = String((form).levelId ?? "");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -143,7 +166,7 @@ export function StudentModal({
             <FieldRow label="Student name">
               <div className="space-y-1">
                 <Input
-                  value={form.name}
+                  value={form.name ?? ""}
                   onChange={(e) => setField("name", e.target.value)}
                   onBlur={() => setTouched((t) => ({ ...t, name: true }))}
                   placeholder="e.g. Olivia Smith"
@@ -161,10 +184,41 @@ export function StudentModal({
               </div>
             </FieldRow>
 
+            <FieldRow label="Level">
+              <div className="space-y-1">
+                <Select
+                  value={currentLevelId}
+                  onValueChange={(v) => {
+                    setField("levelId", v);
+                    setTouched((t) => ({ ...t, levelId: true }));
+                  }}
+                >
+                  <SelectTrigger
+                    className={cn(
+                      levelError && "border-destructive focus-visible:ring-destructive"
+                    )}
+                  >
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {levels.map((lvl) => (
+                      <SelectItem key={lvl.id} value={lvl.id}>
+                        {lvl.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {levelError && (
+                  <p className="text-xs text-destructive">{levelError}</p>
+                )}
+              </div>
+            </FieldRow>
+
             <FieldRow label="Date of birth (optional)">
               <Input
                 type="date"
-                value={form.dateOfBirth ?? ""}
+                value={(form.dateOfBirth) ?? ""}
                 onChange={(e) => setField("dateOfBirth", e.target.value)}
               />
             </FieldRow>
@@ -173,9 +227,8 @@ export function StudentModal({
           <div className="space-y-3">
             <SectionTitle>Medical notes (optional)</SectionTitle>
             <FieldRow label="Notes">
-              {/* Use Input to mirror FamilyModal. Swap to Textarea if you prefer. */}
               <Input
-                value={form.medicalNotes ?? ""}
+                value={(form.medicalNotes) ?? ""}
                 onChange={(e) => setField("medicalNotes", e.target.value)}
                 placeholder="Allergies, conditions, important info…"
               />
@@ -184,18 +237,17 @@ export function StudentModal({
         </div>
 
         <DialogFooter className="mt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={close}
-            disabled={submitting}
-          >
+          <Button type="button" variant="outline" onClick={close} disabled={submitting}>
             Cancel
           </Button>
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !form.name.trim()}
+            disabled={
+              submitting ||
+              !String(form.name ?? "").trim() ||
+              !String((form).levelId ?? "").trim()
+            }
           >
             {submitting
               ? mode === "create"

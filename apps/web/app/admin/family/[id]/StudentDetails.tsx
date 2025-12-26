@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { StudentModal } from "./StudentModal";
 import type { ClientStudent } from "@/server/student/types";
+import type { Level } from "@prisma/client";
 
 import { MoreVertical, Trash2 } from "lucide-react";
 
@@ -29,9 +30,10 @@ type Props = {
   students: Student[];
   familyId: string;
   enrolContext?: EnrolContext | null;
+  levels: Level[];
 };
 
-export default function StudentDetails({ students, familyId, enrolContext }: Props) {
+export default function StudentDetails({ students, familyId, enrolContext, levels }: Props) {
   const router = useRouter();
 
   const [open, setOpen] = React.useState(false);
@@ -118,6 +120,7 @@ export default function StudentDetails({ students, familyId, enrolContext }: Pro
         familyId={familyId}
         student={editingStudent}
         onSave={onSave}
+        levels={levels}
       />
     </>
   );

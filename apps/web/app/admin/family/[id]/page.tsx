@@ -1,5 +1,6 @@
 import getFamily from "@/server/family/getFamily";
 import FamilyForm from "./FamilyForm";
+import { getLevels } from "@/server/level/getLevels";
 
 type PageProps = {
   params: { id: string };
@@ -13,6 +14,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
 
   const family = await getFamily(id);
+  const levels = await getLevels();
 
   const enrolContext =
     searchParams?.enrolToTemplateId
@@ -22,5 +24,5 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
         }
       : null;
 
-  return <FamilyForm family={family} enrolContext={enrolContext} />;
+  return <FamilyForm family={family} enrolContext={enrolContext} levels={levels} />;
 }

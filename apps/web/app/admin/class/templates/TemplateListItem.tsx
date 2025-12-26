@@ -1,8 +1,10 @@
 "use client";
 
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+
+import { useRouter } from "next/navigation";
 
 import {
   DropdownMenu,
@@ -24,6 +26,8 @@ export default function TemplateListItem({
   onDelete: (template: TemplateWithLevel) => void;
 }) {
   const name = template.name?.trim() || "Untitled";
+
+  const router = useRouter();
 
   const schedule = formatSchedule(template.dayOfWeek, template.startTime, template.endTime);
   const level = template.level?.name ?? "—";
@@ -71,6 +75,15 @@ export default function TemplateListItem({
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem
+              onClick={(e) => {
+                router.push(`/admin/class/${template.id}`)
+                e.stopPropagation();
+              }}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();

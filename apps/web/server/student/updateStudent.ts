@@ -8,7 +8,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
 export async function updateStudent(payload : ClientStudent, id : string) {
 
-    const user = await getOrCreateUser()
+    await getOrCreateUser()
 
     const dob = new Date(`${payload.dateOfBirth}T00:00:00.000Z`);
 
@@ -20,7 +20,8 @@ export async function updateStudent(payload : ClientStudent, id : string) {
             name: payload?.name,
             dateOfBirth: dob,
             medicalNotes: payload?.medicalNotes,
-            familyId: payload.familyId
+            familyId: payload.familyId,
+            levelId: payload.levelId
         }
     })
 

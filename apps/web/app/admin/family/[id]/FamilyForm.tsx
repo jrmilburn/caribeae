@@ -2,6 +2,7 @@ import FamilyDetails from "./FamilyDetails";
 import StudentDetails from "./StudentDetails";
 
 import type { Prisma } from "@prisma/client";
+import type { Level } from "@prisma/client";
 
 export type FamilyWithStudents = Prisma.FamilyGetPayload<{
   include: { students: true };
@@ -15,9 +16,10 @@ export type EnrolContext = {
 type FamilyFormProps = {
   family: FamilyWithStudents | null;
   enrolContext?: EnrolContext | null;
+  levels: Level[];
 };
 
-export default function FamilyForm({ family, enrolContext }: FamilyFormProps) {
+export default function FamilyForm({ family, enrolContext, levels }: FamilyFormProps) {
   if (!family) return null;
 
   return (
@@ -35,6 +37,7 @@ export default function FamilyForm({ family, enrolContext }: FamilyFormProps) {
           students={family.students}
           familyId={family.id}
           enrolContext={enrolContext ?? null}
+          levels={levels}
         />
       </div>
     </div>

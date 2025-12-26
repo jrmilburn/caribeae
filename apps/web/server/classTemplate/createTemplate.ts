@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { ClientTemplate } from "./types";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { revalidatePath } from "next/cache";
 
 export async function createTemplate(payload : ClientTemplate) {
 
@@ -26,6 +27,8 @@ export async function createTemplate(payload : ClientTemplate) {
     if(!newTemplate) {
         return { success: false }
     }
+
+    revalidatePath("/admin/schedule")
 
     return { success: true }
 

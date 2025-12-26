@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ClientTemplate } from "./types";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { revalidatePath } from "next/cache";
 
 export async function updateTemplate(payload : ClientTemplate, id : string) {
 
@@ -30,6 +31,8 @@ export async function updateTemplate(payload : ClientTemplate, id : string) {
         if(!updatedTemplate) {
             return { success: false }
         }
+
+        revalidatePath("/admin/schedule")
     
         return { success: true }
 
