@@ -1,5 +1,5 @@
 // Core schedule domain types aligned to the shared Prisma schema
-// (ClassInstance + related entities).
+// (ClassTemplate + derived occurrences).
 
 export type DayOfWeek =
   | "Sunday"
@@ -22,36 +22,49 @@ export type Level = {
   id: string;
   name: string;
   levelOrder?: number | null;
+  defaultCapacity?: number | null;
+  defaultLengthMin?: number | null;
 };
 
-export type Enrolment = {
+export type ClassTemplate = {
   id: string;
-  student: { id: string; name: string };
-  startDate?: string | null;
-};
-
-export type ClassInstance = {
-  id: string;
-  templateId?: string | null;
-  startTime: Date;
-  endTime: Date;
-  status?: string | null;
+  name?: string | null;
+  dayOfWeek?: number | null; // 0-6 (Mon-Sun)
+  startTime?: number | null; // minutes since midnight
+  endTime?: number | null; // minutes since midnight
+  startDate: Date | string;
+  endDate?: Date | string | null;
   capacity?: number | null;
-  level?: Level;
+  active?: boolean | null;
+  level?: Level | null;
   levelId?: string;
   teacher?: Teacher | null;
-  enrolments?: Enrolment[];
-  location?: string | null;
+  teacherId?: string | null;
 };
 
-export type NormalizedClassInstance = ClassInstance & {
+export type ScheduleClass = {
+  /** Unique per-occurrence identifier (templateId + date). */
+  id: string;
+  templateId: string;
+  templateName?: string | null;
+  startTime: Date;
+  endTime: Date;
+  capacity?: number | null;
+  level?: Level | null;
+  levelId?: string | null;
+  teacher?: Teacher | null;
+  teacherId?: string | null;
+  template?: ClassTemplate | null;
+};
+
+export type NormalizedScheduleClass = ScheduleClass & {
   startTime: Date;
   endTime: Date;
   durationMin: number;
   dayName: DayOfWeek;
 };
 
-export function normalizeClassInstance(ci: ClassInstance): NormalizedClassInstance {
+export function normalizeScheduleClass(ci: ScheduleClass): NormalizedScheduleClass {
   const start = ci.startTime instanceof Date ? ci.startTime : new Date(ci.startTime);
   const end = ci.endTime instanceof Date ? ci.endTime : new Date(ci.endTime);
   const durationMin = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
