@@ -397,9 +397,6 @@ React.useEffect(() => {
                     onChange={(e) => setField("name", e.target.value)}
                     placeholder="e.g. Squad - Lane 1"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Optional. Helps staff identify the recurring class.
-                  </p>
                 </div>
 
                 <div className="space-y-1">
@@ -427,7 +424,6 @@ React.useEffect(() => {
                     <p className="text-xs text-destructive">{levelError}</p>
                   ) : selectedLevel ? (
                     <p className="text-xs text-muted-foreground">
-                      Defaults: {selectedLevel.defaultLengthMin} min • Capacity{" "}
                       {formatCapacity(levelDefaultCap)}
                     </p>
                   ) : null}
@@ -454,10 +450,8 @@ React.useEffect(() => {
                     ))}
                   </select>
 
-                  {teacherError ? (
+                  {teacherError && (
                     <p className="text-xs text-destructive">{teacherError}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Assigns the primary teacher.</p>
                   )}
                 </div>
 
