@@ -1,9 +1,10 @@
 "use client";
 
-import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+
+import * as React from "react"
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
