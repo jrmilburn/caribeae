@@ -150,6 +150,18 @@ export default function DayView(props: DayViewProps) {
                   clearDragImage();
                   setDraggingId(null);
                 }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  if (!onMoveClass) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const templateId = e.dataTransfer.getData("text/plain");
+                  if (!templateId) return;
+                  onMoveClass(templateId, c.startTime);
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onClassClick?.(c);

@@ -450,9 +450,22 @@ React.useEffect(() => {
                     ))}
                   </select>
 
-                  {teacherError && (
+                  {teacherError ? (
                     <p className="text-xs text-destructive">{teacherError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Assigns the primary teacher.</p>
                   )}
+                </div>
+
+                <div className="rounded-xl border bg-muted/20 p-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Schedule</span>
+                    <span className="font-medium">{scheduleSummary}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-muted-foreground">Capacity</span>
+                    <span className="font-medium">{shownCapacity}</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
