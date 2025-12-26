@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { isSameDay } from "date-fns";
 
 import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
@@ -14,6 +14,7 @@ export type ScheduleGridProps = {
   classes: NormalizedScheduleClass[];
   weekDates: Date[];
   onSlotClick?: (date: Date) => void;
+  onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
   viewMode: "week" | "day";
   setViewMode: React.Dispatch<React.SetStateAction<"week" | "day">>;
@@ -40,6 +41,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     classes,
     weekDates,
     onSlotClick,
+    onClassClick,
     onMoveClass,
   viewMode,
   setViewMode,
@@ -57,7 +59,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     [classes, levelLookup]
   );
   const normalized = useMemo(() => attachLayout(classesWithLevels), [classesWithLevels]);
-  const [draggingId, setDraggingId] = React.useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const selectedDayName = DAYS_OF_WEEK[selectedDay] ?? "Monday";
 
@@ -78,6 +80,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
             setViewMode("day");
           }}
           onSlotClick={onSlotClick}
+          onClassClick={onClassClick}
           onMoveClass={onMoveClass}
           draggingId={draggingId}
           setDraggingId={setDraggingId}
@@ -91,6 +94,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           classes={normalized.filter((c) => isSameDay(c.startTime, weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? new Date()))}
           onBack={() => setViewMode("week")}
           onSlotClick={onSlotClick}
+          onClassClick={onClassClick}
           onMoveClass={onMoveClass}
           draggingId={draggingId}
           setDraggingId={setDraggingId}

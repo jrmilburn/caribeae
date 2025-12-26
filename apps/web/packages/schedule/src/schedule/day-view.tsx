@@ -18,6 +18,7 @@ type DayViewProps = {
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onBack: () => void;
   onSlotClick?: (date: Date) => void;
+  onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -32,6 +33,7 @@ export default function DayView(props: DayViewProps) {
     classes,
     onBack,
     onSlotClick,
+    onClassClick,
     onMoveClass,
     draggingId,
     setDraggingId,
@@ -145,6 +147,10 @@ export default function DayView(props: DayViewProps) {
                 onDragEnd={() => {
                   clearDragImage();
                   setDraggingId(null);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClassClick?.(c);
                 }}
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",

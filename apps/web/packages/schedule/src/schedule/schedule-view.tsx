@@ -23,6 +23,8 @@ export type ScheduleViewProps = {
   dataEndpoint?: string;
   /** Optional callback when a schedule slot is clicked. */
   onSlotClick?: (date: Date) => void;
+  /** Optional callback when an existing class occurrence is clicked. */
+  onClassClick?: (occurrence: NormalizedScheduleClass) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
 };
@@ -32,6 +34,7 @@ export function ScheduleView({
   dataAdapter,
   dataEndpoint = "/api/admin/class-templates",
   onSlotClick,
+  onClassClick,
   defaultViewMode = "week",
   showHeader = true,
 }: ScheduleViewProps) {
@@ -177,6 +180,7 @@ export function ScheduleView({
           classes={classes}
           weekDates={weekDates}
           onSlotClick={onSlotClick}
+          onClassClick={onClassClick}
           onMoveClass={onMoveClass}
           viewMode={viewMode}
           setViewMode={setViewMode}

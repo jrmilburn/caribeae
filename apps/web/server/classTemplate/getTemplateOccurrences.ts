@@ -13,6 +13,7 @@ export type TemplateOccurrence = {
   levelId?: string;
   teacher?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>['teacher'];
   teacherId?: string | null;
+  template?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>;
 };
 
 export async function getTemplateOccurrences(params: { from: Date; to: Date }): Promise<TemplateOccurrence[]> {
@@ -78,6 +79,7 @@ function expandTemplateToRange(
       levelId: template.levelId,
       teacher: template.teacher,
       teacherId: template.teacherId,
+      template,
     });
 
     cursor = addDays(cursor, 7);
