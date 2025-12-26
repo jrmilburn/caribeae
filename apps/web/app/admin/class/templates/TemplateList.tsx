@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useMemo, useState } from "react";
-import { Search, X, MoreVerticalIcon } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,10 @@ import { cn } from "@/lib/utils";
 
 import { useRouter } from "next/navigation";
 
-import type { Prisma, Level } from "@prisma/client";
+import type { Prisma, Level, Teacher } from "@prisma/client";
 
 import TemplateListItem from "./TemplateListItem";
 import { TemplateModal } from "./TemplateModal";
-import { GenerateInstancesModal } from "./GenerateInstancesModal";
 
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
@@ -22,36 +21,22 @@ import { deleteTemplate } from "@/server/classTemplate/deleteTemplate";
 
 import type { ClientTemplate } from "@/server/classTemplate/types";
 
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-
 export type TemplateWithLevel = Prisma.ClassTemplateGetPayload<{
-  include: { level: true };
+  include: { level: true; teacher: true };
 }>;
 
 export default function TemplateList({
   templates,
   levels,
+  teachers,
 }: {
   templates: TemplateWithLevel[];
   levels: Level[];
+  teachers: Teacher[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [newTemplateModal, setNewTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = React.useState<TemplateWithLevel | null>(null);
-
-  // selection
-  const [selectedIds, setSelectedIds] = React.useState<Record<string, boolean>>({});
-
-  // generator modal state
-  const [genOpen, setGenOpen] = React.useState(false);
-  const [genTemplateIds, setGenTemplateIds] = React.useState<string[]>([]);
-  const [genLabel, setGenLabel] = React.useState<string>("");
 
   const router = useRouter();
 
@@ -70,33 +55,6 @@ export default function TemplateList({
       return false;
     });
   }, [templates, searchTerm]);
-
-  // derived selection for current filtered list
-  const filteredIds = useMemo(() => filteredTemplates.map((t) => t.id), [filteredTemplates]);
-
-  const selectedFilteredIds = useMemo(
-    () => filteredIds.filter((id) => selectedIds[id]),
-    [filteredIds, selectedIds]
-  );
-
-  const allFilteredSelected =
-    filteredIds.length > 0 && selectedFilteredIds.length === filteredIds.length;
-
-  const someFilteredSelected =
-    selectedFilteredIds.length > 0 && selectedFilteredIds.length < filteredIds.length;
-
-  const toggleOne = (id: string, next: boolean) =>
-    setSelectedIds((prev) => ({ ...prev, [id]: next }));
-
-  const toggleAllFiltered = (next: boolean) => {
-    setSelectedIds((prev) => {
-      const copy = { ...prev };
-      for (const id of filteredIds) copy[id] = next;
-      return copy;
-    });
-  };
-
-  const clearSelection = () => setSelectedIds({});
 
   const openEdit = (template: TemplateWithLevel) => {
     setSelectedTemplate(template);
@@ -123,20 +81,6 @@ export default function TemplateList({
     router.refresh();
   };
 
-  const openGenerateForOne = (template: TemplateWithLevel) => {
-    setGenTemplateIds([template.id]);
-    setGenLabel(template.name?.trim() || "Untitled");
-    setGenOpen(true);
-  };
-
-  const openGenerateForSelected = () => {
-    if (selectedFilteredIds.length === 0) return;
-
-    setGenTemplateIds(selectedFilteredIds);
-    setGenLabel(`${selectedFilteredIds.length} templates`);
-    setGenOpen(true);
-  };
-
   return (
     <div className="w-full">
       <TemplateListHeader
@@ -149,13 +93,6 @@ export default function TemplateList({
           if (next) setSelectedTemplate(null);
           setNewTemplateModal(next);
         }}
-        // selection controls
-        allSelected={allFilteredSelected}
-        someSelected={someFilteredSelected}
-        selectedCount={selectedFilteredIds.length}
-        onToggleAll={(next) => toggleAllFiltered(next)}
-        onGenerateSelected={openGenerateForSelected}
-        onClearSelection={clearSelection}
       />
 
       <TemplateModal
@@ -166,19 +103,8 @@ export default function TemplateList({
         }}
         template={selectedTemplate}
         levels={levels}
+        teachers={teachers}
         onSave={handleSave}
-      />
-
-      <GenerateInstancesModal
-        open={genOpen}
-        onOpenChange={setGenOpen}
-        templateIds={genTemplateIds}
-        label={genLabel}
-        onSuccess={() => {
-          router.refresh();
-          // keep selection (handy) OR clear selection (safer). MVP preference: keep.
-          // clearSelection();
-        }}
       />
 
       <div>
@@ -186,11 +112,8 @@ export default function TemplateList({
           <TemplateListItem
             key={t.id}
             template={t}
-            checked={!!selectedIds[t.id]}
-            onCheckedChange={(next) => toggleOne(t.id, next)}
             onEdit={openEdit}
             onDelete={handleDelete}
-            onGenerate={openGenerateForOne}
           />
         ))}
 
@@ -211,13 +134,6 @@ function TemplateListHeader({
   searchTerm,
   setSearchTerm,
   setNewTemplateModal,
-
-  allSelected,
-  someSelected,
-  selectedCount,
-  onToggleAll,
-  onGenerateSelected,
-  onClearSelection,
 }: {
   title: string;
   totalCount: number;
@@ -225,13 +141,6 @@ function TemplateListHeader({
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   setNewTemplateModal: React.Dispatch<React.SetStateAction<boolean>>;
-
-  allSelected: boolean;
-  someSelected: boolean;
-  selectedCount: number;
-  onToggleAll: (next: boolean) => void;
-  onGenerateSelected: () => void;
-  onClearSelection: () => void;
 }) {
   const hasQuery = searchTerm.trim().length > 0;
 
@@ -244,11 +153,6 @@ function TemplateListHeader({
             <span className="text-xs text-muted-foreground">
               {hasQuery ? `${filteredCount} / ${totalCount}` : totalCount}
             </span>
-            {selectedCount > 0 ? (
-              <span className="text-xs text-muted-foreground">
-                • {selectedCount} selected
-              </span>
-            ) : null}
           </div>
         </div>
 
@@ -284,64 +188,11 @@ function TemplateListHeader({
 
       {/* Column header row */}
       <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 bg-gray-50">
-        {/* Select all checkbox */}
-        <div className="flex w-10 items-center justify-center">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            ref={(el) => {
-              if (!el) return;
-              el.indeterminate = someSelected;
-            }}
-            onChange={(e) => onToggleAll(e.target.checked)}
-            aria-label="Select all templates"
-            className="h-4 w-4"
-          />
-        </div>
-
         <div className="truncate text-sm font-medium flex-1">Template</div>
         <div className="truncate text-sm font-medium flex-1">Schedule</div>
         <div className="truncate text-sm font-medium flex-1">Level</div>
         <div className="truncate text-sm font-medium flex-1">Capacity</div>
-
-        {/* header actions */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open template actions"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreVerticalIcon className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-
-          <DropdownMenuContent
-            align="end"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <DropdownMenuItem
-              disabled={selectedCount === 0}
-              onSelect={() => {
-                onGenerateSelected();
-              }}
-            >
-              Generate for selected
-            </DropdownMenuItem>
-
-            <DropdownMenuItem
-              disabled={selectedCount === 0}
-              onSelect={() => {
-                onClearSelection();
-              }}
-            >
-              Clear selection
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="w-12 text-sm font-medium text-muted-foreground text-right">Actions</div>
       </div>
     </>
   );

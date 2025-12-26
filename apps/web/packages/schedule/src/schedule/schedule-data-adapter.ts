@@ -1,28 +1,25 @@
 import { addDays, setHours, setMinutes } from "date-fns";
 import {
-  type ClassInstance,
-  type NormalizedClassInstance,
-  normalizeClassInstance,
+  type ScheduleClass,
+  normalizeScheduleClass,
   type Teacher,
   type Level,
 } from "./schedule-types";
 
-export type FetchClassInstancesParams = {
+export type FetchClassesParams = {
   from: Date;
   to: Date;
 };
 
-export type MoveClassInstanceInput = {
-  id: string;
-  startTime: Date;
-  endTime: Date;
-};
-
 export type ScheduleDataAdapter = {
-  /** Load only concrete ClassInstances (no templates). */
-  fetchClassInstances: (params: FetchClassInstancesParams) => Promise<ClassInstance[]>;
-  /** Persist a drag-and-drop move. */
-  moveClassInstance?: (input: MoveClassInstanceInput) => Promise<ClassInstance>;
+  /** Load projected class occurrences from templates. */
+  fetchClasses: (params: FetchClassesParams) => Promise<ScheduleClass[]>;
+  /** Persist a drag-and-drop move for a template occurrence. */
+  moveTemplate?: (input: {
+    templateId: string;
+    startTime: Date;
+    endTime: Date;
+  }) => Promise<ScheduleClass>;
   /** Optional: load supporting metadata (teachers/levels) for labels. */
   fetchTeachers?: () => Promise<Teacher[]>;
   fetchLevels?: () => Promise<Level[]>;
@@ -30,28 +27,20 @@ export type ScheduleDataAdapter = {
 
 // Minimal placeholder for consumers to wire in their own server actions later.
 export const placeholderScheduleDataAdapter: ScheduleDataAdapter = {
-  async fetchClassInstances() {
+  async fetchClasses() {
     return [];
-  },
-  async moveClassInstance(input) {
-    return normalizeClassInstance({
-      id: input.id,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      level: { id: "unknown", name: "Level TBD" },
-    });
   },
 };
 
 /**
- * API-backed adapter for fetching class instances through a Next.js route handler.
+ * API-backed adapter for fetching class occurrences through a Next.js route handler.
  * Keeps credentials for authenticated access and uses no-store caching to avoid stale data.
  */
 export function createApiScheduleDataAdapter(
-  endpoint: string = "/api/admin/class-instances"
+  endpoint: string = "/api/admin/class-templates"
 ): ScheduleDataAdapter {
   return {
-    async fetchClassInstances({ from, to }) {
+    async fetchClasses({ from, to }) {
       const params = new URLSearchParams({
         from: from.toISOString(),
         to: to.toISOString(),
@@ -64,21 +53,19 @@ export function createApiScheduleDataAdapter(
       });
 
       if (!response.ok) {
-        throw new Error("Unable to load class instances");
+        throw new Error("Unable to load class schedule");
       }
 
-      const payload = (await response.json()) as { classInstances?: ClassInstance[] };
-      return Array.isArray(payload.classInstances) ? payload.classInstances : [];
+      const payload = (await response.json()) as { classes?: ScheduleClass[] };
+      return Array.isArray(payload.classes) ? payload.classes : [];
     },
 
-    async moveClassInstance(input) {
-      const response = await fetch(`${endpoint}/${encodeURIComponent(input.id)}`, {
+    async moveTemplate(input) {
+      const response = await fetch(`${endpoint}/${encodeURIComponent(input.templateId)}`, {
         method: "PATCH",
         credentials: "include",
         cache: "no-store",
-        headers: {
-          "content-type": "application/json",
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           startTime: input.startTime.toISOString(),
           endTime: input.endTime.toISOString(),
@@ -86,14 +73,14 @@ export function createApiScheduleDataAdapter(
       });
 
       if (!response.ok) {
-        throw new Error("Unable to move class instance");
+        throw new Error("Unable to move class template");
       }
 
-      const payload = (await response.json()) as { classInstance?: ClassInstance };
-      if (!payload.classInstance) {
+      const payload = (await response.json()) as { template?: ScheduleClass };
+      if (!payload.template) {
         throw new Error("Invalid response from server");
       }
-      return payload.classInstance;
+      return payload.template;
     },
   };
 }
@@ -102,59 +89,47 @@ export function createApiScheduleDataAdapter(
 // in isolation or storybook-like environments. Consumers should replace this with
 // real implementations against their own API.
 export const demoScheduleDataAdapter: ScheduleDataAdapter = {
-  async fetchClassInstances({ from }) {
+  async fetchClasses({ from }) {
     const base = new Date(from);
     const startOfDay = (daysFromStart: number, hour: number, minute: number) => {
       const d = addDays(base, daysFromStart);
       return setMinutes(setHours(d, hour), minute);
     };
 
-    const sample: ClassInstance[] = [
+    const sample: ScheduleClass[] = [
       {
         id: "demo-1",
+        templateId: "t1",
+        templateName: "Beginner",
         startTime: startOfDay(0, 9, 0),
         endTime: startOfDay(0, 9, 45),
         level: { id: "l1", name: "Beginner" },
         teacher: { id: "t1", name: "Alex" },
         capacity: 6,
-        status: "SCHEDULED",
-        location: "Pool A",
       },
       {
         id: "demo-2",
+        templateId: "t2",
+        templateName: "Intermediate",
         startTime: startOfDay(1, 11, 0),
         endTime: startOfDay(1, 12, 0),
         level: { id: "l2", name: "Intermediate" },
         teacher: { id: "t2", name: "Blake" },
         capacity: 8,
-        status: "SCHEDULED",
-        location: "Pool B",
       },
       {
         id: "demo-3",
+        templateId: "t3",
+        templateName: "Beginner",
         startTime: startOfDay(2, 15, 15),
         endTime: startOfDay(2, 16, 0),
         level: { id: "l1", name: "Beginner" },
         teacher: { id: "t1", name: "Alex" },
         capacity: 4,
-        status: "SCHEDULED",
-        location: "Pool A",
       },
     ];
 
-    return sample;
-  },
-
-  async moveClassInstance(input) {
-    // No-op demo move: echo back a normalized instance with the new times.
-    const norm: NormalizedClassInstance = normalizeClassInstance({
-      id: input.id,
-      startTime: input.startTime,
-      endTime: input.endTime,
-      level: { id: "l1", name: "Beginner" },
-      teacher: { id: "t1", name: "Alex" },
-    });
-    return norm;
+    return sample.map(normalizeScheduleClass);
   },
 
   async fetchTeachers() {

@@ -1,20 +1,17 @@
-import { ScheduleView, createApiScheduleDataAdapter } from "@/packages/schedule"
 import { getLevels } from "@/server/level/getLevels"
 import { requireAdmin } from "@/lib/requireAdmin";
-import { moveClassInstanceAction } from "./actions";
+import ScheduleWithTemplateModal from "./ScheduleWithTemplateModal";
+import { getTeachers } from "@/server/teacher/getTeachers";
 
 export default async function AdminSchedule() {
 
     await requireAdmin();
 
     const levels = await getLevels();
+    const teachers = await getTeachers();
 
     return(
-        <ScheduleView
-            levels={levels}
-            dataEndpoint="/api/admin/class-instances"
-            moveClassInstanceAction={moveClassInstanceAction}
-        />
+        <ScheduleWithTemplateModal levels={levels} teachers={teachers} />
     )
 
 }
