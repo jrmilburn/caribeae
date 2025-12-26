@@ -197,10 +197,9 @@ export default function WeekView(props: WeekViewProps) {
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";
-                      const dragId = c.templateId ?? c.id;
-                      e.dataTransfer.setData("text/plain", dragId);
+                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
                       createDragImage(e);
-                      setDraggingId(dragId);
+                      setDraggingId(c.id);
                     }}
                     onDragEnd={() => {
                       clearDragImage();

@@ -522,6 +522,36 @@ React.useEffect(() => {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Day of week</label>
+                      <select
+                        value={form.dayOfWeek}
+                        onChange={(e) => setField("dayOfWeek", e.target.value)}
+                        className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                      >
+                        <option value="">Not set</option>
+                        {DAYS.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground">Optional. Set for recurring day.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Start time</label>
+                      <Input
+                        type="time"
+                        value={form.startTime}
+                        onChange={(e) => setField("startTime", e.target.value)}
+                        className={cn(timeError && form.startTime === "" && "border-destructive focus-visible:ring-destructive")}
+                      />
+                      <p className="text-xs text-muted-foreground">Required when setting a schedule.</p>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Class duration</label>
 
