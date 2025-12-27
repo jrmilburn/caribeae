@@ -30,10 +30,11 @@ type PlanFormState = {
   levelId: string;
   billingType: BillingType;
   enrolmentType: EnrolmentType;
-  blockLength: string;
+  durationWeeks: string;
+  blockClassCount: string;
 };
 
-const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK"];
+const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK", "BLOCK"];
 const ENROLMENT_OPTIONS: EnrolmentType[] = ["BLOCK", "CLASS"];
 
 export function EnrolmentPlanForm({
@@ -57,7 +58,8 @@ export function EnrolmentPlanForm({
     levelId: levels[0]?.id ?? "",
     billingType: "PER_CLASS",
     enrolmentType: "BLOCK",
-    blockLength: "1",
+    durationWeeks: "4",
+    blockClassCount: "1",
   }));
 
   React.useEffect(() => {
@@ -69,7 +71,8 @@ export function EnrolmentPlanForm({
         levelId: plan.levelId,
         billingType: plan.billingType,
         enrolmentType: plan.enrolmentType,
-        blockLength: String(plan.blockLength ?? 1),
+        durationWeeks: String(plan.durationWeeks ?? ""),
+        blockClassCount: String(plan.blockClassCount ?? plan.blockLength ?? 1),
       });
     } else {
       setForm({
@@ -78,19 +81,26 @@ export function EnrolmentPlanForm({
         levelId: levels[0]?.id ?? "",
         billingType: "PER_CLASS",
         enrolmentType: "BLOCK",
-        blockLength: "1",
+        durationWeeks: "4",
+        blockClassCount: "1",
       });
     }
     setSubmitting(false);
   }, [open, plan, levels]);
 
+  const requiresDuration = form.billingType === "PER_WEEK";
+  const requiresBlockCount = form.billingType === "BLOCK";
+  const parsedPrice = Number(form.priceCents);
+  const parsedDuration = Number(form.durationWeeks);
+  const parsedBlockCount = Number(form.blockClassCount);
+
   const canSubmit =
     form.name.trim().length > 0 &&
     form.levelId &&
-    form.priceCents !== "" &&
-    Number.isFinite(Number(form.priceCents)) &&
-    Number.isFinite(Number(form.blockLength)) &&
-    Number(form.blockLength) > 0;
+    parsedPrice > 0 &&
+    Number.isFinite(parsedPrice) &&
+    (!requiresDuration || (Number.isFinite(parsedDuration) && parsedDuration > 0)) &&
+    (!requiresBlockCount || (Number.isFinite(parsedBlockCount) && parsedBlockCount > 0));
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -102,7 +112,13 @@ export function EnrolmentPlanForm({
       levelId: form.levelId,
       billingType: form.billingType,
       enrolmentType: form.enrolmentType,
-      blockLength: Number(form.blockLength),
+      durationWeeks: requiresDuration ? parsedDuration : null,
+      blockClassCount:
+        form.billingType === "BLOCK"
+          ? parsedBlockCount
+          : form.billingType === "PER_CLASS"
+            ? parsedBlockCount || 1
+            : null,
     };
 
     try {
@@ -178,7 +194,11 @@ export function EnrolmentPlanForm({
                 <SelectContent>
                   {BILLING_OPTIONS.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option === "PER_CLASS" ? "Per class" : "Per week"}
+                      {option === "PER_CLASS"
+                        ? "Per class"
+                        : option === "PER_WEEK"
+                          ? "Per week"
+                          : "Block"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -205,17 +225,33 @@ export function EnrolmentPlanForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Block length (classes)</Label>
-            <Input
-              inputMode="numeric"
-              value={form.blockLength}
-              onChange={(e) => setForm((p) => ({ ...p, blockLength: e.target.value }))}
-            />
-            <p className="text-xs text-muted-foreground">
-              For block plans, set how many classes are included. Ignored for single-class plans.
-            </p>
-          </div>
+          {form.billingType === "PER_WEEK" ? (
+            <div className="space-y-2">
+              <Label>Duration (weeks)</Label>
+              <Input
+                inputMode="numeric"
+                value={form.durationWeeks}
+                onChange={(e) => setForm((p) => ({ ...p, durationWeeks: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Weekly plans require a fixed number of weeks per invoice period.
+              </p>
+            </div>
+          ) : null}
+
+          {form.billingType !== "PER_WEEK" ? (
+            <div className="space-y-2">
+              <Label>{form.billingType === "BLOCK" ? "Classes per block" : "Classes per invoice"}</Label>
+              <Input
+                inputMode="numeric"
+                value={form.blockClassCount}
+                onChange={(e) => setForm((p) => ({ ...p, blockClassCount: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Blocks require at least one class; per-class plans default to one if left empty.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>

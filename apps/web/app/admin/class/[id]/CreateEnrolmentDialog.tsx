@@ -117,7 +117,12 @@ export function CreateEnrolmentDialog({
               <SelectContent>
                 {availablePlans.map((plan) => (
                   <SelectItem key={plan.id} value={plan.id}>
-                    {plan.name} · {plan.billingType === "PER_CLASS" ? "Per class" : "Per week"}
+                    {plan.name} ·{" "}
+                    {plan.billingType === "PER_WEEK"
+                      ? "Per week"
+                      : plan.billingType === "BLOCK"
+                        ? "Block"
+                        : "Per class"}
                   </SelectItem>
                 ))}
               </SelectContent>

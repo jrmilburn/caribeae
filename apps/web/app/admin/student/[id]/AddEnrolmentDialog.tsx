@@ -128,8 +128,8 @@ export function AddEnrolmentDialog({
         <DialogHeader>
           <DialogTitle>Add enrolment</DialogTitle>
           <DialogDescription>
-            Choose a plan. Weekly plans enrol the student into all matching classes; per-class plans
-            require selecting a specific class from the schedule.
+            Choose a plan. Weekly plans enrol the student into all matching classes; per-class and
+            block plans require selecting a specific class from the schedule.
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +146,12 @@ export function AddEnrolmentDialog({
                 <SelectContent>
                   {availablePlans.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} · {plan.billingType === "PER_CLASS" ? "Per class" : "Per week"}
+                      {plan.name} ·{" "}
+                      {plan.billingType === "PER_WEEK"
+                        ? "Per week"
+                        : plan.billingType === "BLOCK"
+                          ? "Block"
+                          : "Per class"}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -99,7 +99,7 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
                     <TableHead>Name</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Billing</TableHead>
-                    <TableHead>Enrolment</TableHead>
+                    <TableHead>Entitlement</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -110,12 +110,18 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
                       <TableCell className="font-medium">{plan.name}</TableCell>
                       <TableCell>{plan.level.name}</TableCell>
                       <TableCell className="capitalize">
-                        {plan.billingType === "PER_CLASS" ? "Per class" : "Per week"}
+                        {plan.billingType === "PER_WEEK"
+                          ? "Per week"
+                          : plan.billingType === "BLOCK"
+                            ? "Block"
+                            : "Per class"}
                       </TableCell>
                       <TableCell>
-                        {plan.enrolmentType === "BLOCK"
-                          ? `Block of ${plan.blockLength} classes`
-                          : "Single class enrolment"}
+                        {plan.billingType === "PER_WEEK"
+                          ? `${plan.durationWeeks ?? "—"} week${(plan.durationWeeks ?? 0) === 1 ? "" : "s"}`
+                          : plan.billingType === "BLOCK"
+                            ? `${plan.blockClassCount ?? plan.blockLength ?? 1} classes per block`
+                            : "1 class per invoice"}
                       </TableCell>
                       <TableCell>${(plan.priceCents / 100).toFixed(2)}</TableCell>
                       <TableCell className="text-right">
