@@ -44,6 +44,7 @@ model Family {
   medicalContactPhone String?
 
   students Student[]
+  invoices Invoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -98,6 +99,14 @@ enum EnrolmentStatus {
   CANCELLED
 }
 
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+  OVERDUE
+}
+
 model Enrolment {
   id String @id @default(cuid())
 
@@ -115,6 +124,11 @@ model Enrolment {
   planId String?
   plan   EnrolmentPlan? @relation(fields: [planId], references: [id])
 
+  paidThroughDate DateTime?
+  creditsRemaining Int?
+
+  invoices Invoice[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -130,6 +144,7 @@ enum EnrolmentType {
 enum BillingType {
   PER_WEEK
   PER_CLASS
+  BLOCK
 }
 
 model EnrolmentPlan {
@@ -140,6 +155,8 @@ model EnrolmentPlan {
 
   enrolmentType EnrolmentType @default(BLOCK)
   billingType   BillingType   @default(PER_CLASS)
+  durationWeeks  Int?
+  blockClassCount Int?
 
   levelId String
   level   Level  @relation(fields: [levelId], references: [id])
@@ -187,4 +204,37 @@ model Teacher {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   classTemplates ClassTemplate[]
+}
+
+model Invoice {
+  id String @id @default(cuid())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  enrolmentId String?
+  enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  status      InvoiceStatus @default(DRAFT)
+
+  coverageStart    DateTime?
+  coverageEnd      DateTime?
+  creditsPurchased Int?
+
+  issuedAt DateTime @default(now())
+  dueAt    DateTime?
+  paidAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId, status])
+  @@index([enrolmentId, status])
+  @@index([dueAt])
+}
+
+model InvoicingSweepState {
+  id        String   @id
+  lastRunAt DateTime
 }

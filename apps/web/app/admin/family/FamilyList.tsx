@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { FamilyModal } from "./FamilyModal"
+import { UnpaidFamiliesIndicator } from "./UnpaidFamiliesIndicator";
 
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
 import { deleteFamily } from "@/server/family/deleteFamily";
 
 import type { ClientFamily } from "@/server/family/types";
+import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 
 import {
   DropdownMenu,
@@ -28,7 +30,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
-export default function FamilyList({ families }: { families: Family[] }) {
+export default function FamilyList({ families, unpaidSummary }: { families: Family[]; unpaidSummary: UnpaidFamiliesSummary }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [newFamilyModal, setNewFamilyModal] = useState(false);
   const [selected, setSelected] = React.useState<Family | null>(null);
@@ -72,7 +74,8 @@ export default function FamilyList({ families }: { families: Family[] }) {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
+      <UnpaidFamiliesIndicator summary={unpaidSummary} />
       <ListHeader
         title="Families"
         totalCount={families.length}
