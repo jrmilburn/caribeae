@@ -1,13 +1,14 @@
-import { prisma } from "@/lib/prisma"
+"use server";
 
+import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export async function getLevels() {
+  await getOrCreateUser();
+  await requireAdmin();
 
-    const user = await getOrCreateUser()
-
-    const levels = await prisma.level.findMany()
-
-    return levels;
-
+  return prisma.level.findMany({
+    orderBy: [{ levelOrder: "asc" }, { name: "asc" }],
+  });
 }

@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -23,35 +24,46 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { EnrolmentPlanForm } from "./EnrolmentPlanForm";
 import { deleteEnrolmentPlan } from "@/server/enrolmentPlan/deleteEnrolmentPlan";
+
+import { EnrolmentPlanForm } from "../enrolment-plans/EnrolmentPlanForm";
 
 type PlanWithLevel = EnrolmentPlan & { level: Level };
 
-export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithLevel[]; levels: Level[] }) {
+export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[]; levels: Level[] }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PlanWithLevel | null>(null);
+  const [search, setSearch] = React.useState("");
 
-  const onClose = () => {
-    setOpen(false);
-    setEditing(null);
-  };
+  const filteredPlans = React.useMemo(() => {
+    const query = search.toLowerCase();
+    return plans.filter(
+      (plan) =>
+        plan.name.toLowerCase().includes(query) ||
+        plan.level.name.toLowerCase().includes(query),
+    );
+  }, [plans, search]);
 
   const onDelete = async (plan: PlanWithLevel) => {
     const ok = window.confirm(`Delete enrolment plan "${plan.name}"?`);
     if (!ok) return;
-    await deleteEnrolmentPlan(plan.id);
-    router.refresh();
+    try {
+      await deleteEnrolmentPlan(plan.id);
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to delete plan.";
+      window.alert(message);
+    }
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
-      <div className="flex items-start justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Enrolment plans</h1>
+          <h2 className="text-lg font-semibold">Enrolment plans</h2>
           <p className="text-sm text-muted-foreground">
-            Manage plans used when creating enrolments. Plans control billing type and block length.
+            Manage billing presets used when creating enrolments.
           </p>
         </div>
         <Button
@@ -67,12 +79,18 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">Plans</CardTitle>
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search plans"
+            className="max-w-xs"
+          />
         </CardHeader>
         <CardContent>
-          {plans.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No enrolment plans yet.</p>
+          {filteredPlans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No enrolment plans found.</p>
           ) : (
             <div className="rounded-lg border">
               <Table>
@@ -87,7 +105,7 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {plans.map((plan) => (
+                  {filteredPlans.map((plan) => (
                     <TableRow key={plan.id}>
                       <TableCell className="font-medium">{plan.name}</TableCell>
                       <TableCell>{plan.level.name}</TableCell>
@@ -99,9 +117,7 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                           ? `Block of ${plan.blockLength} classes`
                           : "Single class enrolment"}
                       </TableCell>
-                      <TableCell>
-                        ${(plan.priceCents / 100).toFixed(2)}
-                      </TableCell>
+                      <TableCell>${(plan.priceCents / 100).toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

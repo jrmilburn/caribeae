@@ -41,11 +41,13 @@ export function EnrolmentPlanForm({
   onOpenChange,
   plan,
   levels,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   plan: (EnrolmentPlan & { level: Level }) | null;
   levels: Level[];
+  onSaved?: () => void;
 }) {
   const mode: "create" | "edit" = plan ? "edit" : "create";
   const [submitting, setSubmitting] = React.useState(false);
@@ -109,6 +111,7 @@ export function EnrolmentPlanForm({
       } else {
         await createEnrolmentPlan(payload);
       }
+      onSaved?.();
       onOpenChange(false);
     } finally {
       setSubmitting(false);
