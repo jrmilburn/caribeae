@@ -1,6 +1,7 @@
 import getFamily from "@/server/family/getFamily";
 import FamilyForm from "./FamilyForm";
 import { getLevels } from "@/server/level/getLevels";
+import { getUnpaidFamiliesSummary, maybeRunInvoicingSweep } from "@/server/invoicing";
 
 type PageProps = {
   params: { id: string };
@@ -13,8 +14,12 @@ type PageProps = {
 export default async function FamilyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
 
-  const family = await getFamily(id);
-  const levels = await getLevels();
+  await maybeRunInvoicingSweep();
+  const [family, levels, unpaidSummary] = await Promise.all([
+    getFamily(id),
+    getLevels(),
+    getUnpaidFamiliesSummary(),
+  ]);
 
   const enrolContext =
     searchParams?.enrolToTemplateId
@@ -24,5 +29,12 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
         }
       : null;
 
-  return <FamilyForm family={family} enrolContext={enrolContext} levels={levels} />;
+  return (
+    <FamilyForm
+      family={family}
+      enrolContext={enrolContext}
+      levels={levels}
+      unpaidSummary={unpaidSummary}
+    />
+  );
 }

@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createEnrolment } from "./createEnrolment";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -33,6 +32,12 @@ export async function enrolStudentWithPlan(input: EnrolmentWithPlanInput) {
   if (student?.levelId && student.levelId !== plan.levelId) {
     throw new Error("Student level must match enrolment plan level");
   }
+  if (plan.billingType === "PER_WEEK" && !plan.durationWeeks) {
+    throw new Error("Weekly plans require a duration");
+  }
+  if (plan.billingType === "BLOCK" && !plan.blockClassCount) {
+    throw new Error("Block plans require a class count");
+  }
 
   if (plan.billingType === "PER_WEEK") {
     const templates = await prisma.classTemplate.findMany({
@@ -49,26 +54,30 @@ export async function enrolStudentWithPlan(input: EnrolmentWithPlanInput) {
     }
 
     for (const tmpl of templates) {
-      await createEnrolment({
-        templateId: tmpl.id,
-        studentId: input.studentId,
-        startDate: input.startDate,
-        endDate: input.endDate ?? null,
-        planId: input.planId,
-      });
+      await createEnrolment(
+        {
+          templateId: tmpl.id,
+          studentId: input.studentId,
+          startDate: input.startDate,
+          endDate: input.endDate ?? null,
+          planId: input.planId,
+        },
+        { skipAuth: true }
+      );
     }
   } else {
     if (!input.templateId) {
       throw new Error("A class template must be selected for this plan");
     }
-    await createEnrolment({
-      templateId: input.templateId,
-      studentId: input.studentId,
-      startDate: input.startDate,
-      endDate: input.endDate ?? null,
-      planId: input.planId,
-    });
+    await createEnrolment(
+      {
+        templateId: input.templateId,
+        studentId: input.studentId,
+        startDate: input.startDate,
+        endDate: input.endDate ?? null,
+        planId: input.planId,
+      },
+      { skipAuth: true }
+    );
   }
-
-  revalidatePath("/admin/enrolment-plans");
 }
