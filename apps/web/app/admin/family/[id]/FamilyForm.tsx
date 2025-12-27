@@ -5,6 +5,7 @@ import FamilyInvoices from "./FamilyInvoices";
 import type { Prisma } from "@prisma/client";
 import type { Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
+import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { UnpaidFamiliesIndicator } from "../UnpaidFamiliesIndicator";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
@@ -49,9 +50,10 @@ type FamilyFormProps = {
   enrolContext?: EnrolContext | null;
   levels: Level[];
   unpaidSummary: UnpaidFamiliesSummary;
+  billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
 };
 
-export default function FamilyForm({ family, enrolContext, levels, unpaidSummary }: FamilyFormProps) {
+export default function FamilyForm({ family, enrolContext, levels, unpaidSummary, billing }: FamilyFormProps) {
   if (!family) return null;
 
   return (
@@ -78,7 +80,7 @@ export default function FamilyForm({ family, enrolContext, levels, unpaidSummary
         />
       </div>
 
-      <FamilyInvoices family={family} />
+      <FamilyInvoices family={family} billing={billing} />
     </div>
   );
 }
