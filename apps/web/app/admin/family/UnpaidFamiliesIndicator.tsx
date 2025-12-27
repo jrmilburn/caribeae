@@ -25,7 +25,7 @@ export function UnpaidFamiliesIndicator({ summary }: Props) {
   const count = summary.count ?? 0;
 
   return (
-    <div className="sticky top-4 z-10 flex justify-end">
+    <div className="sticky top-4 z-10 flex justify-end mb-2">
       <Button
         variant={count ? "secondary" : "outline"}
         size="sm"

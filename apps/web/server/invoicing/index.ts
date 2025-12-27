@@ -1,4 +1,3 @@
-"use server";
 
 import { addDays, addWeeks, isAfter, isBefore, max as maxDate } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";

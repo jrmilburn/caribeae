@@ -344,12 +344,9 @@ function RecordPaymentSheet({
           Record payment
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-full sm:max-w-xl">
+      <SheetContent side="right" className="w-full sm:max-w-xl p-4">
         <SheetHeader>
-          <SheetTitle>Record payment</SheetTitle>
-          <SheetDescription>
-            Allocate the payment across selected invoices. Amounts are in dollars.
-          </SheetDescription>
+          <SheetTitle>Payment</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

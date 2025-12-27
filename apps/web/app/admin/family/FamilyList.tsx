@@ -74,7 +74,7 @@ export default function FamilyList({ families, unpaidSummary }: { families: Fami
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full">
       <UnpaidFamiliesIndicator summary={unpaidSummary} />
       <ListHeader
         title="Families"

@@ -54,13 +54,10 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center p-4">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Teachers</h2>
-          <p className="text-sm text-muted-foreground">
-            Add the teachers that can be assigned to class templates or schedules.
-          </p>
         </div>
         <Button
           size="sm"
@@ -74,7 +71,7 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
         </Button>
       </div>
 
-      <Card>
+      <Card className="border-l-0!">
         <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">Teacher directory</CardTitle>
           <Input

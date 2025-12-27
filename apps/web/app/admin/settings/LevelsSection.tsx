@@ -50,13 +50,10 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center p-4">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Levels</h2>
-          <p className="text-sm text-muted-foreground">
-            Control level ordering and default settings used throughout the admin.
-          </p>
         </div>
         <Button
           size="sm"
@@ -70,7 +67,7 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
         </Button>
       </div>
 
-      <Card>
+      <Card className="border-l-0!">
         <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">Level list</CardTitle>
           <Input

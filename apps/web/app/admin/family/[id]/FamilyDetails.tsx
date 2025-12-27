@@ -58,7 +58,7 @@ export default function FamilyDetails({ family }: Props) {
 
   return (
     <section className="md:col-span-3 border-t border-b bg-background p-5">
-      <div className="mb-4">
+      <div className="mb-4 p-4">
         <h2 className="text-base font-semibold">Family information</h2>
         <p className="text-sm text-muted-foreground">
           Update contacts and emergency info.

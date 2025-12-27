@@ -20,22 +20,18 @@ type SectionId = "levels" | "plans" | "teachers";
 const SECTIONS: Array<{
   id: SectionId;
   label: string;
-  description: string;
 }> = [
   {
     id: "levels",
     label: "Levels",
-    description: "Ordering, timings, and class defaults.",
   },
   {
     id: "plans",
     label: "Enrolment plans",
-    description: "Billing and enrolment presets.",
   },
   {
     id: "teachers",
     label: "Teachers",
-    description: "Manage teacher profiles.",
   },
 ];
 
@@ -51,16 +47,15 @@ export function SettingsPageClient({
   const [active, setActive] = React.useState<SectionId>("levels");
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 p-6 lg:flex-row">
-      <aside className="w-full shrink-0 space-y-4 lg:w-64">
-        <Card className="p-4">
+    <div className="flex h-full flex-col lg:flex-row">
+      <aside className="w-full shrink-0 space-y-4 lg:w-64 h-full">
+        <Card className="p-4 border-l-0! h-full">
           <div className="flex items-center gap-2 pb-2">
             <div className="rounded-md bg-muted p-2">
               <Settings className="h-4 w-4" />
             </div>
             <div>
               <p className="text-sm font-semibold">Settings</p>
-              <p className="text-xs text-muted-foreground">Manage your admin defaults</p>
             </div>
           </div>
           <Separator className="my-2" />
@@ -80,7 +75,6 @@ export function SettingsPageClient({
               >
                 <div className="flex flex-col items-start text-left">
                   <span className="text-sm font-medium">{section.label}</span>
-                  <span className="text-xs text-muted-foreground">{section.description}</span>
                 </div>
               </button>
             ))}

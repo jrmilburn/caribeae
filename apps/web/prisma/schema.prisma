@@ -46,8 +46,9 @@ model Family {
   students Student[]
   invoices Invoice[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  payments  Payment[]
 }
 
 model Student {
@@ -125,7 +126,7 @@ model Enrolment {
   planId String?
   plan   EnrolmentPlan? @relation(fields: [planId], references: [id])
 
-  paidThroughDate DateTime?
+  paidThroughDate  DateTime?
   creditsRemaining Int?
 
   invoices Invoice[]
@@ -154,9 +155,9 @@ model EnrolmentPlan {
   name       String
   priceCents Int    @default(0)
 
-  enrolmentType EnrolmentType @default(BLOCK)
-  billingType   BillingType   @default(PER_CLASS)
-  durationWeeks  Int?
+  enrolmentType   EnrolmentType @default(BLOCK)
+  billingType     BillingType   @default(PER_CLASS)
+  durationWeeks   Int?
   blockClassCount Int?
 
   levelId String
@@ -216,15 +217,15 @@ model Invoice {
   enrolmentId String?
   enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
 
-  amountCents Int
-  amountPaidCents Int @default(0)
-  status      InvoiceStatus @default(DRAFT)
+  amountCents     Int
+  amountPaidCents Int           @default(0)
+  status          InvoiceStatus @default(DRAFT)
 
   coverageStart    DateTime?
   coverageEnd      DateTime?
   creditsPurchased Int?
 
-  issuedAt DateTime @default(now())
+  issuedAt DateTime  @default(now())
   dueAt    DateTime?
   paidAt   DateTime?
 
@@ -245,9 +246,9 @@ model Payment {
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   amountCents Int
-  paidAt     DateTime @default(now())
-  method     String?
-  note       String?
+  paidAt      DateTime @default(now())
+  method      String?
+  note        String?
 
   allocations PaymentAllocation[]
 
@@ -258,8 +259,8 @@ model Payment {
 }
 
 model PaymentAllocation {
-  paymentId String
-  invoiceId String
+  paymentId   String
+  invoiceId   String
   amountCents Int
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)

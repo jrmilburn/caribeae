@@ -58,13 +58,11 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center p-4">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Enrolment plans</h2>
-          <p className="text-sm text-muted-foreground">
-            Manage billing presets used when creating enrolments.
-          </p>
+
         </div>
         <Button
           size="sm"
@@ -78,7 +76,7 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
         </Button>
       </div>
 
-      <Card>
+      <Card className="border-l-0!">
         <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">Plans</CardTitle>
           <Input

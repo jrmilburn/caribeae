@@ -57,14 +57,11 @@ export default function FamilyForm({ family, enrolContext, levels, unpaidSummary
   if (!family) return null;
 
   return (
-    <div className="mx-auto w-full space-y-6 py-4">
-      <div className="space-y-1 px-4">
+    <div className="mx-auto w-full h-screen overflow-y-auto">
+      <div className="space-y-1 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold">{family.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage family details and students.
-            </p>
           </div>
           <UnpaidFamiliesIndicator summary={unpaidSummary} />
         </div>
