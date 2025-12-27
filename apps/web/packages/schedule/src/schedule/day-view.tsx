@@ -28,6 +28,10 @@ type DayViewProps = {
 };
 
 export default function DayView(props: DayViewProps) {
+  const [dropTarget, setDropTarget] = React.useState<{
+    start: Date;
+    duration: number;
+  } | null>(null);
   const {
     TIME_SLOTS,
     dayName,
@@ -43,6 +47,13 @@ export default function DayView(props: DayViewProps) {
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
+  const draggingClass = React.useMemo(
+    () =>
+      draggingId
+        ? classes.find((c) => c.id === draggingId || c.templateId === draggingId) ?? null
+        : null,
+    [classes, draggingId]
+  );
 
   const clearDragImage = () => {
     if (dragImageRef.current) {
@@ -72,6 +83,10 @@ export default function DayView(props: DayViewProps) {
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
   const minuteHeight = SLOT_HEIGHT_PX / 5;
+
+  React.useEffect(() => {
+    if (!draggingId) setDropTarget(null);
+  }, [draggingId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -119,16 +134,38 @@ export default function DayView(props: DayViewProps) {
                 if (!onSlotClick) return;
                 onSlotClick(combineDateAndTime(dayDate, slot.time12));
               }}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                if (!draggingClass) return;
+                e.preventDefault();
+                setDropTarget({
+                  start: combineDateAndTime(dayDate, slot.time12),
+                  duration: draggingClass.durationMin,
+                });
+              }}
               onDrop={(e) => {
                 if (!onMoveClass) return;
                 e.preventDefault();
                 const templateId = e.dataTransfer.getData("text/plain");
                 if (!templateId) return;
                 onMoveClass(templateId, combineDateAndTime(dayDate, slot.time12));
+                setDropTarget(null);
               }}
             />
           ))}
+
+          {dropTarget && draggingClass ? (
+            <div
+              className="absolute left-[3px] right-[3px] z-10 rounded border border-dashed border-primary/60 bg-primary/10"
+              style={{
+                top: `${Math.max(
+                  0,
+                  ((dropTarget.start.getHours() * 60 + dropTarget.start.getMinutes()) - GRID_START_MIN) *
+                    minuteHeight
+                )}px`,
+                height: `${dropTarget.duration * minuteHeight}px`,
+              }}
+            />
+          ) : null}
 
           {classes.map((c) => {
           const colors = getTeacherColor(c.teacher?.id);
@@ -147,7 +184,7 @@ export default function DayView(props: DayViewProps) {
                       e.dataTransfer.effectAllowed = "move";
                       e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
                       createDragImage(e);
-                      setDraggingId(c.id);
+                      setDraggingId(c.templateId ?? c.id);
                     }
                   : undefined
               }

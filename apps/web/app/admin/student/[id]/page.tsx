@@ -1,5 +1,6 @@
 import { getLevels } from "@/server/level/getLevels";
 import { getStudent } from "@/server/student/getStudent";
+import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
 
 import StudentPageClient from "./StudentPageClient";
 
@@ -13,11 +14,11 @@ export default async function StudentPage({ params }: PageProps) {
   const student = await getStudent(id);
   if (!student) return null;
 
-  const levels = await getLevels();
+  const [levels, enrolmentPlans] = await Promise.all([getLevels(), getEnrolmentPlans()]);
 
   return (
     <div className="max-h-screen overflow-y-auto">
-      <StudentPageClient student={student} levels={levels} />
+      <StudentPageClient student={student} levels={levels} enrolmentPlans={enrolmentPlans} />
     </div>
   );
 }
