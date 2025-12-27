@@ -37,9 +37,21 @@ import EmailMarketingPane from "@/components/admin/messages/EmailMarketingPane"
 
 import { sendSmsAction } from "@/server/messages/sendSms"
 import { useTransition } from "react"
+import type { ClientRecipient, InvoiceStatus, LevelLite, ClassLite } from "@/types/admin/recipients"
 
+type Json = string | number | boolean | null | { [key: string]: Json } | Json[]
+type CommandCreatePayload = { key: "message"; href: string }
+const COMMAND_CREATE_EVENT = "command:create"
+const COMMAND_CREATE_STORAGE_KEY = "command:create"
 
 type Channel = "EMAIL" | "SMS"
+
+type Props = {
+  recipients: ClientRecipient[]
+  levels: LevelLite[]
+  classes: ClassLite[]
+  invoiceStatusOptions: InvoiceStatus[]
+}
 
 export default function MessageComposer({
   recipients,
@@ -892,4 +904,3 @@ function ClassMultiSelect({
     </Popover>
   )
 }
-

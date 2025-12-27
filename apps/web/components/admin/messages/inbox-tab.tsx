@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { Check, CheckCheck, Clock, Loader2, Send, X, Search } from "lucide-react";
-import type { SAClientItem, SAMessage } from "@/lib/server/messages/actions";
+import type { SAClientItem, SAMessage } from "@/server/messages/actions";
 import { getSupaBrowser } from "@/lib/realtime/supabase-browser";
 
 type SearchResult = { id: string; name: string | null; email: string | null; phone: string | null };
@@ -22,7 +22,9 @@ export default function InboxClient({
 }: {
   initialClients: SAClientItem[];
   initialConversation: SAMessage[];
-  sendAction: (input: { clientId: string; to: string; body: string }) => Promise<{ ok: boolean }>;
+  sendAction: (
+    input: { clientId: string; to: string; body: string }
+  ) => Promise<{ ok: true; id: string } | { ok: false; error?: string }>;
   loadConversationAction: (clientId: string) => Promise<SAMessage[]>;
   listClientsAction: () => Promise<SAClientItem[]>;
 }) {

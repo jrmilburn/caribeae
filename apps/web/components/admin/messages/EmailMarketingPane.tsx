@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import EmailEditor from "./EmailEditor";
 import { toast } from "sonner";
-import { sendEmailBroadcastAction } from "@/lib/server/messages/sendEmailBroadcast";
+import { sendEmailBroadcastAction } from "@/server/messages/sendEmailBroadcast";
 import type { ClientRecipient } from "@/types/admin/recipients";
 import { Mail } from "lucide-react";
 import EmailPreviewDialog from "./EmailPreviewDialog";

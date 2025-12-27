@@ -12,7 +12,7 @@ const MESSAGE_TABS = [
 ] as const;
 
 type MessagesPageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Record<string, string | string[] | undefined>;
 };
 
 function resolveTab(
@@ -24,7 +24,7 @@ function resolveTab(
 }
 
 export default async function MessagesPage({ searchParams }: MessagesPageProps) {
-  const params = (await searchParams) ?? {};
+  const params = searchParams ?? {};
   const currentTab = resolveTab(params.tab, "inbox");
 
   const initialClients = await listRecentClients();
