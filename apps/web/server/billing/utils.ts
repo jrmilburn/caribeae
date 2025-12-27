@@ -1,9 +1,6 @@
-"use server";
 
 import { isBefore } from "date-fns";
 import { InvoiceStatus, Prisma } from "@prisma/client";
-
-import { prisma } from "@/lib/prisma";
 
 export function nextInvoiceStatus(params: {
   invoice: { status: InvoiceStatus; amountCents: number; dueAt: Date | null; issuedAt: Date | null };

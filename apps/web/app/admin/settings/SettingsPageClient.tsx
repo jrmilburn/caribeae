@@ -5,7 +5,6 @@ import type { EnrolmentPlan, Level, Teacher } from "@prisma/client";
 import { Settings } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -48,17 +47,16 @@ export function SettingsPageClient({
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
-      <aside className="w-full shrink-0 space-y-4 lg:w-64 h-full">
-        <Card className="p-4 border-l-0! h-full">
-          <div className="flex items-center gap-2 pb-2">
-            <div className="rounded-md bg-muted p-2">
+      <aside className="w-full shrink-0 lg:w-64 h-full">
+        <Card className=" border-l-0! border-t-0! h-full py-0!">
+          <div className="flex items-center gap-2 border-b p-4 h-[65px]">
+            <div className="rounded-md bg-muted">
               <Settings className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold">Settings</p>
+              <p className="text-lg font-semibold">Settings</p>
             </div>
           </div>
-          <Separator className="my-2" />
           <div className="space-y-2">
             {SECTIONS.map((section) => (
               <button
