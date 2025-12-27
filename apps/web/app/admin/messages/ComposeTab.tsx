@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 import {
   previewBroadcastRecipientsAction,
@@ -20,11 +21,12 @@ type ComposeTabProps = {
   families: Family[];
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
+  mode?: "direct" | "broadcast"; // NEW
 };
 
 type Channel = "SMS" | "EMAIL";
 
-export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProps) {
+export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeTabProps) {
   // ----- Direct -----
   const [familyId, setFamilyId] = React.useState("");
   const [channel, setChannel] = React.useState<Channel>("SMS");
@@ -126,15 +128,20 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
     });
   };
 
+  const showTabs = !mode;
+  const defaultValue = mode ?? "direct";
+
   return (
-    <Tabs defaultValue="direct" className="w-full">
-      <TabsList className="w-fit">
-        <TabsTrigger value="direct">Direct</TabsTrigger>
-        <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
-      </TabsList>
+    <Tabs defaultValue={defaultValue} className="w-full">
+      {showTabs ? (
+        <TabsList className="w-fit">
+          <TabsTrigger value="direct">Direct</TabsTrigger>
+          <TabsTrigger value="broadcast">Broadcast</TabsTrigger>
+        </TabsList>
+      ) : null}
 
       {/* DIRECT */}
-      <TabsContent value="direct" className="mt-4 space-y-4">
+      <TabsContent value="direct" className={cn(showTabs ? "mt-4" : "mt-0", "space-y-4")}>
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-3">
             <div className="text-sm font-semibold">Direct message</div>
@@ -161,11 +168,7 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
             <div className="space-y-2">
               <Label className="text-xs">Channel</Label>
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={channel === "SMS" ? "default" : "outline"}
-                  onClick={() => setChannel("SMS")}
-                >
+                <Button type="button" variant={channel === "SMS" ? "default" : "outline"} onClick={() => setChannel("SMS")}>
                   SMS
                 </Button>
                 <Button
@@ -191,23 +194,17 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
             <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{message.length} characters</span>
-              <Button
-                type="button"
-                onClick={handleDirectSend}
-                disabled={!familyId || !message.trim() || directBusy}
-              >
+              <Button type="button" onClick={handleDirectSend} disabled={!familyId || !message.trim() || directBusy}>
                 {directBusy ? "Sending…" : "Send"}
               </Button>
             </div>
-            {directStatus ? (
-              <div className="mt-2 text-xs text-muted-foreground">{directStatus}</div>
-            ) : null}
+            {directStatus ? <div className="mt-2 text-xs text-muted-foreground">{directStatus}</div> : null}
           </div>
         </div>
       </TabsContent>
 
       {/* BROADCAST */}
-      <TabsContent value="broadcast" className="mt-4 space-y-4">
+      <TabsContent value="broadcast" className={cn(showTabs ? "mt-4" : "mt-0", "space-y-4")}>
         <div className="rounded-lg border bg-card p-4">
           <div className="mb-3">
             <div className="text-sm font-semibold">Broadcast</div>
@@ -250,9 +247,7 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
                     {lvl.name}
                   </Badge>
                 ))}
-                {levels.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">No levels found.</div>
-                ) : null}
+                {levels.length === 0 ? <div className="text-xs text-muted-foreground">No levels found.</div> : null}
               </div>
             </div>
 
@@ -295,11 +290,7 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
 
           <div className="mt-4 space-y-2">
             <Label className="text-xs">Message</Label>
-            <Textarea
-              value={broadcastMessage}
-              onChange={(e) => setBroadcastMessage(e.target.value)}
-              rows={5}
-            />
+            <Textarea value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} rows={5} />
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{broadcastMessage.length} characters</span>
@@ -307,19 +298,13 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
                 <Button type="button" variant="outline" onClick={previewBroadcast} disabled={broadcastBusy}>
                   {broadcastBusy ? "Loading…" : "Preview"}
                 </Button>
-                <Button
-                  type="button"
-                  onClick={sendBroadcast}
-                  disabled={!broadcastMessage.trim() || broadcastBusy}
-                >
+                <Button type="button" onClick={sendBroadcast} disabled={!broadcastMessage.trim() || broadcastBusy}>
                   {broadcastBusy ? "Sending…" : "Send broadcast"}
                 </Button>
               </div>
             </div>
 
-            {broadcastStatus ? (
-              <div className="mt-2 text-xs text-muted-foreground">{broadcastStatus}</div>
-            ) : null}
+            {broadcastStatus ? <div className="mt-2 text-xs text-muted-foreground">{broadcastStatus}</div> : null}
           </div>
 
           {preview ? (
@@ -362,6 +347,3 @@ export function ComposeTab({ families, levels, invoiceStatuses }: ComposeTabProp
     </Tabs>
   );
 }
-
-// Optional alias if you want to import as ComposerTab elsewhere without changing other code
-export const ComposerTab = ComposeTab;

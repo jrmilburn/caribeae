@@ -38,15 +38,22 @@ function ComposeSheet({
       <SheetTrigger asChild>
         <Button>New message</Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>New message</SheetTitle>
-          <SheetDescription>Send an SMS or Email to a family, or broadcast to groups.</SheetDescription>
-        </SheetHeader>
 
-        <div className="mt-4">
-          {/* Keep your existing ComposeTab UI intact */}
-          <ComposeTab families={families} levels={levels} invoiceStatuses={invoiceStatuses} />
+      <SheetContent className="w-full sm:max-w-xl">
+        <div className="flex h-full flex-col">
+          <SheetHeader>
+            <SheetTitle>New message</SheetTitle>
+            <SheetDescription>Send a single SMS or Email to a family.</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            <ComposeTab
+              families={families}
+              levels={levels}
+              invoiceStatuses={invoiceStatuses}
+              mode="direct"
+            />
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -62,21 +69,27 @@ function BroadcastSheet({
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
 }) {
-  // OPTIONAL: If you want a tighter UI, you can later split ComposeTab into Direct/Broadcast panels.
-  // For now we just open the same ComposeTab; you can scroll to the broadcast section.
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button variant="outline">Broadcast</Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>Broadcast</SheetTitle>
-          <SheetDescription>Send one message to many families using filters.</SheetDescription>
-        </SheetHeader>
 
-        <div className="mt-4">
-          <ComposeTab families={families} levels={levels} invoiceStatuses={invoiceStatuses} />
+      <SheetContent className="w-full sm:max-w-xl">
+        <div className="flex h-full flex-col">
+          <SheetHeader>
+            <SheetTitle>Broadcast</SheetTitle>
+            <SheetDescription>Send one message to groups of families using filters.</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            <ComposeTab
+              families={families}
+              levels={levels}
+              invoiceStatuses={invoiceStatuses}
+              mode="broadcast"
+            />
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -91,7 +104,6 @@ export default function MessagesPageClient({
 }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header */}
       <div className="flex items-start justify-between gap-3 border-b bg-card px-4 py-3">
         <div>
           <div className="text-base font-semibold">Messages</div>
@@ -104,7 +116,6 @@ export default function MessagesPageClient({
         </div>
       </div>
 
-      {/* Content (no nested page scroll) */}
       <div className="flex-1 overflow-hidden">
         <InboxTab conversations={conversations} families={families} />
       </div>
