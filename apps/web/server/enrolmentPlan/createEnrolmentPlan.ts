@@ -30,6 +30,7 @@ export async function createEnrolmentPlan(input: EnrolmentPlanInput) {
     },
   });
 
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/enrolment-plans");
   return plan;
 }

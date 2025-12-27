@@ -31,6 +31,7 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
     },
   });
 
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/enrolment-plans");
   return plan;
 }
