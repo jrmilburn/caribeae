@@ -21,7 +21,7 @@ export async function createEnrolment(input: CreateEnrolmentInput) {
   await getOrCreateUser()
   await requireAdmin()
   
-const enrolment = await prisma.enrolment.create({
+  const enrolment = await prisma.enrolment.create({
     data: {
       templateId: input.templateId,
       studentId: input.studentId,
@@ -33,5 +33,6 @@ const enrolment = await prisma.enrolment.create({
   });
 
   revalidatePath(`/admin/class/${input.templateId}`);
+  revalidatePath(`/admin/student/${input.studentId}`);
   return enrolment;
 }

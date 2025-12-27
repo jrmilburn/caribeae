@@ -27,6 +27,7 @@ export type ScheduleViewProps = {
   onClassClick?: (occurrence: NormalizedScheduleClass) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
+  allowTemplateMoves?: boolean;
 };
 
 export function ScheduleView({
@@ -37,6 +38,7 @@ export function ScheduleView({
   onClassClick,
   defaultViewMode = "week",
   showHeader = true,
+  allowTemplateMoves = true,
 }: ScheduleViewProps) {
   const [viewMode, setViewMode] = useState<"week" | "day">(defaultViewMode);
   const [currentWeek, setCurrentWeek] = useState<Date>(() =>
@@ -181,7 +183,7 @@ export function ScheduleView({
           weekDates={weekDates}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
-          onMoveClass={onMoveClass}
+          onMoveClass={allowTemplateMoves ? onMoveClass : undefined}
           viewMode={viewMode}
           setViewMode={setViewMode}
           selectedDay={selectedDay}
