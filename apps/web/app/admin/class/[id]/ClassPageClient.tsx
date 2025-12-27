@@ -10,6 +10,18 @@ import type { ClientTemplateWithInclusions } from "./types";
 import { ClassTemplateForm } from "./ClassTemplateForm";
 import { EnrolmentsSection } from "./EnrolmentsSection";
 
+import { minutesToTimeInput } from "./utils/time";
+
+const DAY_OPTIONS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday"
+]
+
 export default function ClassPageClient({
   classTemplate,
   teachers,
@@ -24,15 +36,12 @@ export default function ClassPageClient({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
+    <div className="mx-auto w-full">
       <div className="space-y-1">
-        <h1 className="text-xl font-semibold">Class</h1>
-        <p className="text-sm text-muted-foreground">
-          Update class details and manage enrolments for this template.
-        </p>
+        <h1 className="text-xl font-semibold p-6">{classTemplate.level.name} - {classTemplate.dayOfWeek && DAY_OPTIONS[classTemplate.dayOfWeek]} - {classTemplate?.startTime && minutesToTimeInput(classTemplate.startTime)}</h1>
       </div>
 
-      <Card>
+      <Card className="border-l-0! border-r-0! border-b-0!">
         <CardHeader>
           <CardTitle className="text-base">Class details</CardTitle>
         </CardHeader>
