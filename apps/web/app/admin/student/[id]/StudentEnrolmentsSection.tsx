@@ -1,23 +1,22 @@
-// /app/admin/class/[id]/components/EnrolmentsSection.tsx
 "use client";
 
 import * as React from "react";
-import type { EnrolmentPlan, Student } from "@prisma/client";
+import type { EnrolmentPlan, Level } from "@prisma/client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import type { ClientTemplateWithInclusions } from "./types";
-import { EnrolmentsTable } from "./EnrolmentsTable";
-import { CreateEnrolmentDialog } from "./CreateEnrolmentDialog";
+import type { ClientStudentWithRelations } from "./types";
+import { StudentEnrolmentsTable } from "./StudentEnrolmentsTable";
+import { AddEnrolmentDialog } from "./AddEnrolmentDialog";
 
-export function EnrolmentsSection({
-  classTemplate,
-  students,
+export function StudentEnrolmentsSection({
+  student,
+  levels,
   enrolmentPlans,
 }: {
-  classTemplate: ClientTemplateWithInclusions;
-  students: Student[];
+  student: ClientStudentWithRelations;
+  levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const [open, setOpen] = React.useState(false);
@@ -25,16 +24,16 @@ export function EnrolmentsSection({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle className="text-base">Enrolments</CardTitle>
+        <CardTitle className="text-base">Student enrolments</CardTitle>
         <Button onClick={() => setOpen(true)}>Add enrolment</Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <EnrolmentsTable enrolments={classTemplate.enrolments} />
-        <CreateEnrolmentDialog
+        <StudentEnrolmentsTable enrolments={student.enrolments} />
+        <AddEnrolmentDialog
           open={open}
           onOpenChange={setOpen}
-          templateId={classTemplate.id}
-          students={students}
+          studentId={student.id}
+          levels={levels}
           enrolmentPlans={enrolmentPlans}
         />
       </CardContent>

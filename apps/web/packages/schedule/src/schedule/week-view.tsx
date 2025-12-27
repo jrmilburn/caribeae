@@ -49,6 +49,11 @@ type WeekViewProps = {
 };
 
 export default function WeekView(props: WeekViewProps) {
+  const [dropTarget, setDropTarget] = React.useState<{
+    dayIndex: number;
+    start: Date;
+    duration: number;
+  } | null>(null);
   const {
     DAYS_OF_WEEK,
     TIME_SLOTS,
@@ -64,6 +69,13 @@ export default function WeekView(props: WeekViewProps) {
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
+  const draggingClass = React.useMemo(
+    () =>
+      draggingId
+        ? classes.find((c) => c.id === draggingId || c.templateId === draggingId) ?? null
+        : null,
+    [classes, draggingId]
+  );
 
   const clearDragImage = () => {
     if (dragImageRef.current) {
@@ -92,7 +104,11 @@ export default function WeekView(props: WeekViewProps) {
   };
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
-  const minuteHeight = SLOT_HEIGHT_PX / 15;
+  const minuteHeight = SLOT_HEIGHT_PX / 5;
+
+  React.useEffect(() => {
+    if (!draggingId) setDropTarget(null);
+  }, [draggingId]);
 
   // modal state
   return (
@@ -176,17 +192,40 @@ export default function WeekView(props: WeekViewProps) {
                           if (!onSlotClick) return;
                           onSlotClick(combineDateAndTime12(weekDates[dayIndex], slot.time12));
                         }}
-                        onDragOver={(e) => e.preventDefault()}
+                        onDragOver={(e) => {
+                          if (!draggingClass) return;
+                          e.preventDefault();
+                          setDropTarget({
+                            dayIndex,
+                            start: combineDateAndTime12(weekDates[dayIndex], slot.time12),
+                            duration: draggingClass.durationMin,
+                          });
+                        }}
                         onDrop={(e) => {
                           if (!onMoveClass) return;
                           e.preventDefault();
                           const templateId = e.dataTransfer.getData("text/plain");
                           if (!templateId) return;
                           onMoveClass(templateId, combineDateAndTime12(weekDates[dayIndex], slot.time12));
+                          setDropTarget(null);
                         }}
                       />
                     );
                   })}
+
+                  {dropTarget?.dayIndex === dayIndex && draggingClass ? (
+                    <div
+                      className="absolute left-[3px] right-[3px] z-10 rounded border border-dashed border-primary/60 bg-primary/10"
+                      style={{
+                        top: `${Math.max(
+                          0,
+                          ((dropTarget.start.getHours() * 60 + dropTarget.start.getMinutes()) - GRID_START_MIN) *
+                            minuteHeight
+                        )}px`,
+                        height: `${dropTarget.duration * minuteHeight}px`,
+                      }}
+                    />
+                  ) : null}
 
               {/* Class blocks */}
               {dayClasses.map((c) => {
@@ -194,33 +233,50 @@ export default function WeekView(props: WeekViewProps) {
                     const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
                     const top = (startMinutes - GRID_START_MIN) * minuteHeight;
                     const widthPct = 100 / c.columns;
+                const isDraggable = Boolean(onMoveClass);
 
                 return (
                   <div
                     key={c.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
-                      createDragImage(e);
-                      setDraggingId(c.id);
-                    }}
-                    onDragEnd={() => {
-                      clearDragImage();
-                      setDraggingId(null);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={(e) => {
-                      if (!onMoveClass) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const templateId = e.dataTransfer.getData("text/plain");
-                      if (!templateId) return;
-                      onMoveClass(templateId, c.startTime);
-                    }}
+                    draggable={isDraggable}
+                    onDragStart={
+                      isDraggable
+                        ? (e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                            createDragImage(e);
+                            setDraggingId(c.templateId ?? c.id);
+                          }
+                        : undefined
+                    }
+                    onDragEnd={
+                      isDraggable
+                        ? () => {
+                            clearDragImage();
+                            setDraggingId(null);
+                          }
+                        : undefined
+                    }
+                    onDragOver={
+                      isDraggable
+                        ? (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        : undefined
+                    }
+                    onDrop={
+                      isDraggable
+                        ? (e) => {
+                            if (!onMoveClass) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const templateId = e.dataTransfer.getData("text/plain");
+                            if (!templateId) return;
+                            onMoveClass(templateId, c.startTime);
+                          }
+                        : undefined
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       onClassClick?.(c);
