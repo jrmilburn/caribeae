@@ -1,13 +1,42 @@
 import FamilyDetails from "./FamilyDetails";
 import StudentDetails from "./StudentDetails";
+import FamilyInvoices from "./FamilyInvoices";
 
 import type { Prisma } from "@prisma/client";
 import type { Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 import { UnpaidFamiliesIndicator } from "../UnpaidFamiliesIndicator";
 
-export type FamilyWithStudents = Prisma.FamilyGetPayload<{
-  include: { students: true };
+export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
+  include: {
+    students: {
+      include: {
+        enrolments: {
+          select: {
+            id: true;
+            templateId: true;
+            startDate: true;
+            endDate: true;
+            paidThroughDate: true;
+            status: true;
+          };
+        };
+      };
+    };
+    invoices: {
+      include: {
+        enrolment: {
+          select: {
+            id: true;
+            startDate: true;
+            endDate: true;
+            templateId: true;
+            plan: { select: { name: true; billingType: true } };
+          };
+        };
+      };
+    };
+  };
 }>;
 
 export type EnrolContext = {
@@ -16,7 +45,7 @@ export type EnrolContext = {
 };
 
 type FamilyFormProps = {
-  family: FamilyWithStudents | null;
+  family: FamilyWithStudentsAndInvoices | null;
   enrolContext?: EnrolContext | null;
   levels: Level[];
   unpaidSummary: UnpaidFamiliesSummary;
@@ -48,6 +77,8 @@ export default function FamilyForm({ family, enrolContext, levels, unpaidSummary
           levels={levels}
         />
       </div>
+
+      <FamilyInvoices family={family} />
     </div>
   );
 }
