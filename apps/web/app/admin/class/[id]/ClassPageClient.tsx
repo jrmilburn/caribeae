@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import type { Level, Student, Teacher } from "@prisma/client";
+import type { EnrolmentPlan, Level, Student, Teacher } from "@prisma/client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -15,11 +15,13 @@ export default function ClassPageClient({
   teachers,
   levels,
   students,
+  enrolmentPlans,
 }: {
   classTemplate: ClientTemplateWithInclusions;
   teachers: Teacher[];
   levels: Level[];
   students: Student[];
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
@@ -39,7 +41,7 @@ export default function ClassPageClient({
         </CardContent>
       </Card>
 
-      <EnrolmentsSection classTemplate={classTemplate} students={students} />
+      <EnrolmentsSection classTemplate={classTemplate} students={students} enrolmentPlans={enrolmentPlans} />
     </div>
   );
 }
