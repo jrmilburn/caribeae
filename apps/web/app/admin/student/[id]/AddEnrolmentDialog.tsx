@@ -75,7 +75,7 @@ export function AddEnrolmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl">
+      <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>Select a class</DialogTitle>
           <DialogDescription>
