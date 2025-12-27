@@ -92,7 +92,7 @@ export default function WeekView(props: WeekViewProps) {
   };
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
-  const minuteHeight = SLOT_HEIGHT_PX / 15;
+  const minuteHeight = SLOT_HEIGHT_PX / 5;
 
   // modal state
   return (
@@ -194,33 +194,50 @@ export default function WeekView(props: WeekViewProps) {
                     const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
                     const top = (startMinutes - GRID_START_MIN) * minuteHeight;
                     const widthPct = 100 / c.columns;
+                const isDraggable = Boolean(onMoveClass);
 
                 return (
                   <div
                     key={c.id}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
-                      createDragImage(e);
-                      setDraggingId(c.id);
-                    }}
-                    onDragEnd={() => {
-                      clearDragImage();
-                      setDraggingId(null);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={(e) => {
-                      if (!onMoveClass) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const templateId = e.dataTransfer.getData("text/plain");
-                      if (!templateId) return;
-                      onMoveClass(templateId, c.startTime);
-                    }}
+                    draggable={isDraggable}
+                    onDragStart={
+                      isDraggable
+                        ? (e) => {
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                            createDragImage(e);
+                            setDraggingId(c.id);
+                          }
+                        : undefined
+                    }
+                    onDragEnd={
+                      isDraggable
+                        ? () => {
+                            clearDragImage();
+                            setDraggingId(null);
+                          }
+                        : undefined
+                    }
+                    onDragOver={
+                      isDraggable
+                        ? (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        : undefined
+                    }
+                    onDrop={
+                      isDraggable
+                        ? (e) => {
+                            if (!onMoveClass) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const templateId = e.dataTransfer.getData("text/plain");
+                            if (!templateId) return;
+                            onMoveClass(templateId, c.startTime);
+                          }
+                        : undefined
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       onClassClick?.(c);
