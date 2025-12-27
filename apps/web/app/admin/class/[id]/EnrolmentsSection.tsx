@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import type { Student } from "@prisma/client";
+import type { EnrolmentPlan, Student } from "@prisma/client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,11 @@ import { CreateEnrolmentDialog } from "./CreateEnrolmentDialog";
 export function EnrolmentsSection({
   classTemplate,
   students,
+  enrolmentPlans,
 }: {
   classTemplate: ClientTemplateWithInclusions;
   students: Student[];
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -33,6 +35,7 @@ export function EnrolmentsSection({
           onOpenChange={setOpen}
           templateId={classTemplate.id}
           students={students}
+          enrolmentPlans={enrolmentPlans}
         />
       </CardContent>
     </Card>

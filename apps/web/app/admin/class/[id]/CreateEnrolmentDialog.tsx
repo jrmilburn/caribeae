@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { Student, EnrolmentStatus } from "@prisma/client";
+import type { Student, EnrolmentStatus, EnrolmentPlan } from "@prisma/client";
 
 import {
   Dialog,
@@ -22,7 +22,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-import { createEnrolment } from "@/server/enrolment/createEnrolment";
+import { enrolStudentWithPlan } from "@/server/enrolment/enrolStudentWithPlan";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -34,11 +34,13 @@ export function CreateEnrolmentDialog({
   onOpenChange,
   templateId,
   students,
+  enrolmentPlans,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   templateId: string;
   students: Student[];
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
@@ -46,6 +48,7 @@ export function CreateEnrolmentDialog({
   const [studentId, setStudentId] = React.useState<string>("");
   const [startDate, setStartDate] = React.useState<string>("");
   const [endDate, setEndDate] = React.useState<string>("");
+  const [planId, setPlanId] = React.useState<string>("");
   const [status, setStatus] = React.useState<EnrolmentStatus>("ACTIVE");
 
   React.useEffect(() => {
@@ -53,12 +56,19 @@ export function CreateEnrolmentDialog({
       setStudentId("");
       setStartDate("");
       setEndDate("");
+      setPlanId("");
       setStatus("ACTIVE");
       setSaving(false);
     }
   }, [open]);
 
-  const canSubmit = studentId && startDate && !saving;
+  const availablePlans = enrolmentPlans;
+  React.useEffect(() => {
+    if (!availablePlans.find((p) => p.id === planId)) {
+      setPlanId(availablePlans[0]?.id ?? "");
+    }
+  }, [availablePlans, planId]);
+  const canSubmit = studentId && startDate && planId && !saving;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,16 +81,20 @@ export function CreateEnrolmentDialog({
 
       if (!start) return;
 
-      await createEnrolment({
-        templateId,
+      const selectedPlan = availablePlans.find((p) => p.id === planId);
+      await enrolStudentWithPlan({
+        templateId: selectedPlan?.billingType === "PER_WEEK" ? undefined : templateId,
         studentId,
         startDate: start,
         endDate: end ?? null,
-        status,
+        planId,
       });
 
       onOpenChange(false);
       router.refresh();
+    } catch (err) {
+      console.error(err);
+      alert("Unable to create enrolment. Please check the plan and try again.");
     } finally {
       setSaving(false);
     }
@@ -94,6 +108,22 @@ export function CreateEnrolmentDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Plan</Label>
+            <Select value={planId} onValueChange={setPlanId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select plan" />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePlans.map((plan) => (
+                  <SelectItem key={plan.id} value={plan.id}>
+                    {plan.name} · {plan.billingType === "PER_CLASS" ? "Per class" : "Per week"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label>Student</Label>
             <Select value={studentId} onValueChange={setStudentId}>

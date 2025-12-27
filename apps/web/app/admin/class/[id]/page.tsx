@@ -3,6 +3,7 @@ import { getClassTemplate } from "@/server/classTemplate/getClassTemplate";
 import { getTeachers } from "@/server/teacher/getTeachers";
 import { getStudentsByLevel } from "@/server/student/getStudentsByLevel";
 import { getLevels } from "@/server/level/getLevels";
+import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
 
 import ClassPageClient from "./ClassPageClient";
 
@@ -21,6 +22,8 @@ export default async function ClassPage({ params }: PageProps) {
     getLevels(),
     getStudentsByLevel(classTemplate.levelId),
   ]);
+  const plans = await getEnrolmentPlans();
+  const levelPlans = plans.filter((plan) => plan.levelId === classTemplate.levelId);
 
   return (
     <div className="max-h-screen overflow-y-auto">
@@ -29,6 +32,7 @@ export default async function ClassPage({ params }: PageProps) {
       teachers={teachers}
       levels={levels}
       students={students}
+      enrolmentPlans={levelPlans}
     />
     </div>
   );
