@@ -22,7 +22,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-import { createEnrolment } from "@/server/enrolment/createEnrolment";
+import { enrolStudentWithPlan } from "@/server/enrolment/enrolStudentWithPlan";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -81,12 +81,12 @@ export function CreateEnrolmentDialog({
 
       if (!start) return;
 
-      await createEnrolment({
-        templateId,
+      const selectedPlan = availablePlans.find((p) => p.id === planId);
+      await enrolStudentWithPlan({
+        templateId: selectedPlan?.billingType === "PER_WEEK" ? undefined : templateId,
         studentId,
         startDate: start,
         endDate: end ?? null,
-        status,
         planId,
       });
 
