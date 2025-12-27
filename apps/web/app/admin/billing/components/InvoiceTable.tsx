@@ -79,17 +79,18 @@ export function InvoiceTable({
         </Button>
       </div>
 
-      <div className="flex h-12 items-center justify-between border-y bg-muted/40 px-4 text-sm font-medium text-muted-foreground">
-        <div className="flex-1">Issued</div>
-        <div className="flex-1">Family</div>
-        <div className="flex-1">Status</div>
-        <div className="flex-1">Due</div>
-        <div className="flex-1 text-right">Total</div>
-        <div className="flex-1 text-right">Paid / owing</div>
-        <div className="w-10" />
-      </div>
-
       <Table>
+        <TableHeader>
+          <TableRow className="border-y bg-muted/40 text-sm font-medium text-muted-foreground">
+            <TableHead className="w-[160px]">Issued</TableHead>
+            <TableHead className="w-[200px]">Family</TableHead>
+            <TableHead className="w-[140px]">Status</TableHead>
+            <TableHead className="w-[140px]">Due</TableHead>
+            <TableHead className="w-[140px] text-right">Total</TableHead>
+            <TableHead className="w-[180px] text-right">Paid / owing</TableHead>
+            <TableHead className="w-[64px]" />
+          </TableRow>
+        </TableHeader>
         <TableBody>
           {invoices.length === 0 ? (
             <TableRow>
@@ -100,7 +101,7 @@ export function InvoiceTable({
           ) : (
             invoices.map((invoice) => (
               <TableRow key={invoice.id} className="hover:bg-muted/40">
-                <TableCell className="flex-1">
+                <TableCell className="w-[160px]">
                   <div className="space-y-1">
                     <div className="text-sm font-semibold">
                       {invoice.issuedAt ? format(invoice.issuedAt, "d MMM yyyy") : "—"}
@@ -110,21 +111,21 @@ export function InvoiceTable({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="flex-1">
+                <TableCell className="w-[200px]">
                   <div className="text-sm font-medium">{invoice.family?.name ?? "—"}</div>
                 </TableCell>
-                <TableCell className="flex-1">
+                <TableCell className="w-[140px]">
                   <Badge variant={statusVariant(invoice.status)} className="rounded-full">
                     {invoice.status.replace("_", " ").toLowerCase()}
                   </Badge>
                 </TableCell>
-                <TableCell className="flex-1">
+                <TableCell className="w-[140px]">
                   {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"}
                 </TableCell>
-                <TableCell className="flex-1 text-right font-semibold">
+                <TableCell className="w-[140px] text-right font-semibold">
                   {formatCurrencyFromCents(invoice.amountCents)}
                 </TableCell>
-                <TableCell className="flex-1 text-right">
+                <TableCell className="w-[180px] text-right">
                   <div className="text-sm font-medium">{formatCurrencyFromCents(invoice.amountPaidCents)}</div>
                   <div
                     className={cn(
@@ -135,7 +136,7 @@ export function InvoiceTable({
                     Owing {formatCurrencyFromCents(invoice.amountOwingCents)}
                   </div>
                 </TableCell>
-                <TableCell className="w-10 text-right">
+                <TableCell className="w-[64px] text-right">
                   <InvoiceActions
                     invoice={invoice}
                     onEdit={onEdit}

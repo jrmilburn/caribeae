@@ -47,16 +47,17 @@ export function PaymentTable({ payments, onCreate, onEdit, onDelete }: Props) {
         </Button>
       </div>
 
-      <div className="flex h-12 items-center justify-between border-y bg-muted/40 px-4 text-sm font-medium text-muted-foreground">
-        <div className="flex-1">Paid on</div>
-        <div className="flex-1">Family</div>
-        <div className="flex-1">Method</div>
-        <div className="flex-1">Invoice</div>
-        <div className="flex-1 text-right">Amount</div>
-        <div className="w-10" />
-      </div>
-
       <Table>
+        <TableHeader>
+          <TableRow className="border-y bg-muted/40 text-sm font-medium text-muted-foreground">
+            <TableHead className="w-[160px]">Paid on</TableHead>
+            <TableHead className="w-[200px]">Family</TableHead>
+            <TableHead className="w-[160px]">Method</TableHead>
+            <TableHead className="w-[220px]">Invoice</TableHead>
+            <TableHead className="w-[140px] text-right">Amount</TableHead>
+            <TableHead className="w-[64px]" />
+          </TableRow>
+        </TableHeader>
         <TableBody>
           {payments.length === 0 ? (
             <TableRow>
@@ -70,7 +71,7 @@ export function PaymentTable({ payments, onCreate, onEdit, onDelete }: Props) {
               const appliedInvoice = allocation?.invoice;
               return (
                 <TableRow key={payment.id} className="hover:bg-muted/40">
-                  <TableCell className="flex-1">
+                  <TableCell className="w-[160px]">
                     <div className="space-y-1">
                       <div className="text-sm font-semibold">
                         {payment.paidAt ? format(payment.paidAt, "d MMM yyyy") : "—"}
@@ -78,16 +79,16 @@ export function PaymentTable({ payments, onCreate, onEdit, onDelete }: Props) {
                       <div className="text-xs text-muted-foreground">#{payment.id}</div>
                     </div>
                   </TableCell>
-                  <TableCell className="flex-1">
+                  <TableCell className="w-[200px]">
                     <div className="text-sm font-medium">{payment.family?.name ?? "—"}</div>
                   </TableCell>
-                  <TableCell className="flex-1">
+                  <TableCell className="w-[160px]">
                     <div className="flex items-center gap-2 text-sm">
                       <CreditCard className="h-4 w-4 text-muted-foreground" />
                       <span>{payment.method || "Manual"}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="flex-1">
+                  <TableCell className="w-[220px]">
                     {appliedInvoice ? (
                       <div className="space-y-1">
                         <div className="text-sm font-medium truncate">Invoice #{appliedInvoice.id}</div>
@@ -99,10 +100,10 @@ export function PaymentTable({ payments, onCreate, onEdit, onDelete }: Props) {
                       <span className="text-sm text-muted-foreground">Unapplied</span>
                     )}
                   </TableCell>
-                  <TableCell className="flex-1 text-right font-semibold">
+                  <TableCell className="w-[140px] text-right font-semibold">
                     {formatCurrencyFromCents(payment.amountCents)}
                   </TableCell>
-                  <TableCell className="w-10 text-right">
+                  <TableCell className="w-[64px] text-right">
                     <PaymentActions payment={payment} onEdit={onEdit} onDelete={onDelete} />
                   </TableCell>
                 </TableRow>
