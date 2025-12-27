@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmailBroadcast, type EmailRecipient } from "@/lib/server/email/sendgrid";
 import { auth } from "@clerk/nextjs/server"; // or your auth util
+import { requireAdmin } from "@/lib/requireAdmin";
 import { Prisma } from "@prisma/client";
 
 export async function sendEmailBroadcastAction(input: {
@@ -12,6 +13,7 @@ export async function sendEmailBroadcastAction(input: {
   recipients: EmailRecipient[]; // deduped!
   meta?: Prisma.InputJsonValue;
 }) {
+  await requireAdmin();
   const { userId } = await auth();
   if (!userId) return { ok: false, error: "Unauthorized" };
 
@@ -34,6 +36,22 @@ export async function sendEmailBroadcastAction(input: {
     html: input.html,
     recipients,
   });
+
+  if (recipients.length) {
+    const now = new Date();
+    const messages = recipients.map((r) => ({
+      direction: "OUTBOUND" as const,
+      channel: "EMAIL" as const,
+      body: input.html,
+      subject: input.subject.trim(),
+      fromEmail: process.env.SENDGRID_FROM_EMAIL ?? null,
+      toEmail: r.email,
+      status: summary.failed > 0 ? "PENDING" : "SENT",
+      familyId: r.familyId ?? null,
+      createdAt: now,
+    }));
+    await prisma.message.createMany({ data: messages });
+  }
 
   await prisma.emailCampaign.create({
     data: {

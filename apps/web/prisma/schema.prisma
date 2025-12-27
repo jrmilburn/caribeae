@@ -292,6 +292,25 @@ enum MessageStatus {
   FAILED
 }
 
+enum MessageChannel {
+  SMS
+  EMAIL
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  phoneNumber String
+  familyId    String?
+  family      Family? @relation(fields: [familyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@unique([phoneNumber])
+}
+
 model Campaign {
   id          String    @id @default(cuid())
   createdAt   DateTime  @default(now())
@@ -306,9 +325,13 @@ model Message {
   id           String           @id @default(cuid())
   createdAt    DateTime         @default(now())
   direction    MessageDirection
+  channel      MessageChannel   @default(SMS)
   body         String
-  fromNumber   String
-  toNumber     String
+  subject      String?
+  fromNumber   String?
+  toNumber     String?
+  fromEmail    String?
+  toEmail      String?
   status       MessageStatus    @default(PENDING)
   providerSid  String?          @unique
   errorCode    String?
@@ -317,13 +340,17 @@ model Message {
   deliveredAt  DateTime?
   failedAt     DateTime?
 
-  clientId     String?
-  client       Client? @relation(fields: [clientId], references: [id])
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+
+  familyId     String?
+  family       Family? @relation(fields: [familyId], references: [id])
 
   campaignId   String?
   campaign     Campaign? @relation(fields: [campaignId], references: [id])
 
-  @@index([clientId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([familyId, createdAt])
   @@index([campaignId, createdAt])
   @@index([status, createdAt])
 }
@@ -341,4 +368,3 @@ model EmailCampaign {
   // optional: store filters/segments etc as JSON
   meta          Json?
 }
-
