@@ -20,6 +20,10 @@ export function StudentEnrolmentsSection({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const [open, setOpen] = React.useState(false);
+  const levelPlans = React.useMemo(
+    () => enrolmentPlans.filter((plan) => plan.levelId === student.levelId),
+    [enrolmentPlans, student.levelId]
+  );
 
   return (
     <Card>
@@ -34,7 +38,7 @@ export function StudentEnrolmentsSection({
           onOpenChange={setOpen}
           studentId={student.id}
           levels={levels}
-          enrolmentPlans={enrolmentPlans}
+          enrolmentPlans={levelPlans}
         />
       </CardContent>
     </Card>
