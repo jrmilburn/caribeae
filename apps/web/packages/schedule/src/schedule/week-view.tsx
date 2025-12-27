@@ -92,7 +92,7 @@ export default function WeekView(props: WeekViewProps) {
   };
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
-  const minuteHeight = SLOT_HEIGHT_PX / 15;
+  const minuteHeight = SLOT_HEIGHT_PX / 5;
 
   // modal state
   return (

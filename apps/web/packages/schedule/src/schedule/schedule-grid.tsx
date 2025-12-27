@@ -112,7 +112,7 @@ type TimeSlot = { time24: string; time12: string; isHour: boolean };
 function generateTimeSlots(): TimeSlot[] {
   const slots: TimeSlot[] = [];
   for (let hour = 5; hour <= 20; hour++) {
-    for (let minute = 0; minute < 60; minute += 15) {
+    for (let minute = 0; minute < 60; minute += 5) {
       const h = String(hour).padStart(2, "0");
       const m = String(minute).padStart(2, "0");
       const time24 = `${h}:${m}`;

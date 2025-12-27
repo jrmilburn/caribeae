@@ -71,7 +71,7 @@ export default function DayView(props: DayViewProps) {
   };
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
-  const minuteHeight = SLOT_HEIGHT_PX / 15;
+  const minuteHeight = SLOT_HEIGHT_PX / 5;
 
   return (
     <div className="flex h-full flex-col">
