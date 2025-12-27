@@ -102,6 +102,7 @@ enum EnrolmentStatus {
 enum InvoiceStatus {
   DRAFT
   SENT
+  PARTIALLY_PAID
   PAID
   VOID
   OVERDUE
@@ -216,6 +217,7 @@ model Invoice {
   enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
 
   amountCents Int
+  amountPaidCents Int @default(0)
   status      InvoiceStatus @default(DRAFT)
 
   coverageStart    DateTime?
@@ -229,9 +231,45 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  allocations PaymentAllocation[]
+
   @@index([familyId, status])
   @@index([enrolmentId, status])
   @@index([dueAt])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  paidAt     DateTime @default(now())
+  method     String?
+  note       String?
+
+  allocations PaymentAllocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId, paidAt])
+}
+
+model PaymentAllocation {
+  paymentId String
+  invoiceId String
+  amountCents Int
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([paymentId, invoiceId])
+  @@index([invoiceId])
 }
 
 model InvoicingSweepState {

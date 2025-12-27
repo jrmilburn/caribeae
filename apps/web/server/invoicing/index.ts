@@ -10,7 +10,12 @@ import { requireAdmin } from "@/lib/requireAdmin";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
-const OPEN_INVOICE_STATUSES = [InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.OVERDUE] as const;
+export const OPEN_INVOICE_STATUSES = [
+  InvoiceStatus.DRAFT,
+  InvoiceStatus.SENT,
+  InvoiceStatus.PARTIALLY_PAID,
+  InvoiceStatus.OVERDUE,
+] as const;
 const DEFAULT_DUE_IN_DAYS = 7;
 const SWEEP_THROTTLE_MS = 15 * 60 * 1000;
 
@@ -133,11 +138,17 @@ export async function markInvoicePaid(invoiceId: string) {
     });
 
     if (!invoice) throw new Error("Invoice not found");
-    if (invoice.status === InvoiceStatus.PAID) return invoice;
+    if (invoice.status === InvoiceStatus.PAID && invoice.amountPaidCents >= invoice.amountCents) {
+      return invoice;
+    }
 
     const updated = await tx.invoice.update({
       where: { id: invoiceId },
-      data: { status: InvoiceStatus.PAID, paidAt: new Date() },
+      data: {
+        status: InvoiceStatus.PAID,
+        paidAt: invoice.paidAt ?? new Date(),
+        amountPaidCents: invoice.amountCents,
+      },
     });
 
     if (invoice.enrolment && invoice.enrolment.plan) {
@@ -330,14 +341,23 @@ export async function getUnpaidFamiliesSummary() {
       name: true,
       invoices: {
         where: { status: { in: OPEN_INVOICE_STATUSES } },
-        select: { id: true, amountCents: true, status: true, dueAt: true },
+        select: {
+          id: true,
+          amountCents: true,
+          amountPaidCents: true,
+          status: true,
+          dueAt: true,
+        },
         orderBy: { dueAt: "asc" },
       },
     },
   });
 
   const summary = families.map((family) => {
-    const amountDueCents = family.invoices.reduce((total, inv) => total + inv.amountCents, 0);
+    const amountDueCents = family.invoices.reduce(
+      (total, inv) => total + Math.max(inv.amountCents - inv.amountPaidCents, 0),
+      0
+    );
     const latestInvoice = family.invoices[0];
     return {
       id: family.id,
