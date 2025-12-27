@@ -277,3 +277,68 @@ model InvoicingSweepState {
   id        String   @id
   lastRunAt DateTime
 }
+
+
+//MESSAGE AND EMAIL RELATED STUFF
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model Campaign {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  name        String
+  body        String
+  createdById String?   // admin user
+  // derived counters are computed in queries, but you can persist if you want
+  messages    Message[]
+}
+
+model Message {
+  id           String           @id @default(cuid())
+  createdAt    DateTime         @default(now())
+  direction    MessageDirection
+  body         String
+  fromNumber   String
+  toNumber     String
+  status       MessageStatus    @default(PENDING)
+  providerSid  String?          @unique
+  errorCode    String?
+  errorMessage String?
+
+  deliveredAt  DateTime?
+  failedAt     DateTime?
+
+  clientId     String?
+  client       Client? @relation(fields: [clientId], references: [id])
+
+  campaignId   String?
+  campaign     Campaign? @relation(fields: [campaignId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([campaignId, createdAt])
+  @@index([status, createdAt])
+}
+
+model EmailCampaign {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  createdById   String?
+  subject       String
+  preheader     String?
+  html          String
+  total         Int
+  sent          Int
+  failed        Int
+  // optional: store filters/segments etc as JSON
+  meta          Json?
+}
+
