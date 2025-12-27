@@ -101,14 +101,14 @@ export default function WeekView(props: WeekViewProps) {
         <div className="min-w-[800px]">
           {/* Header row */}
           <div
-            className="grid border-b border-r border-border bg-card sticky top-0 z-20 min-h-[60px]"
+            className="grid border-b border-r border-border bg-card sticky top-0 z-40 min-h-[60px]"
             style={{ gridTemplateColumns: "minmax(32px,1fr) repeat(7, minmax(64px,2fr))" }}
           >
             <div className="p-4 flex items-center border-r border-border" />
             {DAYS_OF_WEEK.map((day, index) => (
               <button
                 key={day}
-                className="p-4 text-center border-l border-border flex items-center justify-center hover:bg-accent/40 transition-colors"
+                className="relative p-4 text-center border-l border-border z-[10000] flex items-center justify-center hover:bg-accent/40 transition-colors"
                 onClick={() => onDayHeaderClick(day)}
                 title={`Open ${day} day view`}
               >
