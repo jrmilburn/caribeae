@@ -60,6 +60,11 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
   const [broadcastBusy, startBroadcast] = React.useTransition();
   const [activeTab, setActiveTab] = React.useState(defaultValue);
 
+  const htmlHasContent = (html: string) => {
+    const text = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+    return Boolean(text) || /<img\s/i.test(html);
+  };
+
   const toggleLevel = (id: string) => {
     setSelectedLevels((prev) => {
       const next = new Set(prev);
