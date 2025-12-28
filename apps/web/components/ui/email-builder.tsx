@@ -119,7 +119,7 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
         <div
           ref={containerRef}
           id={containerId}
-          className="min-h-[320px] w-full overflow-hidden rounded-md border bg-background"
+          className="min-h-[320px] h-full w-full overflow-hidden rounded-md border bg-background"
         >
           {!initialized ? (
             <div className="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground">
