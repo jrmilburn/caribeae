@@ -39,7 +39,7 @@ function ComposeSheet({
         <Button>New message</Button>
       </SheetTrigger>
 
-      <SheetContent className="w-full sm:max-w-xl">
+      <SheetContent className="w-full sm:max-w-4xl">
         <div className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>New message</SheetTitle>
@@ -75,7 +75,7 @@ function BroadcastSheet({
         <Button variant="outline">Broadcast</Button>
       </SheetTrigger>
 
-      <SheetContent className="w-full sm:max-w-xl">
+      <SheetContent className="w-full sm:max-w-4xl">
         <div className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>Broadcast</SheetTitle>
