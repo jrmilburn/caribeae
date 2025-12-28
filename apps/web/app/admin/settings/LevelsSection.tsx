@@ -52,7 +52,7 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
   return (
     <div className="">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center p-4">
-        <div className="space-y-1">
+        <div className="">
           <h2 className="text-lg font-semibold">Levels</h2>
         </div>
         <Button

@@ -46,9 +46,11 @@ model Family {
   students Student[]
   invoices Invoice[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  payments  Payment[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  payments      Payment[]
+  conversations Conversation[]
+  messages      Message[]
 }
 
 model Student {
@@ -278,7 +280,6 @@ model InvoicingSweepState {
   lastRunAt DateTime
 }
 
-
 //MESSAGE AND EMAIL RELATED STUFF
 enum MessageDirection {
   OUTBOUND
@@ -316,7 +317,7 @@ model Campaign {
   createdAt   DateTime  @default(now())
   name        String
   body        String
-  createdById String?   // admin user
+  createdById String? // admin user
   // derived counters are computed in queries, but you can persist if you want
   messages    Message[]
 }
@@ -337,8 +338,8 @@ model Message {
   errorCode    String?
   errorMessage String?
 
-  deliveredAt  DateTime?
-  failedAt     DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
 
   conversationId String?
   conversation   Conversation? @relation(fields: [conversationId], references: [id])
@@ -346,8 +347,11 @@ model Message {
   familyId     String?
   family       Family? @relation(fields: [familyId], references: [id])
 
-  campaignId   String?
-  campaign     Campaign? @relation(fields: [campaignId], references: [id])
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id])
+
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
 
   @@index([conversationId, createdAt])
   @@index([familyId, createdAt])
@@ -356,15 +360,15 @@ model Message {
 }
 
 model EmailCampaign {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  createdById   String?
-  subject       String
-  preheader     String?
-  html          String
-  total         Int
-  sent          Int
-  failed        Int
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  createdById String?
+  subject     String
+  preheader   String?
+  html        String
+  total       Int
+  sent        Int
+  failed      Int
   // optional: store filters/segments etc as JSON
-  meta          Json?
+  meta        Json?
 }
