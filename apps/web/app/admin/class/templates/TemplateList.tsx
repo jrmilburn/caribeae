@@ -63,13 +63,11 @@ export default function TemplateList({
 
   const handleSave = async (payload: ClientTemplate) => {
     if (selectedTemplate) {
-      const update = await updateTemplate(payload, selectedTemplate.id);
+      await updateTemplate(payload, selectedTemplate.id);
       router.refresh();
-      return update;
     } else {
-      const created = await createTemplate(payload);
+      await createTemplate(payload);
       router.refresh();
-      return created;
     }
   };
 
