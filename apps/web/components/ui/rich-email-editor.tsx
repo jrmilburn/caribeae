@@ -33,6 +33,7 @@ export function RichEmailEditor({
 }: RichEmailEditorProps) {
   const editorRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [selectedImage, setSelectedImage] = React.useState<HTMLImageElement | null>(null);
 
   React.useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
@@ -101,6 +102,36 @@ export function RichEmailEditor({
   const handleInput = () => {
     const html = editorRef.current?.innerHTML ?? "";
     onChange(html);
+  };
+
+  React.useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = document.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        setSelectedImage(null);
+        return;
+      }
+
+      const node = selection.anchorNode;
+      if (!node) {
+        setSelectedImage(null);
+        return;
+      }
+
+      const element = node instanceof HTMLElement ? node : node.parentElement;
+      const image = element?.closest("img");
+      setSelectedImage(image ?? null);
+    };
+
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, []);
+
+  const updateSelectedImageSize = (dimension: "width" | "height", value: number) => {
+    if (!selectedImage) return;
+    const next = Math.max(50, Math.min(2400, value));
+    selectedImage.style[dimension] = `${next}px`;
+    handleInput();
   };
 
   return (
@@ -233,6 +264,47 @@ export function RichEmailEditor({
         </div>
       </div>
 
+      {selectedImage ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/60 p-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Selected image size</span>
+          <div className="flex items-center gap-1">
+            <span>W</span>
+            <Input
+              type="number"
+              min={50}
+              max={2400}
+              value={
+                Number.parseInt(
+                  selectedImage.style.width || `${selectedImage.width || selectedImage.naturalWidth}`,
+                  10
+                ) || selectedImage.width || selectedImage.naturalWidth
+              }
+              onChange={(e) => updateSelectedImageSize("width", Number(e.target.value))}
+              className="h-7 w-20"
+            />
+            <span>px</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>H</span>
+            <Input
+              type="number"
+              min={50}
+              max={2400}
+              value={
+                Number.parseInt(
+                  selectedImage.style.height || `${selectedImage.height || selectedImage.naturalHeight}`,
+                  10
+                ) || selectedImage.height || selectedImage.naturalHeight
+              }
+              onChange={(e) => updateSelectedImageSize("height", Number(e.target.value))}
+              className="h-7 w-20"
+            />
+            <span>px</span>
+          </div>
+          <span className="text-muted-foreground">Click an image to adjust its dimensions.</span>
+        </div>
+      ) : null}
+
       <div
         ref={editorRef}
         className="min-h-[200px] w-full rounded-md border bg-background p-3 text-sm shadow-sm outline-none"
@@ -246,6 +318,27 @@ export function RichEmailEditor({
           content: attr(data-placeholder);
           color: hsl(var(--muted-foreground));
           pointer-events: none;
+        }
+
+        [contenteditable] ul {
+          list-style: disc;
+          margin-left: 1.25rem;
+          padding-left: 0.25rem;
+        }
+
+        [contenteditable] ol {
+          list-style: decimal;
+          margin-left: 1.25rem;
+          padding-left: 0.25rem;
+        }
+
+        [contenteditable] li {
+          margin-bottom: 0.25rem;
+        }
+
+        [contenteditable] img {
+          max-width: 100%;
+          height: auto;
         }
       `}</style>
     </div>
