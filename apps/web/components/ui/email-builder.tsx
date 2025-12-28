@@ -27,10 +27,13 @@ const EmailEditorShell = dynamic(() => Promise.resolve(() => null), { ssr: false
 type EmailBuilderProps = {
   className?: string;
   onReady?: () => void;
+
+  /** Controls editor height. Default: 70vh */
+  height?: string; // e.g. "70vh" | "800px"
 };
 
 export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderProps>(
-  ({ className, onReady }, ref) => {
+  ({ className, onReady, height = "70vh" }, ref) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const containerId = React.useId();
     const [initialized, setInitialized] = React.useState(false);
@@ -41,7 +44,9 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
       if (window.unlayer) return Promise.resolve();
 
       return new Promise<void>((resolve, reject) => {
-        const existing = document.querySelector<HTMLScriptElement>('script[src="https://editor.unlayer.com/embed.js"]');
+        const existing = document.querySelector<HTMLScriptElement>(
+          'script[src="https://editor.unlayer.com/embed.js"]'
+        );
         if (existing) {
           existing.addEventListener("load", () => resolve(), { once: true });
           existing.addEventListener("error", () => reject(new Error("Failed to load editor script")), { once: true });
@@ -60,6 +65,7 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
     const createEditor = React.useCallback(async () => {
       if (initStarted.current || initialized) return;
       initStarted.current = true;
+
       try {
         await ensureScript();
         if (!window.unlayer || !containerRef.current) return;
@@ -73,17 +79,12 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
         setInitialized(true);
         onReady?.();
       } finally {
-        // allow retries if initialization failed
-        if (!initialized) {
-          initStarted.current = false;
-        }
+        if (!initialized) initStarted.current = false;
       }
     }, [containerId, ensureScript, initialized, onReady]);
 
     React.useEffect(() => {
-      createEditor().catch((error) => {
-        console.error(error);
-      });
+      createEditor().catch(console.error);
     }, [createEditor]);
 
     React.useImperativeHandle(
@@ -91,24 +92,16 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
       () => ({
         exportHtml: () =>
           new Promise<string>((resolve, reject) => {
-            if (!window.unlayer) {
-              reject(new Error("Email editor not ready"));
-              return;
-            }
+            if (!window.unlayer) return reject(new Error("Email editor not ready"));
 
             window.unlayer.exportHtml((data) => {
-              if (!data?.html) {
-                reject(new Error("No HTML to export"));
-              } else {
-                resolve(data.html);
-              }
+              if (!data?.html) reject(new Error("No HTML to export"));
+              else resolve(data.html);
             });
           }),
         clear: () => {
           if (!window.unlayer) return;
-          window.unlayer.loadDesign({
-            body: { rows: [], values: {} },
-          });
+          window.unlayer.loadDesign({ body: { rows: [], values: {} } });
         },
       }),
       []
@@ -119,7 +112,8 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
         <div
           ref={containerRef}
           id={containerId}
-          className="min-h-[320px] h-full w-full overflow-hidden rounded-md border bg-background"
+          className="w-full overflow-hidden rounded-md border bg-background"
+          style={{ height, minHeight: height }}
         >
           {!initialized ? (
             <div className="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground">
