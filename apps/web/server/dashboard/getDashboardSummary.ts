@@ -4,11 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { InvoiceStatus, EnrolmentStatus, MessageChannel } from "@prisma/client";
+import { endOfDay, startOfDay } from "date-fns";
 
 export type DashboardSummary = {
   families: number;
   students: number;
   activeEnrolments: number;
+  classesToday: number;
+  activeClassTemplates: number;
   outstandingInvoices: number;
   overdueInvoices: number;
   smsLast7Days: number;
@@ -22,10 +25,18 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+  const today = new Date();
+  const todayStart = startOfDay(today);
+  const todayEnd = endOfDay(today);
+  // Prisma schema comment: 0-6 for Mon to Sun
+  const todayDayOfWeek = ((today.getDay() + 6) % 7) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
   const [
     families,
     students,
     activeEnrolments,
+    classesToday,
+    activeClassTemplates,
     outstandingInvoices,
     overdueInvoices,
     smsLast7Days,
@@ -34,6 +45,21 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     prisma.family.count(),
     prisma.student.count(),
     prisma.enrolment.count({ where: { status: EnrolmentStatus.ACTIVE } }),
+    prisma.classTemplate.count({
+      where: {
+        active: true,
+        dayOfWeek: todayDayOfWeek,
+        startDate: { lte: todayEnd },
+        OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
+      },
+    }),
+    prisma.classTemplate.count({
+      where: {
+        active: true,
+        startDate: { lte: todayEnd },
+        OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
+      },
+    }),
     prisma.invoice.count({
       where: { status: { in: [InvoiceStatus.SENT, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] } },
     }),
@@ -50,6 +76,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     families,
     students,
     activeEnrolments,
+    classesToday,
+    activeClassTemplates,
     outstandingInvoices,
     overdueInvoices,
     smsLast7Days,

@@ -54,6 +54,17 @@ export default async function DashboardPage() {
     listCommunications(5),
   ]);
 
+  const stats = [
+    { title: "Families", value: summary.families, href: "/admin/family" },
+    { title: "Students", value: summary.students, href: "/admin/student" },
+    { title: "Classes today", value: summary.classesToday, href: "/admin/schedule" },
+    { title: "Active enrolments", value: summary.activeEnrolments, href: "/admin/enrolment" },
+    { title: "Active class templates", value: summary.activeClassTemplates, href: "/admin/class" },
+    { title: "Outstanding invoices", value: summary.outstandingInvoices, href: "/admin/billing" },
+    { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: "/admin/communications" },
+    { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: "/admin/communications" },
+  ];
+
   return (
     <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
       <div className="flex flex-wrap justify-between gap-3">
@@ -69,13 +80,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-        <StatCard title="Families" value={summary.families} href="/admin/family" />
-        <StatCard title="Students" value={summary.students} href="/admin/student" />
-        <StatCard title="Active enrolments" value={summary.activeEnrolments} href="/admin/enrolment" />
-        <StatCard title="Outstanding invoices" value={summary.outstandingInvoices} href="/admin/billing" />
-        <StatCard title="Overdue invoices" value={summary.overdueInvoices} href="/admin/billing" />
-        <StatCard title="SMS (last 7 days)" value={summary.smsLast7Days} href="/admin/communications" />
-        <StatCard title="Emails (last 7 days)" value={summary.emailLast7Days} href="/admin/communications" />
+        {stats.map((stat) => (
+          <StatCard key={stat.title} title={stat.title} value={stat.value} href={stat.href} />
+        ))}
       </div>
 
       <Card className="flex-1 overflow-hidden">
