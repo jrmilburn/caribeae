@@ -35,7 +35,7 @@ type TemplateModalProps = {
   levels: Level[];
   teachers: Teacher[];
 
-  onSave: (payload: ClientTemplate) => Promise<any>;
+  onSave: (payload: ClientTemplate) => Promise<ClassTemplate>;
   prefill?: {
     date?: Date;
     startMinutes?: number;
@@ -239,7 +239,6 @@ export function TemplateModal({
     setSubmitting(false);
     setCapacityMode("default");
     setCapacityCustomOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, template, levels, teachers, prefill]);
 
   React.useEffect(() => {
