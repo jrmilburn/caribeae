@@ -35,7 +35,7 @@ type TemplateModalProps = {
   levels: Level[];
   teachers: Teacher[];
 
-  onSave: (payload: ClientTemplate) => Promise<any>;
+  onSave: (payload: ClientTemplate) => Promise<void>;
   prefill?: {
     date?: Date;
     startMinutes?: number;
