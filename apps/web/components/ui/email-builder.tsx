@@ -34,6 +34,7 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
     const containerRef = React.useRef<HTMLDivElement>(null);
     const containerId = React.useId();
     const [initialized, setInitialized] = React.useState(false);
+    const initStarted = React.useRef(false);
 
     const ensureScript = React.useCallback(() => {
       if (typeof window === "undefined") return;
@@ -57,18 +58,26 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
     }, []);
 
     const createEditor = React.useCallback(async () => {
-      if (initialized) return;
-      await ensureScript();
-      if (!window.unlayer || !containerRef.current) return;
+      if (initStarted.current || initialized) return;
+      initStarted.current = true;
+      try {
+        await ensureScript();
+        if (!window.unlayer || !containerRef.current) return;
 
-      window.unlayer.init({
-        id: containerId,
-        displayMode: "email",
-        source: "react-email-builder",
-      });
+        window.unlayer.init({
+          id: containerId,
+          displayMode: "email",
+          source: "react-email-builder",
+        });
 
-      setInitialized(true);
-      onReady?.();
+        setInitialized(true);
+        onReady?.();
+      } finally {
+        // allow retries if initialization failed
+        if (!initialized) {
+          initStarted.current = false;
+        }
+      }
     }, [containerId, ensureScript, initialized, onReady]);
 
     React.useEffect(() => {
