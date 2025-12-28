@@ -5,11 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import {
-  CalendarDays,
   LayoutDashboard,
+  CalendarDays,
   Users,
-  GraduationCap,
+  BookOpen,          // or GraduationCap
   MessageSquare,
+  Megaphone,         // or Send
   CreditCard,
   Settings,
   Menu,
@@ -45,13 +46,14 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-  { label: "Schedule", href: "/admin/schedule", icon: CalendarDays },
-  { label: "Families", href: "/admin/family", icon: Users },
-  { label: "Classes", href: "/admin/class", icon: GraduationCap },
-  { label: "Messages", href: "/admin/messages", icon: MessageSquare },
-  { label: "Billing", href: "/admin/billing", icon: CreditCard },
-  { label: "Settings", href: "/admin/settings", icon: Settings },
+  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard }, // ✅
+  { label: "Schedule", href: "/admin/schedule", icon: CalendarDays },     // ✅
+  { label: "Families", href: "/admin/family", icon: Users },              // ✅
+  { label: "Classes", href: "/admin/class", icon: BookOpen },             // ✅ (clearer than GraduationCap for “class list”)
+  { label: "Message", href: "/admin/messages", icon: MessageSquare },     // ✅ direct/inbox
+  { label: "Communications", href: "/admin/communications", icon: Megaphone }, // ✅ broadcast/announcements
+  { label: "Billing", href: "/admin/billing", icon: CreditCard },         // ✅
+  { label: "Settings", href: "/admin/settings", icon: Settings },         // ✅
 ];
 
 type AppNavbarProps = {

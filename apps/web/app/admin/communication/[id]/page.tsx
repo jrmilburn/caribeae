@@ -20,11 +20,14 @@ export default async function CommunicationDetailPage({
 }: {
   params: { id: string };
 }) {
-  const communication = await getCommunication(params.id);
+
+  const { id } = await params;
+
+  const communication = await getCommunication(id);
   if (!communication) return notFound();
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4 p-4 h-screen overflow-y-auto">
       <div className="text-sm text-muted-foreground">
         <Link href="/admin/communications" className="hover:underline">
           ← Back to communications
