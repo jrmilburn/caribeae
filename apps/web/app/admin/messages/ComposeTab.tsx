@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RichEmailEditor } from "@/components/ui/rich-email-editor";
+import { EmailBuilder, type EmailBuilderHandle } from "@/components/ui/email-builder";
 import { cn } from "@/lib/utils";
 
 import {
@@ -28,23 +28,24 @@ type ComposeTabProps = {
 type Channel = "SMS" | "EMAIL";
 
 export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeTabProps) {
+  const showTabs = !mode;
+  const defaultValue = mode ?? "direct";
+
   // ----- Direct -----
   const [familyId, setFamilyId] = React.useState("");
   const [channel, setChannel] = React.useState<Channel>("SMS");
   const [subject, setSubject] = React.useState("");
   const [directSmsMessage, setDirectSmsMessage] = React.useState("");
-  const [directEmailMessage, setDirectEmailMessage] = React.useState("");
-  const [directImageMaxWidth, setDirectImageMaxWidth] = React.useState(1200);
-  const [directImageMaxHeight, setDirectImageMaxHeight] = React.useState(1200);
+  const [directEmailReady, setDirectEmailReady] = React.useState(false);
+  const directEmailEditorRef = React.useRef<EmailBuilderHandle>(null);
   const [directStatus, setDirectStatus] = React.useState<string | null>(null);
   const [directBusy, startDirect] = React.useTransition();
 
   // ----- Broadcast -----
   const [broadcastChannel, setBroadcastChannel] = React.useState<Channel>("SMS");
   const [broadcastSmsMessage, setBroadcastSmsMessage] = React.useState("");
-  const [broadcastEmailMessage, setBroadcastEmailMessage] = React.useState("");
-  const [broadcastImageMaxWidth, setBroadcastImageMaxWidth] = React.useState(1200);
-  const [broadcastImageMaxHeight, setBroadcastImageMaxHeight] = React.useState(1200);
+  const [broadcastEmailReady, setBroadcastEmailReady] = React.useState(false);
+  const broadcastEmailEditorRef = React.useRef<EmailBuilderHandle>(null);
   const [broadcastSubject, setBroadcastSubject] = React.useState("");
   const [selectedLevels, setSelectedLevels] = React.useState<Set<string>>(new Set());
   const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = React.useState<Set<InvoiceStatus>>(new Set());
@@ -57,6 +58,7 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
   const [broadcastStatus, setBroadcastStatus] = React.useState<string | null>(null);
   const [broadcastBusy, startBroadcast] = React.useTransition();
+  const [activeTab, setActiveTab] = React.useState(defaultValue);
 
   const htmlHasContent = (html: string) => {
     const text = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
@@ -87,27 +89,54 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     });
   };
 
+  React.useEffect(() => {
+    if (channel !== "EMAIL") {
+      setDirectEmailReady(false);
+    }
+  }, [channel]);
+
+  React.useEffect(() => {
+    if (broadcastChannel !== "EMAIL") {
+      setBroadcastEmailReady(false);
+    }
+  }, [broadcastChannel]);
+
+  React.useEffect(() => {
+    if (activeTab !== "direct") setDirectEmailReady(false);
+    if (activeTab !== "broadcast") setBroadcastEmailReady(false);
+  }, [activeTab]);
+
+  const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle>) => {
+    const instance = editor.current;
+    if (!instance) throw new Error("Email editor not ready");
+    const html = await instance.exportHtml();
+    if (!html.trim()) throw new Error("Message cannot be empty");
+    return html;
+  };
+
   const handleDirectSend = () => {
     startDirect(async () => {
       setDirectStatus(null);
-      const body = channel === "SMS" ? directSmsMessage : directEmailMessage;
-      if (channel === "EMAIL" && !htmlHasContent(body)) {
-        setDirectStatus("Message cannot be empty");
-        return;
-      }
+      const body =
+        channel === "SMS" ? directSmsMessage : await exportEmailHtml(directEmailEditorRef).catch((error) => {
+          setDirectStatus(error instanceof Error ? error.message : "Message cannot be empty");
+          return null;
+        });
+
+      if (!body) return;
 
       const res = await sendDirectMessageAction({
         familyId,
         channel,
-        body: channel === "SMS" ? body : body.trim(),
+        body,
         subject: subject || undefined,
       });
 
       if (res.ok) {
         setDirectStatus("Message sent");
         setDirectSmsMessage("");
-        setDirectEmailMessage("");
         setSubject("");
+        if (channel === "EMAIL") directEmailEditorRef.current?.clear();
       } else {
         setDirectStatus(res.error ?? "Failed to send");
       }
@@ -133,15 +162,19 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     startBroadcast(async () => {
       setBroadcastStatus(null);
 
-      const body = broadcastChannel === "SMS" ? broadcastSmsMessage : broadcastEmailMessage;
-      if (broadcastChannel === "EMAIL" && !htmlHasContent(body)) {
-        setBroadcastStatus("Message cannot be empty");
-        return;
-      }
+      const body =
+        broadcastChannel === "SMS"
+          ? broadcastSmsMessage
+          : await exportEmailHtml(broadcastEmailEditorRef).catch((error) => {
+              setBroadcastStatus(error instanceof Error ? error.message : "Message cannot be empty");
+              return null;
+            });
+
+      if (!body) return;
 
       const res = await sendBroadcastAction({
         channel: broadcastChannel,
-        body: broadcastChannel === "SMS" ? body : body.trim(),
+        body,
         subject: broadcastSubject || undefined,
         filters: {
           levelIds: Array.from(selectedLevels),
@@ -153,8 +186,8 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
       if ("ok" in res && res.ok) {
         setBroadcastStatus("Broadcast sent");
         setBroadcastSmsMessage("");
-        setBroadcastEmailMessage("");
         setBroadcastSubject("");
+        if (broadcastChannel === "EMAIL") broadcastEmailEditorRef.current?.clear();
         setPreview(null);
       } else {
         setBroadcastStatus((res).error ?? "Failed to send");
@@ -162,11 +195,12 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     });
   };
 
-  const showTabs = !mode;
-  const defaultValue = mode ?? "direct";
-
   return (
-    <Tabs defaultValue={defaultValue} className="w-full">
+    <Tabs
+      defaultValue={defaultValue}
+      className="w-full"
+      onValueChange={(value) => setActiveTab(value as "direct" | "broadcast")}
+    >
       {showTabs ? (
         <TabsList className="w-fit">
           <TabsTrigger value="direct">Direct</TabsTrigger>
@@ -225,28 +259,21 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
           <div className="mt-4 space-y-2">
             <Label className="text-xs">Message</Label>
-            {channel === "EMAIL" ? (
-              <RichEmailEditor
-                value={directEmailMessage}
-                onChange={setDirectEmailMessage}
-                placeholder="Write a formatted email…"
-                maxImageWidth={directImageMaxWidth}
-                maxImageHeight={directImageMaxHeight}
-                onMaxImageWidthChange={setDirectImageMaxWidth}
-                onMaxImageHeightChange={setDirectImageMaxHeight}
-              />
-            ) : (
+            {channel === "EMAIL" && activeTab === "direct" ? (
+              <EmailBuilder ref={directEmailEditorRef} onReady={() => setDirectEmailReady(true)} />
+            ) : null}
+            {channel === "SMS" ? (
               <Textarea value={directSmsMessage} onChange={(e) => setDirectSmsMessage(e.target.value)} rows={5} />
-            )}
+            ) : null}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{channel === "SMS" ? `${directSmsMessage.length} characters` : "Rich formatting enabled for email."}</span>
+              <span>{channel === "SMS" ? `${directSmsMessage.length} characters` : "Use the builder to craft your email."}</span>
               <Button
                 type="button"
                 onClick={handleDirectSend}
                 disabled={
                   !familyId ||
                   directBusy ||
-                  (channel === "SMS" ? !directSmsMessage.trim() : !htmlHasContent(directEmailMessage))
+                  (channel === "SMS" ? !directSmsMessage.trim() : !directEmailReady)
                 }
               >
                 {directBusy ? "Sending…" : "Send"}
@@ -344,25 +371,18 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
           <div className="mt-4 space-y-2">
             <Label className="text-xs">Message</Label>
-            {broadcastChannel === "EMAIL" ? (
-              <RichEmailEditor
-                value={broadcastEmailMessage}
-                onChange={setBroadcastEmailMessage}
-                placeholder="Write a formatted email…"
-                maxImageWidth={broadcastImageMaxWidth}
-                maxImageHeight={broadcastImageMaxHeight}
-                onMaxImageWidthChange={setBroadcastImageMaxWidth}
-                onMaxImageHeightChange={setBroadcastImageMaxHeight}
-              />
-            ) : (
+            {broadcastChannel === "EMAIL" && activeTab === "broadcast" ? (
+              <EmailBuilder ref={broadcastEmailEditorRef} onReady={() => setBroadcastEmailReady(true)} />
+            ) : null}
+            {broadcastChannel === "SMS" ? (
               <Textarea value={broadcastSmsMessage} onChange={(e) => setBroadcastSmsMessage(e.target.value)} rows={5} />
-            )}
+            ) : null}
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>
                 {broadcastChannel === "SMS"
                   ? `${broadcastSmsMessage.length} characters`
-                  : "Rich formatting enabled for email."}
+                  : "Use the builder to craft your email."}
               </span>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={previewBroadcast} disabled={broadcastBusy}>
@@ -375,7 +395,7 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
                     broadcastBusy ||
                     (broadcastChannel === "SMS"
                       ? !broadcastSmsMessage.trim()
-                      : !htmlHasContent(broadcastEmailMessage))
+                      : !broadcastEmailReady)
                   }
                 >
                   {broadcastBusy ? "Sending…" : "Send broadcast"}

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Bold, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, RemoveFormatting, Underline } from "lucide-react";
+import { Bold, Image as ImageIcon, Italic, Link as LinkIcon, RemoveFormatting, Underline } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +92,11 @@ export function RichEmailEditor({
     try {
       const dataUrl = await resizeImage(file);
       exec("insertImage", dataUrl);
+      // Try to select the newly inserted image
+      setTimeout(() => {
+        const image = editorRef.current?.querySelector("img:last-of-type") ?? null;
+        selectImage(image);
+      }, 0);
     } catch (error) {
       console.error("Image upload failed", error);
     } finally {
@@ -104,23 +109,35 @@ export function RichEmailEditor({
     onChange(html);
   };
 
+  const selectImage = (image: HTMLImageElement | null) => {
+    setSelectedImage((prev) => {
+      if (prev && prev !== image) {
+        prev.classList.remove("rich-email-selected");
+      }
+      if (image) {
+        image.classList.add("rich-email-selected");
+      }
+      return image;
+    });
+  };
+
   React.useEffect(() => {
     const handleSelectionChange = () => {
       const selection = document.getSelection();
       if (!selection || selection.rangeCount === 0) {
-        setSelectedImage(null);
+        selectImage(null);
         return;
       }
 
       const node = selection.anchorNode;
       if (!node) {
-        setSelectedImage(null);
+        selectImage(null);
         return;
       }
 
       const element = node instanceof HTMLElement ? node : node.parentElement;
       const image = element?.closest("img");
-      setSelectedImage(image ?? null);
+      selectImage(image ?? null);
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -131,6 +148,20 @@ export function RichEmailEditor({
     if (!selectedImage) return;
     const next = Math.max(50, Math.min(2400, value));
     selectedImage.style[dimension] = `${next}px`;
+    handleInput();
+  };
+
+  const fitSelectedImageToContainer = () => {
+    if (!selectedImage) return;
+    selectedImage.style.width = "100%";
+    selectedImage.style.height = "auto";
+    handleInput();
+  };
+
+  const resetSelectedImageSize = () => {
+    if (!selectedImage) return;
+    selectedImage.style.width = "";
+    selectedImage.style.height = "";
     handleInput();
   };
 
@@ -167,26 +198,6 @@ export function RichEmailEditor({
             aria-label="Underline"
           >
             <Underline className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => exec("insertUnorderedList")}
-            aria-label="Bulleted list"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => exec("insertOrderedList")}
-            aria-label="Numbered list"
-          >
-            <ListOrdered className="h-4 w-4" />
           </Button>
           <Button
             type="button"
@@ -301,6 +312,14 @@ export function RichEmailEditor({
             />
             <span>px</span>
           </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={fitSelectedImageToContainer}>
+              Fit width
+            </Button>
+            <Button variant="ghost" size="sm" onClick={resetSelectedImageSize}>
+              Reset
+            </Button>
+          </div>
           <span className="text-muted-foreground">Click an image to adjust its dimensions.</span>
         </div>
       ) : null}
@@ -311,6 +330,13 @@ export function RichEmailEditor({
         contentEditable
         onInput={handleInput}
         onBlur={handleInput}
+        onClick={(e) => {
+          if (e.target instanceof HTMLImageElement) {
+            selectImage(e.target);
+          } else {
+            selectImage(null);
+          }
+        }}
         data-placeholder={placeholder}
       />
       <style jsx>{`
@@ -320,25 +346,15 @@ export function RichEmailEditor({
           pointer-events: none;
         }
 
-        [contenteditable] ul {
-          list-style: disc;
-          margin-left: 1.25rem;
-          padding-left: 0.25rem;
-        }
-
-        [contenteditable] ol {
-          list-style: decimal;
-          margin-left: 1.25rem;
-          padding-left: 0.25rem;
-        }
-
-        [contenteditable] li {
-          margin-bottom: 0.25rem;
-        }
-
         [contenteditable] img {
           max-width: 100%;
           height: auto;
+        }
+
+        [contenteditable] img.rich-email-selected {
+          outline: 2px solid hsl(var(--primary));
+          outline-offset: 2px;
+          border-radius: 4px;
         }
       `}</style>
     </div>
