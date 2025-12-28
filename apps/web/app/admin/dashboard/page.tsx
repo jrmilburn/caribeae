@@ -2,16 +2,48 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDashboardSummary } from "@/server/dashboard/getDashboardSummary";
 import { listCommunications } from "@/server/communication/listCommunications";
+import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
-function StatCard({ title, value }: { title: string; value: number }) {
+function StatCard({
+  title,
+  value,
+  href,
+}: {
+  title: string;
+  value: number;
+  href: string;
+}) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-semibold">{value}</div>
-      </CardContent>
+    <Card className="group p-0">
+      <Link
+        href={href}
+        className={cn(
+          "block outline-none transition h-full p-4",
+          // clickable affordance
+          "cursor-pointer",
+          "hover:bg-muted/40 hover:shadow-md hover:-translate-y-[1px]",
+          "active:translate-y-0 active:shadow-sm",
+          // accessibility
+          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        )}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
+
+            {/* subtle indicator */}
+            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition group-hover:opacity-100 group-hover:translate-x-0.5" />
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="text-3xl font-semibold">{value}</div>
+          <div className="mt-1 text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100">
+            View details
+          </div>
+        </CardContent>
+      </Link>
     </Card>
   );
 }
@@ -37,13 +69,13 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-        <StatCard title="Families" value={summary.families} />
-        <StatCard title="Students" value={summary.students} />
-        <StatCard title="Active enrolments" value={summary.activeEnrolments} />
-        <StatCard title="Outstanding invoices" value={summary.outstandingInvoices} />
-        <StatCard title="Overdue invoices" value={summary.overdueInvoices} />
-        <StatCard title="SMS (last 7 days)" value={summary.smsLast7Days} />
-        <StatCard title="Emails (last 7 days)" value={summary.emailLast7Days} />
+        <StatCard title="Families" value={summary.families} href="/admin/family" />
+        <StatCard title="Students" value={summary.students} href="/admin/student" />
+        <StatCard title="Active enrolments" value={summary.activeEnrolments} href="/admin/enrolment" />
+        <StatCard title="Outstanding invoices" value={summary.outstandingInvoices} href="/admin/billing" />
+        <StatCard title="Overdue invoices" value={summary.overdueInvoices} href="/admin/billing" />
+        <StatCard title="SMS (last 7 days)" value={summary.smsLast7Days} href="/admin/communications" />
+        <StatCard title="Emails (last 7 days)" value={summary.emailLast7Days} href="/admin/communications" />
       </div>
 
       <Card className="flex-1 overflow-hidden">
