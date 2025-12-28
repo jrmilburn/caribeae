@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmailBuilder, type EmailBuilderHandle } from "@/components/ui/email-builder";
 import { cn } from "@/lib/utils";
 
 import {
@@ -27,17 +28,24 @@ type ComposeTabProps = {
 type Channel = "SMS" | "EMAIL";
 
 export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeTabProps) {
+  const showTabs = !mode;
+  const defaultValue = mode ?? "direct";
+
   // ----- Direct -----
   const [familyId, setFamilyId] = React.useState("");
   const [channel, setChannel] = React.useState<Channel>("SMS");
   const [subject, setSubject] = React.useState("");
-  const [message, setMessage] = React.useState("");
+  const [directSmsMessage, setDirectSmsMessage] = React.useState("");
+  const [directEmailReady, setDirectEmailReady] = React.useState(false);
+  const directEmailEditorRef = React.useRef<EmailBuilderHandle>(null);
   const [directStatus, setDirectStatus] = React.useState<string | null>(null);
   const [directBusy, startDirect] = React.useTransition();
 
   // ----- Broadcast -----
   const [broadcastChannel, setBroadcastChannel] = React.useState<Channel>("SMS");
-  const [broadcastMessage, setBroadcastMessage] = React.useState("");
+  const [broadcastSmsMessage, setBroadcastSmsMessage] = React.useState("");
+  const [broadcastEmailReady, setBroadcastEmailReady] = React.useState(false);
+  const broadcastEmailEditorRef = React.useRef<EmailBuilderHandle>(null);
   const [broadcastSubject, setBroadcastSubject] = React.useState("");
   const [selectedLevels, setSelectedLevels] = React.useState<Set<string>>(new Set());
   const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = React.useState<Set<InvoiceStatus>>(new Set());
@@ -50,11 +58,16 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
   const [broadcastStatus, setBroadcastStatus] = React.useState<string | null>(null);
   const [broadcastBusy, startBroadcast] = React.useTransition();
+  const [activeTab, setActiveTab] = React.useState(defaultValue);
 
   const toggleLevel = (id: string) => {
     setSelectedLevels((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -62,25 +75,63 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
   const toggleInvoiceStatus = (status: InvoiceStatus) => {
     setSelectedInvoiceStatuses((prev) => {
       const next = new Set(prev);
-      next.has(status) ? next.delete(status) : next.add(status);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
       return next;
     });
+  };
+
+  React.useEffect(() => {
+    if (channel !== "EMAIL") {
+      setDirectEmailReady(false);
+    }
+  }, [channel]);
+
+  React.useEffect(() => {
+    if (broadcastChannel !== "EMAIL") {
+      setBroadcastEmailReady(false);
+    }
+  }, [broadcastChannel]);
+
+  React.useEffect(() => {
+    if (activeTab !== "direct") setDirectEmailReady(false);
+    if (activeTab !== "broadcast") setBroadcastEmailReady(false);
+  }, [activeTab]);
+
+  const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle>) => {
+    const instance = editor.current;
+    if (!instance) throw new Error("Email editor not ready");
+    const html = await instance.exportHtml();
+    if (!html.trim()) throw new Error("Message cannot be empty");
+    return html;
   };
 
   const handleDirectSend = () => {
     startDirect(async () => {
       setDirectStatus(null);
+      const body =
+        channel === "SMS" ? directSmsMessage : await exportEmailHtml(directEmailEditorRef).catch((error) => {
+          setDirectStatus(error instanceof Error ? error.message : "Message cannot be empty");
+          return null;
+        });
+
+      if (!body) return;
+
       const res = await sendDirectMessageAction({
         familyId,
         channel,
-        body: message,
+        body,
         subject: subject || undefined,
       });
 
       if (res.ok) {
         setDirectStatus("Message sent");
-        setMessage("");
+        setDirectSmsMessage("");
         setSubject("");
+        if (channel === "EMAIL") directEmailEditorRef.current?.clear();
       } else {
         setDirectStatus(res.error ?? "Failed to send");
       }
@@ -106,9 +157,19 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     startBroadcast(async () => {
       setBroadcastStatus(null);
 
+      const body =
+        broadcastChannel === "SMS"
+          ? broadcastSmsMessage
+          : await exportEmailHtml(broadcastEmailEditorRef).catch((error) => {
+              setBroadcastStatus(error instanceof Error ? error.message : "Message cannot be empty");
+              return null;
+            });
+
+      if (!body) return;
+
       const res = await sendBroadcastAction({
         channel: broadcastChannel,
-        body: broadcastMessage,
+        body,
         subject: broadcastSubject || undefined,
         filters: {
           levelIds: Array.from(selectedLevels),
@@ -119,8 +180,9 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
       if ("ok" in res && res.ok) {
         setBroadcastStatus("Broadcast sent");
-        setBroadcastMessage("");
+        setBroadcastSmsMessage("");
         setBroadcastSubject("");
+        if (broadcastChannel === "EMAIL") broadcastEmailEditorRef.current?.clear();
         setPreview(null);
       } else {
         setBroadcastStatus((res).error ?? "Failed to send");
@@ -128,11 +190,12 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     });
   };
 
-  const showTabs = !mode;
-  const defaultValue = mode ?? "direct";
-
   return (
-    <Tabs defaultValue={defaultValue} className="w-full">
+    <Tabs
+      defaultValue={defaultValue}
+      className="w-full"
+      onValueChange={(value) => setActiveTab(value as "direct" | "broadcast")}
+    >
       {showTabs ? (
         <TabsList className="w-fit">
           <TabsTrigger value="direct">Direct</TabsTrigger>
@@ -191,10 +254,23 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
           <div className="mt-4 space-y-2">
             <Label className="text-xs">Message</Label>
-            <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} />
+            {channel === "EMAIL" && activeTab === "direct" ? (
+              <EmailBuilder ref={directEmailEditorRef} onReady={() => setDirectEmailReady(true)} />
+            ) : null}
+            {channel === "SMS" ? (
+              <Textarea value={directSmsMessage} onChange={(e) => setDirectSmsMessage(e.target.value)} rows={5} />
+            ) : null}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{message.length} characters</span>
-              <Button type="button" onClick={handleDirectSend} disabled={!familyId || !message.trim() || directBusy}>
+              <span>{channel === "SMS" ? `${directSmsMessage.length} characters` : "Use the builder to craft your email."}</span>
+              <Button
+                type="button"
+                onClick={handleDirectSend}
+                disabled={
+                  !familyId ||
+                  directBusy ||
+                  (channel === "SMS" ? !directSmsMessage.trim() : !directEmailReady)
+                }
+              >
                 {directBusy ? "Sending…" : "Send"}
               </Button>
             </div>
@@ -290,15 +366,33 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
 
           <div className="mt-4 space-y-2">
             <Label className="text-xs">Message</Label>
-            <Textarea value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} rows={5} />
+            {broadcastChannel === "EMAIL" && activeTab === "broadcast" ? (
+              <EmailBuilder ref={broadcastEmailEditorRef} onReady={() => setBroadcastEmailReady(true)} />
+            ) : null}
+            {broadcastChannel === "SMS" ? (
+              <Textarea value={broadcastSmsMessage} onChange={(e) => setBroadcastSmsMessage(e.target.value)} rows={5} />
+            ) : null}
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{broadcastMessage.length} characters</span>
+              <span>
+                {broadcastChannel === "SMS"
+                  ? `${broadcastSmsMessage.length} characters`
+                  : "Use the builder to craft your email."}
+              </span>
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={previewBroadcast} disabled={broadcastBusy}>
                   {broadcastBusy ? "Loading…" : "Preview"}
                 </Button>
-                <Button type="button" onClick={sendBroadcast} disabled={!broadcastMessage.trim() || broadcastBusy}>
+                <Button
+                  type="button"
+                  onClick={sendBroadcast}
+                  disabled={
+                    broadcastBusy ||
+                    (broadcastChannel === "SMS"
+                      ? !broadcastSmsMessage.trim()
+                      : !broadcastEmailReady)
+                  }
+                >
                   {broadcastBusy ? "Sending…" : "Send broadcast"}
                 </Button>
               </div>
