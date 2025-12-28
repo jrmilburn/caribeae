@@ -23,11 +23,12 @@ type ComposeTabProps = {
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
   mode?: "direct" | "broadcast"; // NEW
+  onChannelChange?: (channel: Channel) => void;
 };
 
-type Channel = "SMS" | "EMAIL";
+export type Channel = "SMS" | "EMAIL";
 
-export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeTabProps) {
+export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelChange }: ComposeTabProps) {
   const showTabs = !mode;
   const defaultValue = mode ?? "direct";
 
@@ -100,6 +101,12 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode }: ComposeT
     if (activeTab !== "direct") setDirectEmailReady(false);
     if (activeTab !== "broadcast") setBroadcastEmailReady(false);
   }, [activeTab]);
+
+  React.useEffect(() => {
+    if (mode === "direct" && onChannelChange) {
+      onChannelChange(channel);
+    }
+  }, [channel, mode, onChannelChange]);
 
   const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle>) => {
     const instance = editor.current;

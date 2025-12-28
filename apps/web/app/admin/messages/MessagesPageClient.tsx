@@ -13,9 +13,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 import { InboxTab } from "./InboxTab";
-import { ComposeTab } from "./ComposeTab";
+import { ComposeTab, type Channel } from "./ComposeTab";
 
 type Props = {
   conversations: InboxConversation[];
@@ -33,13 +34,21 @@ function ComposeSheet({
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
 }) {
+  const [channel, setChannel] = React.useState<Channel>("SMS");
+  const isEmail = channel === "EMAIL";
+
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button>New message</Button>
       </SheetTrigger>
 
-      <SheetContent className="w-full sm:max-w-6xl">
+      <SheetContent
+        className={cn(
+          "w-full transition-all duration-300 sm:w-[90vw]",
+          isEmail ? "sm:max-w-[90vw]" : "sm:max-w-3xl",
+        )}
+      >
         <div className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>New message</SheetTitle>
@@ -52,6 +61,7 @@ function ComposeSheet({
               levels={levels}
               invoiceStatuses={invoiceStatuses}
               mode="direct"
+              onChannelChange={setChannel}
             />
           </div>
         </div>
