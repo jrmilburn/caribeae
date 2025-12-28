@@ -65,7 +65,7 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
       try {
         const data = await loadConversation(activeId);
         setMessages(data);
-      } catch (e) {
+      } catch {
         // Silent fail; you can add toast if you want
         setMessages([]);
       }
@@ -86,9 +86,12 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
         id: optimisticId,
         body,
         direction: "OUTBOUND",
-        status: "QUEUED" as any,
-        createdAt: new Date(),
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
         errorMessage: null,
+        channel: "SMS",
+        from: null,
+        to: activeConversation?.phoneNumber ?? null,
       };
 
       setMessages((prev) => [...prev, optimistic]);
