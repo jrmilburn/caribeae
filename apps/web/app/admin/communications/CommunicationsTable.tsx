@@ -37,7 +37,7 @@ export function CommunicationsTable({ communications }: { communications: Commun
         <TableHeader>
           <TableRow>
             <TableHead className="w-40">Type</TableHead>
-            <TableHead>Subject / Body</TableHead>
+            <TableHead>Subject</TableHead>
             <TableHead className="w-40">Recipient</TableHead>
             <TableHead className="w-28">Status</TableHead>
             <TableHead className="w-44">Sent</TableHead>
@@ -62,13 +62,8 @@ export function CommunicationsTable({ communications }: { communications: Commun
                   href={`/admin/communication/${comm.id}`}
                   className="line-clamp-2 font-medium hover:underline"
                 >
-                  {comm.subject || comm.body || "Message"}
+                  {comm?.subject}
                 </Link>
-                {comm.subject ? (
-                  <div className="line-clamp-2 text-xs text-muted-foreground">
-                    {comm.body}
-                  </div>
-                ) : null}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
                 {comm.to ?? "—"}
