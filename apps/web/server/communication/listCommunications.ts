@@ -17,13 +17,13 @@ export type CommunicationSummary = {
   family?: { id: string; name: string | null } | null;
 };
 
-export async function listCommunications(): Promise<CommunicationSummary[]> {
+export async function listCommunications(limit = 200): Promise<CommunicationSummary[]> {
   await getOrCreateUser();
   await requireAdmin();
 
   const messages = await prisma.message.findMany({
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: limit,
     select: {
       id: true,
       createdAt: true,
