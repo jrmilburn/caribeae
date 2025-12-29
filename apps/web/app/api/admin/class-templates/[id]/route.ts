@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 import { differenceInMinutes } from "date-fns";
 
+export const dynamic = "force-dynamic";
+
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   await requireAdmin();
 
