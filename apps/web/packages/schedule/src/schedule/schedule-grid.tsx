@@ -92,7 +92,6 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           dayName={selectedDayName as DayOfWeek}
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
           classes={normalized.filter((c) => isSameDay(c.startTime, weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? new Date()))}
-          onBack={() => setViewMode("week")}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
           onMoveClass={onMoveClass}

@@ -175,32 +175,49 @@ export function TemplateModal({
   React.useEffect(() => {
     if (!open) return;
 
-    if (template) {
-      const start = typeof template.startTime === "number" ? template.startTime : null;
-      const end = typeof template.endTime === "number" ? template.endTime : null;
+if (template) {
+  const start = typeof template.startTime === "number" ? template.startTime : null;
+  const end = typeof template.endTime === "number" ? template.endTime : null;
 
-      const inferred = inferDurationMin(start, end, 45);
+  const inferred = inferDurationMin(start, end, 45);
 
-      setForm({
-        name: template.name ?? "",
-        levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
-        teacherId: template.teacherId ?? (teachers?.[0]?.id ?? ""),
-        startDate: dateToInput(new Date(template.startDate)),
-        endDate: template.endDate ? dateToInput(new Date(template.endDate)) : "",
-        dayOfWeek:
-          template.dayOfWeek === null || template.dayOfWeek === undefined
-            ? ""
-            : String(template.dayOfWeek),
-        startTime: typeof start === "number" ? minutesToTimeInput(start) : "",
-        endTime: "",
-        capacity:
-          template.capacity === null || template.capacity === undefined
-            ? ""
-            : String(template.capacity),
-        active: template.active ?? true,
-      });
+  // ✅ OVERRIDES (from optimistic click)
+  const prefillStart =
+    typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
 
-      setDurationMin(inferred);
+  const prefillDay =
+    prefill?.date ? toTemplateDayOfWeek(prefill.date) : null;
+
+  setForm({
+    name: template.name ?? "",
+    levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
+    teacherId: template.teacherId ?? (teachers?.[0]?.id ?? ""),
+    startDate: dateToInput(new Date(template.startDate)),
+    endDate: template.endDate ? dateToInput(new Date(template.endDate)) : "",
+
+    // ✅ use prefill if provided, else template
+    dayOfWeek:
+      prefillDay ??
+      (template.dayOfWeek === null || template.dayOfWeek === undefined
+        ? ""
+        : String(template.dayOfWeek)),
+
+    startTime:
+      prefillStart !== null
+        ? minutesToTimeInput(prefillStart)
+        : typeof start === "number"
+        ? minutesToTimeInput(start)
+        : "",
+
+    endTime: "",
+    capacity:
+      template.capacity === null || template.capacity === undefined
+        ? ""
+        : String(template.capacity),
+    active: template.active ?? true,
+  });
+
+  setDurationMin(inferred);
 
       const lvl = levels.find((l) => l.id === (template.levelId ?? "")) ?? null;
       const defaultLen = lvl ? clampToAllowedDuration(lvl.defaultLengthMin) : (45 as DurationOption);

@@ -1,11 +1,9 @@
 "use client";
 
+import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-
 import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
-
-import * as React from "react"
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -18,7 +16,6 @@ type DayViewProps = {
   dayName: DayOfWeek;
   dayDate: Date;
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
-  onBack: () => void;
   onSlotClick?: (date: Date) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
@@ -32,12 +29,12 @@ export default function DayView(props: DayViewProps) {
     start: Date;
     duration: number;
   } | null>(null);
+
   const {
     TIME_SLOTS,
     dayName,
     dayDate,
     classes,
-    onBack,
     onSlotClick,
     onClassClick,
     onMoveClass,
@@ -47,6 +44,7 @@ export default function DayView(props: DayViewProps) {
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
+
   const draggingClass = React.useMemo(
     () =>
       draggingId
@@ -55,14 +53,14 @@ export default function DayView(props: DayViewProps) {
     [classes, draggingId]
   );
 
-  const clearDragImage = () => {
+  const clearDragImage = React.useCallback(() => {
     if (dragImageRef.current) {
       document.body.removeChild(dragImageRef.current);
       dragImageRef.current = null;
     }
-  };
+  }, []);
 
-  const createDragImage = (e: React.DragEvent<HTMLElement>) => {
+  const createDragImage = React.useCallback((e: React.DragEvent<HTMLElement>) => {
     const el = e.currentTarget;
     const clone = el.cloneNode(true) as HTMLElement;
     const rect = el.getBoundingClientRect();
@@ -79,7 +77,7 @@ export default function DayView(props: DayViewProps) {
     const offsetY = e.clientY - rect.top;
     e.dataTransfer?.setDragImage(clone, offsetX, offsetY);
     dragImageRef.current = clone;
-  };
+  }, []);
 
   const totalGridHeight = TIME_SLOTS.length * SLOT_HEIGHT_PX;
   const minuteHeight = SLOT_HEIGHT_PX / 5;
@@ -88,22 +86,26 @@ export default function DayView(props: DayViewProps) {
     if (!draggingId) setDropTarget(null);
   }, [draggingId]);
 
+  const isDraggable = Boolean(onMoveClass);
+
+  const nextStartForSlot = React.useCallback(
+    (slotTime12: string) => combineDateAndTime(dayDate, slotTime12),
+    [dayDate]
+  );
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-auto">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="text-sm font-medium text-muted-foreground">
           {dayName} • {format(dayDate, "MMM d, yyyy")}
         </div>
-        <button
-          type="button"
-          className="text-sm text-primary underline-offset-2 hover:underline"
-          onClick={onBack}
-        >
-          Back to week
-        </button>
+
       </div>
 
-      <div className="grid relative border-r border-b" style={{ gridTemplateColumns: "minmax(32px,1fr) minmax(64px,4fr)" }}>
+      <div
+        className="grid relative border-r border-b"
+        style={{ gridTemplateColumns: "minmax(32px,1fr) minmax(64px,4fr)" }}
+      >
         {/* Gutter */}
         <div className="border-r border-border">
           {TIME_SLOTS.map((slot) => (
@@ -125,37 +127,42 @@ export default function DayView(props: DayViewProps) {
         </div>
 
         <div className="relative" style={{ height: `${totalGridHeight}px` }}>
+          {/* Slots */}
           {TIME_SLOTS.map((slot) => (
             <div
               key={`${dayName}-${slot.time12}`}
-              className={cn("border-b border-border relative transition-colors")}
+              className={cn("border-b border-border relative transition-colors", "hover:bg-accent/40")}
               style={{ height: `${SLOT_HEIGHT_PX}px` }}
               onClick={() => {
                 if (!onSlotClick) return;
-                onSlotClick(combineDateAndTime(dayDate, slot.time12));
+                onSlotClick(nextStartForSlot(slot.time12));
               }}
               onDragOver={(e) => {
-                if (!draggingClass) return;
+                if (!isDraggable || !draggingClass) return;
                 e.preventDefault();
+
                 setDropTarget({
-                  start: combineDateAndTime(dayDate, slot.time12),
+                  start: nextStartForSlot(slot.time12),
                   duration: draggingClass.durationMin,
                 });
               }}
-              onDrop={(e) => {
-                if (!onMoveClass) return;
+              onDrop={async (e) => {
+                if (!isDraggable || !onMoveClass) return;
                 e.preventDefault();
+
                 const templateId = e.dataTransfer.getData("text/plain");
                 if (!templateId) return;
-                onMoveClass(templateId, combineDateAndTime(dayDate, slot.time12));
+
+                await onMoveClass(templateId, nextStartForSlot(slot.time12));
                 setDropTarget(null);
               }}
             />
           ))}
 
+          {/* Drop preview (must not intercept pointer events) */}
           {dropTarget && draggingClass ? (
             <div
-              className="absolute left-[3px] right-[3px] z-10 rounded border border-dashed border-primary/60 bg-primary/10"
+              className="pointer-events-none absolute left-[3px] right-[3px] z-50 rounded border border-dashed border-primary/60 bg-primary/10"
               style={{
                 top: `${Math.max(
                   0,
@@ -167,60 +174,42 @@ export default function DayView(props: DayViewProps) {
             />
           ) : null}
 
+          {/* Class blocks */}
           {classes.map((c) => {
-          const colors = getTeacherColor(c.teacher?.id);
-          const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
-          const top = (startMinutes - GRID_START_MIN) * minuteHeight;
-          const widthPct = 100 / c.columns;
-          const isDraggable = Boolean(onMoveClass);
+            const colors = getTeacherColor(c.teacher?.id);
+            const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
+            const top = (startMinutes - GRID_START_MIN) * minuteHeight;
+            const widthPct = 100 / c.columns;
 
-          return (
-            <div
-              key={c.id}
-              draggable={isDraggable}
-              onDragStart={
-                isDraggable
-                  ? (e) => {
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
-                      createDragImage(e);
-                      setDraggingId(c.templateId ?? c.id);
-                    }
-                  : undefined
-              }
-              onDragEnd={
-                isDraggable
-                  ? () => {
-                      clearDragImage();
-                      setDraggingId(null);
-                    }
-                  : undefined
-              }
-              onDragOver={
-                isDraggable
-                  ? (e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }
-                  : undefined
-              }
-              onDrop={
-                isDraggable
-                  ? (e) => {
-                      if (!onMoveClass) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const templateId = e.dataTransfer.getData("text/plain");
-                      if (!templateId) return;
-                      onMoveClass(templateId, c.startTime);
-                    }
-                  : undefined
-              }
-              onClick={(e) => {
-                e.stopPropagation();
-                onClassClick?.(c);
-              }}
-              className={cn(
+            return (
+              <div
+                key={c.id}
+                draggable={isDraggable}
+                onDragStart={
+                  isDraggable
+                    ? (e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
+                        createDragImage(e);
+                        setDraggingId(c.templateId ?? c.id);
+                      }
+                    : undefined
+                }
+                onDragEnd={
+                  isDraggable
+                    ? () => {
+                        clearDragImage();
+                        setDraggingId(null);
+                      }
+                    : undefined
+                }
+                // IMPORTANT: no onDrop on cards.
+                // If cards accept drops, you'll "drop onto a card" and it can snap back.
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClassClick?.(c);
+                }}
+                className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   draggingId === (c.templateId ?? c.id) && "opacity-0",
                   colors.bg,
@@ -244,9 +233,7 @@ export default function DayView(props: DayViewProps) {
                     </div>
                   </div>
                   {c.teacher && (
-                    <div className={cn("text-[11px] truncate", colors.text)}>
-                      {c.teacher.name}
-                    </div>
+                    <div className={cn("text-[11px] truncate", colors.text)}>{c.teacher.name}</div>
                   )}
                 </div>
               </div>

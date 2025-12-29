@@ -326,9 +326,6 @@ function UserBlock() {
 
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuItem asChild>
-          <Link href="/profile">Profile</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
           <Link href="/admin/settings">Settings</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

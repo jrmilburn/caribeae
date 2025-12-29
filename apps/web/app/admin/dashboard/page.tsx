@@ -5,6 +5,15 @@ import { listCommunications } from "@/server/communication/listCommunications";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 
+function buildHref(base: string, next: Record<string, string | null | undefined>) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(next)) {
+    if (v) sp.set(k, v);
+  }
+  const qs = sp.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 function StatCard({
   title,
   value,
@@ -20,19 +29,15 @@ function StatCard({
         href={href}
         className={cn(
           "block outline-none transition h-full p-4",
-          // clickable affordance
           "cursor-pointer",
           "hover:bg-muted/40 hover:shadow-md hover:-translate-y-[1px]",
           "active:translate-y-0 active:shadow-sm",
-          // accessibility
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         )}
       >
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-
-            {/* subtle indicator */}
             <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition group-hover:opacity-100 group-hover:translate-x-0.5" />
           </div>
         </CardHeader>
@@ -54,6 +59,10 @@ export default async function DashboardPage() {
     listCommunications(5),
   ]);
 
+  const commsBase = "/admin/communications";
+  const smsHref = buildHref(commsBase, { channel: "SMS" });
+  const emailHref = buildHref(commsBase, { channel: "EMAIL" });
+
   const stats = [
     { title: "Families", value: summary.families, href: "/admin/family" },
     { title: "Students", value: summary.students, href: "/admin/student" },
@@ -61,8 +70,8 @@ export default async function DashboardPage() {
     { title: "Active enrolments", value: summary.activeEnrolments, href: "/admin/enrolment" },
     { title: "Active class templates", value: summary.activeClassTemplates, href: "/admin/class" },
     { title: "Outstanding invoices", value: summary.outstandingInvoices, href: "/admin/billing" },
-    { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: "/admin/communications" },
-    { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: "/admin/communications" },
+    { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: smsHref },
+    { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: emailHref },
   ];
 
   return (
@@ -74,7 +83,9 @@ export default async function DashboardPage() {
             At-a-glance metrics and recent communications.
           </p>
         </div>
-        <Link href="/admin/communications" className="text-sm text-primary hover:underline">
+
+        {/* Clear filters */}
+        <Link href={commsBase} className="text-sm text-primary hover:underline">
           View all communications
         </Link>
       </div>

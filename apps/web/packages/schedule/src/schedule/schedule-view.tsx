@@ -15,145 +15,199 @@ import {
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
 
+export type ScheduleViewHandle = {
+  /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
+  softRefresh: () => void;
+};
+
+export type ScheduleFilters = {
+  levelId?: string | null;
+  teacherId?: string | null;
+};
+
 export type ScheduleViewProps = {
-  /** Required adapter for real projects; defaults to a demo adapter for local usage. */
   levels: Level[];
   dataAdapter?: ScheduleDataAdapter;
-  /** Optional endpoint used to build a client-safe adapter without passing functions from server components. */
   dataEndpoint?: string;
-  /** Optional callback when a schedule slot is clicked. */
   onSlotClick?: (date: Date) => void;
-  /** Optional callback when an existing class occurrence is clicked. */
   onClassClick?: (occurrence: NormalizedScheduleClass) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
   allowTemplateMoves?: boolean;
+
+  // ✅ NEW
+  filters?: ScheduleFilters;
+  headerActions?: React.ReactNode;
 };
 
-export function ScheduleView({
-  levels,
-  dataAdapter,
-  dataEndpoint = "/api/admin/class-templates",
-  onSlotClick,
-  onClassClick,
-  defaultViewMode = "week",
-  showHeader = true,
-  allowTemplateMoves = true,
-}: ScheduleViewProps) {
-  const [viewMode, setViewMode] = useState<"week" | "day">(defaultViewMode);
-  const [currentWeek, setCurrentWeek] = useState<Date>(() =>
-    normalizeWeekAnchor(new Date())
-  );
-  const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
-  const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
 
-  const [error, setError] = useState<string | null>(null);
+export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewProps>(
+  function ScheduleView(
+    {
+      levels,
+      dataAdapter,
+      dataEndpoint = "/api/admin/class-templates",
+      onSlotClick,
+      onClassClick,
+      defaultViewMode = "week",
+      showHeader = true,
+      allowTemplateMoves = true,
+      filters,
+      headerActions
+    },
+    ref
+  ) {
+    const [viewMode, setViewMode] = useState<"week" | "day">(defaultViewMode);
+    const [currentWeek, setCurrentWeek] = useState<Date>(() =>
+      normalizeWeekAnchor(new Date())
+    );
+    const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
+    const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
 
-  const adapter = React.useMemo(
-    () => dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint),
-    [dataAdapter, dataEndpoint]
-  );
+    const [error, setError] = useState<string | null>(null);
 
-  const weekStart = useMemo(
-    () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
-    [currentWeek]
-  );
-  const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+    const adapter = React.useMemo(
+      () => dataAdapter ?? createApiScheduleDataAdapter(dataEndpoint),
+      [dataAdapter, dataEndpoint]
+    );
 
-  const weekDates = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  }, [weekStart]);
+    const weekStart = useMemo(
+      () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
+      [currentWeek]
+    );
+    const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
-  const [reloadKey, setReloadKey] = useState(0);
+    const weekDates = useMemo(() => {
+      return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    }, [weekStart]);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    async function loadClasses() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await adapter.fetchClasses({
-          from: weekStart,
-          to: displayWeekEnd,
-        });
-        if (cancelled) return;
-        setClasses(data.map(normalizeScheduleClass));
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Unable to load schedule");
-      } finally {
-        if (!cancelled) setLoading(false);
+    // Initial / week-navigation load (shows loading state)
+    React.useEffect(() => {
+      let cancelled = false;
+      async function loadClasses() {
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await adapter.fetchClasses({
+            from: weekStart,
+            to: displayWeekEnd,
+          });
+          if (cancelled) return;
+          setClasses(data.map(normalizeScheduleClass));
+        } catch (err) {
+          if (cancelled) return;
+          setError(err instanceof Error ? err.message : "Unable to load schedule");
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
       }
-    }
-    void loadClasses();
-    return () => {
-      cancelled = true;
-    };
-  }, [adapter, weekStart, displayWeekEnd, reloadKey]);
+      void loadClasses();
+      return () => {
+        cancelled = true;
+      };
+    }, [adapter, weekStart, displayWeekEnd]);
 
-  const onMoveClass = React.useCallback(
-    async (templateId: string, nextStart: Date) => {
-      const existing = classes.find((c) => c.templateId === templateId);
-      if (!existing) return;
+    // Background refresh (does NOT flip `loading`, so the grid stays mounted)
+    const softRefresh = React.useCallback(() => {
+      void (async () => {
+        try {
+          const data = await adapter.fetchClasses({
+            from: weekStart,
+            to: displayWeekEnd,
+          });
+          setClasses(data.map(normalizeScheduleClass));
+        } catch (err) {
+          // Keep it non-blocking; you can remove this if you don't want the banner.
+          setError(err instanceof Error ? err.message : "Unable to refresh schedule");
+        }
+      })();
+    }, [adapter, weekStart, displayWeekEnd]);
 
-      const duration = existing.durationMin;
-      const nextEnd = addMinutes(nextStart, duration);
+    React.useImperativeHandle(ref, () => ({ softRefresh }), [softRefresh]);
 
-      const optimistic = normalizeScheduleClass({
-        ...existing,
-        startTime: nextStart,
-        endTime: nextEnd,
+    const filteredClasses = useMemo(() => {
+      const levelId = filters?.levelId ?? null;
+      const teacherId = filters?.teacherId ?? null;
+
+      if (!levelId && !teacherId) return classes;
+
+      return classes.filter((c) => {
+        if (levelId && c.levelId !== levelId) return false;
+        if (teacherId && c.teacherId !== teacherId) return false;
+        return true;
       });
+    }, [classes, filters]);
 
-      setClasses((prev) =>
-        prev.map((c) => (c.templateId === templateId ? optimistic : c))
-      );
 
-      if (!adapter.moveTemplate) return;
+    const onMoveClass = React.useCallback(
+      async (templateId: string, nextStart: Date) => {
+        const existing = classes.find((c) => c.templateId === templateId);
+        if (!existing) return;
 
-      try {
-        await adapter.moveTemplate({
-          templateId,
+        const duration = existing.durationMin;
+        const nextEnd = addMinutes(nextStart, duration);
+
+        const optimistic = normalizeScheduleClass({
+          ...existing,
           startTime: nextStart,
           endTime: nextEnd,
         });
-        setReloadKey((k) => k + 1);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to move class");
-        setClasses((prev) => prev.map((c) => (c.templateId === templateId ? existing : c)));
-      }
-    },
-    [adapter, classes]
-  );
 
-  return (
-    <div className="flex h-full w-full flex-col">
-      {showHeader && (
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+        // optimistic UI update
+        setClasses((prev) =>
+          prev.map((c) => (c.templateId === templateId ? optimistic : c))
+        );
 
-            <div className=" bg-muted px-3 py-1.5 text-sm font-medium text-muted-foreground">
-              {format(weekStart, "MMM d")} – {format(displayWeekEnd, "MMM d, yyyy")}
+        if (!adapter.moveTemplate) return;
+
+        try {
+          await adapter.moveTemplate({
+            templateId,
+            startTime: nextStart,
+            endTime: nextEnd,
+          });
+
+          // ✅ reconcile with server in the background without unmounting the grid
+          softRefresh();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Unable to move class");
+          setClasses((prev) =>
+            prev.map((c) => (c.templateId === templateId ? existing : c))
+          );
+        }
+      },
+      [adapter, classes, softRefresh]
+    );
+
+    return (
+      <div className="flex h-full w-full flex-col">
+        {showHeader && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <div className=" bg-muted px-3 py-1.5 text-sm font-medium text-muted-foreground">
+                {format(weekStart, "MMM d")} – {format(displayWeekEnd, "MMM d, yyyy")}
+              </div>
+
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
 
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
           <div className="flex items-center gap-2">
+            {headerActions /* ✅ NEW slot */}
             <Button
               variant="ghost"
               size="sm"
@@ -167,33 +221,34 @@ export function ScheduleView({
               </Button>
             )}
           </div>
-        </div>
-      )}
+          </div>
+        )}
 
-      {error && (
-        <div className=" border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+        {error && (
+          <div className=" border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
-      <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
-        <ScheduleGrid
-          loading={loading}
-          classes={classes}
-          weekDates={weekDates}
-          onSlotClick={onSlotClick}
-          onClassClick={onClassClick}
-          onMoveClass={allowTemplateMoves ? onMoveClass : undefined}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-          selectedDay={selectedDay}
-          setSelectedDay={setSelectedDay}
-          levels={levels}
-        />
+        <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
+          <ScheduleGrid
+            loading={loading}
+            classes={filteredClasses}
+            weekDates={weekDates}
+            onSlotClick={onSlotClick}
+            onClassClick={onClassClick}
+            onMoveClass={allowTemplateMoves ? onMoveClass : undefined}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            selectedDay={selectedDay}
+            setSelectedDay={setSelectedDay}
+            levels={levels}
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+);
 
 function normalizeWeekAnchor(date: Date): Date {
   const normalized = new Date(date);
