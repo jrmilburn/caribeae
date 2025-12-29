@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getTemplateOccurrences } from "@/server/classTemplate/getTemplateOccurrences";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   await requireAdmin();
 
