@@ -48,7 +48,7 @@ export function SettingsPageClient({
   return (
     <div className="flex h-full flex-col lg:flex-row">
       <aside className="w-full shrink-0 lg:w-64 h-full">
-        <Card className=" border-l-0! border-t-0! h-full py-0!">
+        <Card className=" border-l-0! border-t-0! h-full py-0! shadow-none">
           <div className="flex items-center gap-2 border-b p-4 h-[65px]">
             <div className="rounded-md bg-muted">
               <Settings className="h-4 w-4" />

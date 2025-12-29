@@ -76,8 +76,8 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
         </Button>
       </div>
 
-      <Card className="border-l-0!">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+      <Card className="border-l-0! pb-0 shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4">
           <CardTitle className="text-base">Plans</CardTitle>
           <Input
             value={search}
@@ -86,11 +86,11 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
             className="max-w-xs"
           />
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 py-0">
           {filteredPlans.length === 0 ? (
             <p className="text-sm text-muted-foreground">No enrolment plans found.</p>
           ) : (
-            <div className="rounded-lg border">
+            <div className="">
               <Table>
                 <TableHeader>
                   <TableRow>

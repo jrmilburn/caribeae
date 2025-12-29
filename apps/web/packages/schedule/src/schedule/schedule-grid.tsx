@@ -7,6 +7,8 @@ import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
 import WeekView from "./week-view";
 import DayView from "./day-view";
 
+import ScheduleGridSkeleton from "./Loading";
+
 import type { Level } from "@prisma/client";
 
 export type ScheduleGridProps = {
@@ -63,7 +65,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
 
   const selectedDayName = DAYS_OF_WEEK[selectedDay] ?? "Monday";
 
-  if (loading) return <div>Loading</div>
+  if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

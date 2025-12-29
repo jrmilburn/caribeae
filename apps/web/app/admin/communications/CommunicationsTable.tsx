@@ -32,7 +32,7 @@ export function CommunicationsTable({ communications }: { communications: Commun
   }
 
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="bg-card">
       <Table>
         <TableHeader>
           <TableRow>
