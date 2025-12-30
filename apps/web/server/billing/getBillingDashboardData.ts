@@ -77,6 +77,7 @@ export async function getBillingDashboardData(filters: BillingDashboardFilters =
               payment: { select: { id: true, paidAt: true, method: true, amountCents: true } },
             },
           },
+          lineItems: true,
         },
         orderBy: [{ issuedAt: "desc" }],
         take: 30,

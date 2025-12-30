@@ -17,6 +17,7 @@ export type BillingInvoice = Prisma.InvoiceGetPayload<{
         payment: { select: { id: true; paidAt: true; method: true; amountCents: true } };
       };
     };
+    lineItems: true;
   };
 }>;
 

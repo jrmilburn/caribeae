@@ -216,6 +216,13 @@ enum InvoiceStatus {
   OVERDUE
 }
 
+enum InvoiceLineItemKind {
+  ENROLMENT
+  PRODUCT
+  DISCOUNT
+  ADJUSTMENT
+}
+
 enum EnrolmentAdjustmentType {
   CANCELLATION_CREDIT
 }
@@ -324,6 +331,22 @@ model Teacher {
   teacherSubstitutions TeacherSubstitution[]
 }
 
+model Product {
+  id String @id @default(cuid())
+
+  name       String
+  sku        String?
+  priceCents Int
+  active     Boolean @default(true)
+
+  lineItems InvoiceLineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sku])
+}
+
 model Invoice {
   id String @id @default(cuid())
 
@@ -349,10 +372,12 @@ model Invoice {
   updatedAt DateTime @updatedAt
 
   allocations PaymentAllocation[]
+  lineItems   InvoiceLineItem[]
 
   @@index([familyId, status])
   @@index([enrolmentId, status])
   @@index([dueAt])
+  @@index([familyId, status, dueAt])
 }
 
 model Payment {
@@ -394,6 +419,37 @@ model PaymentAllocation {
 model InvoicingSweepState {
   id        String   @id
   lastRunAt DateTime
+}
+
+model InvoiceLineItem {
+  id String @id @default(cuid())
+
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String
+
+  kind        InvoiceLineItemKind
+  description String
+  quantity    Int  @default(1)
+  unitPriceCents Int
+  amountCents Int
+
+  product   Product?  @relation(fields: [productId], references: [id])
+  productId String?
+
+  enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  enrolmentId String?
+
+  student   Student? @relation(fields: [studentId], references: [id])
+  studentId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([kind])
+  @@index([productId])
+  @@index([enrolmentId])
+  @@index([studentId])
 }
 
 //MESSAGE AND EMAIL RELATED STUFF

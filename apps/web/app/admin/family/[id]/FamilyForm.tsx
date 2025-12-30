@@ -35,6 +35,7 @@ export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
             plan: { select: { name: true; billingType: true } };
           };
         };
+        lineItems: true;
       };
     };
   };

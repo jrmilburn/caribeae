@@ -1,11 +1,16 @@
 
 import { addDays, addWeeks, isAfter, isBefore, max as maxDate } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { BillingType, InvoiceStatus } from "@prisma/client";
+import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import {
+  applyEntitlementsForPaidInvoice,
+  createInvoiceWithLineItems,
+  recalculateInvoiceTotals,
+} from "@/server/billing/invoiceMutations";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -105,18 +110,25 @@ export async function createInitialInvoiceForEnrolment(
       today: enrolment.startDate,
     });
 
-    const invoice = await tx.invoice.create({
-      data: {
-        familyId: enrolment.student.familyId,
-        enrolmentId: enrolment.id,
-        amountCents: enrolment.plan.priceCents,
-        status: InvoiceStatus.SENT,
-        coverageStart: coverageStart ?? null,
-        coverageEnd: coverageEnd ?? null,
-        creditsPurchased,
-        issuedAt: new Date(),
-        dueAt: addDays(new Date(), DEFAULT_DUE_IN_DAYS),
-      },
+    const invoice = await createInvoiceWithLineItems({
+      familyId: enrolment.student.familyId,
+      enrolmentId: enrolment.id,
+      lineItems: [
+        {
+          kind: InvoiceLineItemKind.ENROLMENT,
+          description: enrolment.plan.name,
+          quantity: 1,
+          unitPriceCents: enrolment.plan.priceCents,
+        },
+      ],
+      status: InvoiceStatus.SENT,
+      coverageStart: coverageStart ?? null,
+      coverageEnd: coverageEnd ?? null,
+      creditsPurchased,
+      issuedAt: new Date(),
+      dueAt: addDays(new Date(), DEFAULT_DUE_IN_DAYS),
+      client: tx,
+      skipAuth: true,
     });
 
     return { invoice, created: true };
@@ -133,42 +145,33 @@ export async function markInvoicePaid(invoiceId: string) {
         enrolment: {
           ...enrolmentWithPlanInclude,
         },
+        lineItems: { select: { kind: true } },
       },
     });
 
     if (!invoice) throw new Error("Invoice not found");
-    if (invoice.status === InvoiceStatus.PAID && invoice.amountPaidCents >= invoice.amountCents) {
-      return invoice;
+    const recalculated = await recalculateInvoiceTotals(invoiceId, { client: tx, skipAuth: true });
+    if (recalculated.status === InvoiceStatus.PAID && recalculated.amountPaidCents >= recalculated.amountCents) {
+      return recalculated;
     }
+
+    const allocated = await tx.paymentAllocation.aggregate({
+      where: { invoiceId },
+      _sum: { amountCents: true },
+    });
+    const allocatedCents = allocated._sum.amountCents ?? 0;
+    const nextPaid = Math.max(recalculated.amountCents, allocatedCents, recalculated.amountPaidCents);
 
     const updated = await tx.invoice.update({
       where: { id: invoiceId },
       data: {
         status: InvoiceStatus.PAID,
-        paidAt: invoice.paidAt ?? new Date(),
-        amountPaidCents: invoice.amountCents,
+        paidAt: recalculated.paidAt ?? new Date(),
+        amountPaidCents: nextPaid,
       },
     });
 
-    if (invoice.enrolment && invoice.enrolment.plan) {
-      const plan = invoice.enrolment.plan;
-      if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
-        await tx.enrolment.update({
-          where: { id: invoice.enrolment.id },
-          data: { paidThroughDate: invoice.coverageEnd },
-        });
-      } else if (
-        (plan.billingType === BillingType.BLOCK || plan.billingType === BillingType.PER_CLASS) &&
-        invoice.creditsPurchased
-      ) {
-        await tx.enrolment.update({
-          where: { id: invoice.enrolment.id },
-          data: {
-            creditsRemaining: (invoice.enrolment.creditsRemaining ?? 0) + invoice.creditsPurchased,
-          },
-        });
-      }
-    }
+    await applyEntitlementsForPaidInvoice(invoiceId, { client: tx, skipAuth: true });
 
     return updated;
   });
@@ -217,17 +220,24 @@ export async function issueNextInvoiceForEnrolment(
       const coverageEnd =
         enrolment.endDate && isBefore(enrolment.endDate, rawEnd) ? enrolment.endDate : rawEnd;
 
-      const invoice = await tx.invoice.create({
-        data: {
-          familyId: enrolment.student.familyId,
-          enrolmentId: enrolment.id,
-          amountCents: enrolment.plan.priceCents,
-          status: InvoiceStatus.SENT,
-          coverageStart,
-          coverageEnd,
-          issuedAt: today,
-          dueAt: addDays(today, DEFAULT_DUE_IN_DAYS),
-        },
+      const invoice = await createInvoiceWithLineItems({
+        familyId: enrolment.student.familyId,
+        enrolmentId: enrolment.id,
+        lineItems: [
+          {
+            kind: InvoiceLineItemKind.ENROLMENT,
+            description: enrolment.plan.name,
+            quantity: 1,
+            unitPriceCents: enrolment.plan.priceCents,
+          },
+        ],
+        status: InvoiceStatus.SENT,
+        coverageStart,
+        coverageEnd,
+        issuedAt: today,
+        dueAt: addDays(today, DEFAULT_DUE_IN_DAYS),
+        client: tx,
+        skipAuth: true,
       });
       return { invoice, created: true };
     }
@@ -244,16 +254,23 @@ export async function issueNextInvoiceForEnrolment(
       enrolment.plan.billingType === BillingType.BLOCK
         ? enrolment.plan.blockClassCount!
         : enrolment.plan.blockClassCount ?? 1;
-    const invoice = await tx.invoice.create({
-      data: {
-        familyId: enrolment.student.familyId,
-        enrolmentId: enrolment.id,
-        amountCents: enrolment.plan.priceCents,
-        status: InvoiceStatus.SENT,
-        creditsPurchased,
-        issuedAt: today,
-        dueAt: addDays(today, DEFAULT_DUE_IN_DAYS),
-      },
+    const invoice = await createInvoiceWithLineItems({
+      familyId: enrolment.student.familyId,
+      enrolmentId: enrolment.id,
+      lineItems: [
+        {
+          kind: InvoiceLineItemKind.ENROLMENT,
+          description: enrolment.plan.name,
+          quantity: 1,
+          unitPriceCents: enrolment.plan.priceCents,
+        },
+      ],
+      status: InvoiceStatus.SENT,
+      creditsPurchased,
+      issuedAt: today,
+      dueAt: addDays(today, DEFAULT_DUE_IN_DAYS),
+      client: tx,
+      skipAuth: true,
     });
 
     return { invoice, created: true };
