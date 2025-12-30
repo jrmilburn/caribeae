@@ -1,67 +1,36 @@
 "use client";
 
 import * as React from "react";
-import { AttendanceStatus, type Prisma } from "@prisma/client";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { saveAttendance } from "@/server/attendance/saveAttendance";
-import type { AttendanceEntryDTO } from "./types";
+import type { AttendanceChangeDTO, ClassOccurrenceRoster } from "./types";
+import type { AttendanceRowState } from "./AttendanceTable";
+import { AttendanceTable } from "./AttendanceTable";
 
 type AttendanceSectionProps = {
   templateId: string;
   dateKey: string | null;
-  enrolments: Prisma.EnrolmentGetPayload<{ include: { student: true; plan: true } }>[];
-  initialAttendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
+  roster: ClassOccurrenceRoster | null;
 };
 
-type AttendanceRow = {
-  studentId: string;
-  studentName: string;
-  status: AttendanceStatus;
-  note: string | null;
-};
-
-const STATUS_OPTIONS: AttendanceStatus[] = [
-  AttendanceStatus.PRESENT,
-  AttendanceStatus.ABSENT,
-  AttendanceStatus.LATE,
-  AttendanceStatus.EXCUSED,
-];
-
-export function AttendanceSection({
-  templateId,
-  dateKey,
-  enrolments,
-  initialAttendance,
-}: AttendanceSectionProps) {
-  const [rows, setRows] = React.useState<AttendanceRow[]>(() =>
-    buildRows(enrolments, initialAttendance)
-  );
+export function AttendanceSection({ templateId, dateKey, roster }: AttendanceSectionProps) {
+  const [rows, setRows] = React.useState<AttendanceRowState[]>(() => buildRows(roster));
   const [saving, startSaving] = React.useTransition();
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setRows(buildRows(enrolments, initialAttendance));
-  }, [enrolments, initialAttendance]);
+    setRows(buildRows(roster));
+  }, [roster]);
 
-  const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
+  const hasDate = Boolean(dateKey);
+  const hasRoster = hasDate && rows.length > 0;
+  const dirtyRows = rows.filter((row) => row.status !== row.initialStatus);
+  const hasChanges = dirtyRows.length > 0;
+
+  const handleStatusChange = (studentId: string, status: AttendanceRowState["status"]) => {
     setRows((prev) =>
       prev.map((row) => (row.studentId === studentId ? { ...row, status } : row))
     );
@@ -74,10 +43,14 @@ export function AttendanceSection({
       setError("Select an occurrence date first.");
       return;
     }
+    if (!hasChanges) {
+      setMessage("No changes to save.");
+      return;
+    }
     setMessage(null);
     setError(null);
 
-    const payload: AttendanceEntryDTO[] = rows.map((row) => ({
+    const payload: AttendanceChangeDTO[] = dirtyRows.map((row) => ({
       studentId: row.studentId,
       status: row.status,
       note: row.note,
@@ -89,14 +62,16 @@ export function AttendanceSection({
           const saved = await saveAttendance({
             templateId,
             dateKey,
-            entries: payload,
+            changes: payload,
           });
 
           const savedMap = new Map(saved.map((entry) => [entry.studentId, entry]));
           setRows((prev) =>
             prev.map((row) => {
               const next = savedMap.get(row.studentId);
-              return next ? { ...row, status: next.status, note: next.note } : row;
+              const status = next?.status ?? null;
+              const note = next?.note ?? null;
+              return { ...row, status, note, initialStatus: status };
             })
           );
           setMessage("Attendance saved.");
@@ -113,54 +88,31 @@ export function AttendanceSection({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="text-base">Attendance</CardTitle>
           <p className="text-xs text-muted-foreground">Mark attendance for the selected date.</p>
         </div>
-        <Button onClick={handleSave} disabled={saving || !dateKey || !rows.length}>
-          {saving ? "Saving…" : "Save attendance"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {hasChanges ? (
+            <Badge variant="secondary" className="text-xs">
+              Unsaved changes
+            </Badge>
+          ) : null}
+          <Button onClick={handleSave} disabled={saving || !hasRoster}>
+            {saving ? "Saving…" : "Save attendance"}
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {!rows.length ? (
+      <CardContent className="space-y-4">
+        {!hasDate ? (
+          <p className="text-sm text-muted-foreground">Select an occurrence date to view attendance.</p>
+        ) : !rows.length ? (
           <p className="text-sm text-muted-foreground">No active enrolments for this date.</p>
         ) : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.studentId}>
-                    <TableCell className="font-medium">{row.studentName}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={row.status}
-                        onValueChange={(value) => handleStatusChange(row.studentId, value as AttendanceStatus)}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUS_OPTIONS.map((status) => (
-                            <SelectItem key={status} value={status}>
-                              {statusLabel(status)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <AttendanceTable rows={rows} onStatusChange={handleStatusChange} disabled={saving} />
         )}
+
         {message ? <p className="text-sm text-foreground">{message}</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </CardContent>
@@ -168,38 +120,26 @@ export function AttendanceSection({
   );
 }
 
-function buildRows(
-  enrolments: Prisma.EnrolmentGetPayload<{ include: { student: true; plan: true } }>[],
-  attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[]
-): AttendanceRow[] {
+function buildRows(roster: ClassOccurrenceRoster | null): AttendanceRowState[] {
+  if (!roster) return [];
+
   const attendanceByStudent = new Map(
-    attendance.map((entry) => [entry.studentId, { status: entry.status, note: entry.note ?? null }])
+    roster.attendance.map((entry) => [entry.studentId, { status: entry.status, note: entry.note ?? null }])
   );
 
-  return enrolments
+  return roster.enrolments
     .map((enrolment) => {
       const current = attendanceByStudent.get(enrolment.studentId);
+      const status = current?.status ?? null;
+      const note = current?.note ?? null;
       return {
         studentId: enrolment.student.id,
         studentName: enrolment.student.name ?? "Unnamed student",
-        status: current?.status ?? AttendanceStatus.PRESENT,
-        note: current?.note ?? null,
+        planName: enrolment.plan?.name ?? null,
+        status,
+        initialStatus: status,
+        note,
       };
     })
     .sort((a, b) => a.studentName.localeCompare(b.studentName));
-}
-
-function statusLabel(status: AttendanceStatus) {
-  switch (status) {
-    case AttendanceStatus.PRESENT:
-      return "Present";
-    case AttendanceStatus.ABSENT:
-      return "Absent";
-    case AttendanceStatus.LATE:
-      return "Late";
-    case AttendanceStatus.EXCUSED:
-      return "Excused";
-    default:
-      return status;
-  }
 }

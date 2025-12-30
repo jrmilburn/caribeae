@@ -1,17 +1,17 @@
 "use server";
 
-import { AttendanceStatus } from "@prisma/client";
+import { AttendanceStatus, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
-import type { AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
+import type { AttendanceChangeDTO, AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
 
 type SaveAttendancePayload = {
   templateId: string;
   dateKey: string;
-  entries: AttendanceEntryDTO[];
+  changes: AttendanceChangeDTO[];
 };
 
 const ALLOWED_STATUSES = new Set<AttendanceStatus>([
@@ -24,7 +24,7 @@ const ALLOWED_STATUSES = new Set<AttendanceStatus>([
 export async function saveAttendance({
   templateId,
   dateKey,
-  entries,
+  changes,
 }: SaveAttendancePayload): Promise<AttendanceEntryDTO[]> {
   await getOrCreateUser();
   await requireAdmin();
@@ -34,10 +34,10 @@ export async function saveAttendance({
     throw new Error("Invalid date");
   }
 
-  const uniqueEntries = dedupeEntries(entries);
+  const uniqueChanges = dedupeChanges(changes);
 
-  uniqueEntries.forEach((entry) => {
-    if (!ALLOWED_STATUSES.has(entry.status)) {
+  uniqueChanges.forEach((entry) => {
+    if (entry.status !== null && !ALLOWED_STATUSES.has(entry.status)) {
       throw new Error("Invalid attendance status");
     }
   });
@@ -45,6 +45,7 @@ export async function saveAttendance({
   const activeEnrolments = await prisma.enrolment.findMany({
     where: {
       templateId,
+      status: { not: EnrolmentStatus.CANCELLED },
       startDate: { lte: date },
       OR: [{ endDate: null }, { endDate: { gte: date } }],
     },
@@ -52,31 +53,22 @@ export async function saveAttendance({
   });
 
   const allowedStudents = new Set(activeEnrolments.map((e) => e.studentId));
-  uniqueEntries.forEach((entry) => {
+  uniqueChanges.forEach((entry) => {
     if (!allowedStudents.has(entry.studentId)) {
       throw new Error("Student is not enrolled on this date.");
     }
   });
 
-  const studentIds = uniqueEntries.map((e) => e.studentId);
+  if (uniqueChanges.length === 0) {
+    return loadAttendance(templateId, date);
+  }
 
-  await prisma.$transaction(async (tx) => {
-    if (studentIds.length === 0) {
-      await tx.attendance.deleteMany({ where: { templateId, date } });
-      return;
-    }
-
-    await tx.attendance.deleteMany({
-      where: {
-        templateId,
-        date,
-        NOT: { studentId: { in: studentIds } },
-      },
-    });
-
-    await Promise.all(
-      uniqueEntries.map((entry) =>
-        tx.attendance.upsert({
+  const operations = uniqueChanges.map((entry) =>
+    entry.status === null
+      ? prisma.attendance.deleteMany({
+          where: { templateId, date, studentId: entry.studentId },
+        })
+      : prisma.attendance.upsert({
           where: {
             templateId_date_studentId: {
               templateId,
@@ -93,15 +85,15 @@ export async function saveAttendance({
             note: entry.note ?? null,
           },
         })
-      )
-    );
-  });
+  );
 
-  return uniqueEntries;
+  await prisma.$transaction(operations);
+
+  return loadAttendance(templateId, date);
 }
 
-function dedupeEntries(entries: AttendanceEntryDTO[]): AttendanceEntryDTO[] {
-  const seen = new Map<string, AttendanceEntryDTO>();
+function dedupeChanges(entries: AttendanceChangeDTO[]): AttendanceChangeDTO[] {
+  const seen = new Map<string, AttendanceChangeDTO>();
   entries.forEach((entry) => {
     if (!entry.studentId) return;
     seen.set(entry.studentId, {
@@ -111,4 +103,17 @@ function dedupeEntries(entries: AttendanceEntryDTO[]): AttendanceEntryDTO[] {
     });
   });
   return Array.from(seen.values());
+}
+
+async function loadAttendance(templateId: string, date: Date): Promise<AttendanceEntryDTO[]> {
+  const rows = await prisma.attendance.findMany({
+    where: { templateId, date },
+    orderBy: [{ studentId: "asc" }],
+  });
+
+  return rows.map((row) => ({
+    studentId: row.studentId,
+    status: row.status,
+    note: row.note ?? null,
+  }));
 }
