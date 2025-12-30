@@ -9,13 +9,14 @@ type PageProps = {
 };
 
 export default async function ClassPage({ params, searchParams }: PageProps) {
-  const { id } = params;
+  const { id } = await params;
+  const date = await searchParams
 
-  const pageData = await getClassPageData(id, searchParams?.date);
+  const pageData = await getClassPageData(id, date?.date);
   if (!pageData) return null;
 
   return (
-    <div className="max-h-screen overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       <ClassPageClient
         data={pageData}
         requestedDateKey={searchParams?.date ?? null}
