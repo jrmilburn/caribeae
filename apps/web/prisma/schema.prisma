@@ -378,6 +378,7 @@ model Invoice {
   @@index([enrolmentId, status])
   @@index([dueAt])
   @@index([familyId, status, dueAt])
+  @@index([issuedAt])
 }
 
 model Payment {
@@ -398,6 +399,7 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   @@index([familyId, paidAt])
+  @@index([paidAt])
   @@unique([familyId, idempotencyKey])
 }
 
