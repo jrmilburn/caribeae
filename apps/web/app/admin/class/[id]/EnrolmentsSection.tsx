@@ -22,6 +22,8 @@ export function EnrolmentsSection({
 }) {
   const [open, setOpen] = React.useState(false);
 
+  console.log(classTemplate);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">

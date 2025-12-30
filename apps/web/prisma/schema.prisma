@@ -66,9 +66,10 @@ model Student {
   level   Level?  @relation(fields: [levelId], references: [id])
   levelId String?
 
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  enrolments Enrolment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  enrolments  Enrolment[]
+  attendances Attendance[]
 }
 
 model ClassTemplate {
@@ -91,9 +92,63 @@ model ClassTemplate {
   teacherId String?
   teacher   Teacher? @relation(fields: [teacherId], references: [id])
 
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  enrolments Enrolment[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  enrolments           Enrolment[]
+  teacherSubstitutions TeacherSubstitution[]
+  attendances          Attendance[]
+}
+
+model TeacherSubstitution {
+  id String @id @default(cuid())
+
+  templateId String
+  template   ClassTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // occurrence date (normalize to local midnight)
+  date DateTime
+
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, date])
+  @@index([date])
+  @@index([templateId, date])
+}
+
+model Attendance {
+  id String @id @default(cuid())
+
+  templateId String
+  template   ClassTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  date DateTime // normalized to local midnight
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status AttendanceStatus @default(PRESENT)
+  note   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, date, studentId])
+  @@index([date])
+  @@index([studentId, date])
+  @@index([templateId, date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
 }
 
 enum EnrolmentStatus {
@@ -205,9 +260,10 @@ model Teacher {
   phone    String?
   email    String?
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  classTemplates ClassTemplate[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  classTemplates       ClassTemplate[]
+  teacherSubstitutions TeacherSubstitution[]
 }
 
 model Invoice {
