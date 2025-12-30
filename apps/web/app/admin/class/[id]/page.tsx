@@ -1,39 +1,26 @@
 // /app/admin/class/[id]/page.tsx
-import { getClassTemplate } from "@/server/classTemplate/getClassTemplate";
-import { getTeachers } from "@/server/teacher/getTeachers";
-import { getStudentsByLevel } from "@/server/student/getStudentsByLevel";
-import { getLevels } from "@/server/level/getLevels";
-import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
+import { getClassPageData } from "@/server/class/getClassPageData";
 
 import ClassPageClient from "./ClassPageClient";
 
 type PageProps = {
   params: { id: string };
+  searchParams?: { date?: string; tab?: string };
 };
 
-export default async function ClassPage({ params }: PageProps) {
-  const { id } = await params;
+export default async function ClassPage({ params, searchParams }: PageProps) {
+  const { id } = params;
 
-  const classTemplate = await getClassTemplate(id);
-  if (!classTemplate) return null;
-
-  const [teachers, levels, students] = await Promise.all([
-    getTeachers(),
-    getLevels(),
-    getStudentsByLevel(classTemplate.levelId),
-  ]);
-  const plans = await getEnrolmentPlans();
-  const levelPlans = plans.filter((plan) => plan.levelId === classTemplate.levelId);
+  const pageData = await getClassPageData(id, searchParams?.date);
+  if (!pageData) return null;
 
   return (
     <div className="max-h-screen overflow-y-auto">
-    <ClassPageClient
-      classTemplate={classTemplate}
-      teachers={teachers}
-      levels={levels}
-      students={students}
-      enrolmentPlans={levelPlans}
-    />
+      <ClassPageClient
+        data={pageData}
+        requestedDateKey={searchParams?.date ?? null}
+        initialTab={searchParams?.tab ?? null}
+      />
     </div>
   );
 }

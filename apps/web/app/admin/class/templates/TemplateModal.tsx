@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import type { ClientTemplate } from "@/server/classTemplate/types";
@@ -11,17 +12,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatDateKey } from "@/lib/dateKey";
+import { SubstituteTeacherDialog } from "../[id]/SubstituteTeacherDialog";
 
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
+  MoreHorizontal,
+  NotebookText,
   Pencil,
+  Users2,
   XIcon,
-  ExternalLink,
 } from "lucide-react";
 
 // --- constants / types ---
@@ -123,6 +136,16 @@ export function TemplateModal({
 }: TemplateModalProps) {
   const router = useRouter();
   const isEditMode = Boolean(template?.id);
+  const [subDialogOpen, setSubDialogOpen] = React.useState(false);
+
+  const prefillDateKey = React.useMemo(() => (prefill?.date ? formatDateKey(prefill.date) : null), [prefill?.date]);
+  const viewHref = template?.id ? buildClassHref(template.id, prefillDateKey, null) : null;
+  const attendanceHref = template?.id ? buildClassHref(template.id, prefillDateKey, "attendance") : null;
+  const effectiveTeacher = React.useMemo(() => {
+    const byTemplate = template?.teacherId ? teachers.find((t) => t.id === template.teacherId) ?? null : null;
+    const byPrefill = prefill?.teacherId ? teachers.find((t) => t.id === prefill.teacherId) ?? null : null;
+    return byPrefill ?? byTemplate ?? null;
+  }, [prefill?.teacherId, teachers, template?.teacherId]);
 
   // wizard step: 0 = basics, 1 = schedule/rules
   const [step, setStep] = React.useState<0 | 1>(0);
@@ -256,7 +279,6 @@ if (template) {
     setSubmitting(false);
     setCapacityMode("default");
     setCapacityCustomOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, template, levels, teachers, prefill]);
 
   React.useEffect(() => {
@@ -268,19 +290,12 @@ if (template) {
     if (lengthMode === "default") setDurationMin(defaultLen);
 
     if (isEditMode) setLengthMode(durationMin === defaultLen ? "default" : "custom");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLevel?.id]);
+  }, [selectedLevel, lengthMode, isEditMode, durationMin]);
 
   const close = () => onOpenChange(false);
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleViewClass = () => {
-    if (!template?.id) return;
-    onOpenChange(false);
-    router.push(`/admin/class/${template.id}`);
-  };
 
   // --- validation ---
   const levelError = touched.levelId && !form.levelId ? "Level is required." : "";
@@ -381,20 +396,70 @@ if (template) {
       : selectedLevel.defaultCapacity;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        // ✅ responsive width + hard clip (prevents edit-mode weirdness)
-        className="w-[min(560px,calc(100vw-2rem))] max-w-[560px] overflow-hidden p-0"
-      >
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle className="flex items-center gap-3">
-            <span>{isEditMode ? "Edit template" : "New template"}</span>
-            <div className="flex items-center gap-1">
-              <span className={dotClass(step === 0)} />
-              <span className={dotClass(step === 1)} />
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          // ✅ responsive width + hard clip (prevents edit-mode weirdness)
+          className="w-[min(560px,calc(100vw-2rem))] max-w-[560px] overflow-hidden p-0"
+        >
+          <DialogHeader className="border-b px-6 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-3">
+                <span>{isEditMode ? "Edit template" : "New template"}</span>
+                <div className="flex items-center gap-1">
+                  <span className={dotClass(step === 0)} />
+                  <span className={dotClass(step === 1)} />
+                </div>
+              </DialogTitle>
+              {isEditMode ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="sr-only">Template actions</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {viewHref ? (
+                      <DropdownMenuItem asChild>
+                        <Link href={viewHref} className="flex items-center gap-2">
+                          <NotebookText className="h-4 w-4" />
+                          View class
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem disabled className="flex items-center gap-2">
+                        <NotebookText className="h-4 w-4" />
+                        View class
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => setSubDialogOpen(true)}
+                      disabled={!prefillDateKey}
+                      className="flex items-center gap-2"
+                    >
+                      <Users2 className="h-4 w-4" />
+                      Substitute teacher
+                    </DropdownMenuItem>
+                    {attendanceHref ? (
+                      <DropdownMenuItem asChild>
+                        <Link href={attendanceHref} className="flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4" />
+                          Take attendance
+                        </Link>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem disabled className="flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4" />
+                        Take attendance
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
             </div>
-          </DialogTitle>
-        </DialogHeader>
+          </DialogHeader>
 
         {/* ✅ CRITICAL: clip the slider track here, not just DialogContent */}
         <div className="relative overflow-x-hidden">
@@ -733,18 +798,7 @@ if (template) {
                 {/* ✅ edit-mode safe footer: wraps + never forces overflow */}
                 <div className="pt-2">
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                    {isEditMode ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={handleViewClass}
-                        className="inline-flex w-full justify-center gap-2 sm:w-auto sm:justify-start"
-                      >
-                        View class <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    ) : (
-                      <div />
-                    )}
+                    <div />
 
                     <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
                       <Button
@@ -776,6 +830,21 @@ if (template) {
         </div>
       </DialogContent>
     </Dialog>
+
+      {template?.id ? (
+        <SubstituteTeacherDialog
+          open={subDialogOpen}
+          onOpenChange={setSubDialogOpen}
+          templateId={template.id}
+          dateKey={prefillDateKey}
+          teachers={teachers}
+          effectiveTeacher={effectiveTeacher}
+          onUpdated={() => {
+            router.refresh();
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -838,6 +907,14 @@ function dotClass(active: boolean) {
 function formatCapacity(v: number | null | undefined) {
   if (v === null || typeof v === "undefined") return "N/A";
   return String(v);
+}
+
+function buildClassHref(templateId: string, dateKey: string | null, tab: string | null) {
+  if (!dateKey) return `/admin/class/${templateId}`;
+  const params = new URLSearchParams();
+  params.set("date", dateKey);
+  if (tab) params.set("tab", tab);
+  return `/admin/class/${templateId}?${params.toString()}`;
 }
 
 // --- time helpers ---
