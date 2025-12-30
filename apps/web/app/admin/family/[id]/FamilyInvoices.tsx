@@ -317,6 +317,40 @@ export default function FamilyInvoices({ family, billing }: Props) {
 
                       <AccordionContent className="pb-4">
                         <div className="space-y-3">
+                          {/* Line items */}
+                          <div className="rounded-lg border bg-muted/10 p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-semibold">Line items</div>
+                              <div className="text-xs text-muted-foreground">Totals derive from items</div>
+                            </div>
+                            {invoice.lineItems?.length ? (
+                              <Table className="mt-2">
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Description</TableHead>
+                                    <TableHead>Qty</TableHead>
+                                    <TableHead>Kind</TableHead>
+                                    <TableHead className="text-right">Amount</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {invoice.lineItems.map((item) => (
+                                    <TableRow key={item.id}>
+                                      <TableCell className="text-sm">{item.description}</TableCell>
+                                      <TableCell className="text-sm">{item.quantity}</TableCell>
+                                      <TableCell className="text-xs text-muted-foreground">{item.kind}</TableCell>
+                                      <TableCell className="text-right font-medium">
+                                        {formatCurrencyFromCents(item.amountCents)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            ) : (
+                              <p className="mt-2 text-xs text-muted-foreground">No line items recorded.</p>
+                            )}
+                          </div>
+
                           {/* Payments applied to this invoice */}
                           <div className="rounded-lg border bg-muted/20 p-3">
                             <div className="flex items-center justify-between">
@@ -654,4 +688,3 @@ function RecordPaymentSheet({
     </Sheet>
   );
 }
-

@@ -1,6 +1,6 @@
 
 import { isBefore } from "date-fns";
-import { InvoiceStatus, Prisma } from "@prisma/client";
+import { BillingType, InvoiceLineItemKind, InvoiceStatus, Prisma } from "@prisma/client";
 
 export function nextInvoiceStatus(params: {
   invoice: { status: InvoiceStatus; amountCents: number; dueAt: Date | null; issuedAt: Date | null };
@@ -39,14 +39,10 @@ export async function adjustInvoicePayment(
 ) {
   const invoice = await tx.invoice.findUnique({
     where: { id: invoiceId },
-    select: {
-      id: true,
-      amountCents: true,
-      amountPaidCents: true,
-      status: true,
-      dueAt: true,
-      issuedAt: true,
-      paidAt: true,
+    include: {
+      enrolment: { include: { plan: true } },
+      lineItems: { select: { kind: true } },
+      _count: { select: { lineItems: true } },
     },
   });
 
@@ -54,7 +50,7 @@ export async function adjustInvoicePayment(
   const nextPaid = Math.max(invoice.amountPaidCents + deltaCents, 0);
   const status = nextInvoiceStatus({ invoice, paidCents: nextPaid });
 
-  return tx.invoice.update({
+  const updated = await tx.invoice.update({
     where: { id: invoiceId },
     data: {
       amountPaidCents: nextPaid,
@@ -67,4 +63,35 @@ export async function adjustInvoicePayment(
             : null,
     },
   });
+
+  const hasEnrolmentLineItem =
+    (invoice._count?.lineItems ?? 0) === 0
+      ? false
+      : invoice.lineItems.some((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
+  if (
+    status === InvoiceStatus.PAID &&
+    invoice.status !== InvoiceStatus.PAID &&
+    hasEnrolmentLineItem &&
+    invoice.enrolment?.plan
+  ) {
+    const plan = invoice.enrolment.plan;
+    if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
+      await tx.enrolment.update({
+        where: { id: invoice.enrolment.id },
+        data: { paidThroughDate: invoice.coverageEnd },
+      });
+    } else if (
+      (plan.billingType === BillingType.BLOCK || plan.billingType === BillingType.PER_CLASS) &&
+      invoice.creditsPurchased
+    ) {
+      await tx.enrolment.update({
+        where: { id: invoice.enrolment.id },
+        data: {
+          creditsRemaining: (invoice.enrolment.creditsRemaining ?? 0) + invoice.creditsPurchased,
+        },
+      });
+    }
+  }
+
+  return updated;
 }

@@ -9,10 +9,11 @@ import {
   CreditCard,
   Loader2,
   Search,
+  ShoppingBag,
   Sparkles,
   Wallet,
 } from "lucide-react";
-import type { BillingType } from "@prisma/client";
+import type { BillingType, Product } from "@prisma/client";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/bil
 import { createPayment } from "@/server/billing/createPayment";
 import { createPayAheadInvoice } from "@/server/billing/createPayAheadInvoice";
 import { purchaseCredits } from "@/server/billing/purchaseCredits";
+import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
 type AllocationMap = Record<string, string>;
@@ -65,7 +67,12 @@ function billingLabel(type: BillingType | null | undefined) {
   }
 }
 
-export default function CounterPageClient() {
+type CounterPageClientProps = {
+  products: Product[];
+  counterFamily: { id: string; name: string } | null;
+};
+
+export default function CounterPageClient({ products, counterFamily }: CounterPageClientProps) {
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<FamilyOption[]>([]);
   const [searching, setSearching] = React.useState(false);
@@ -83,6 +90,12 @@ export default function CounterPageClient() {
 
   const [payAheadCounts, setPayAheadCounts] = React.useState<Record<string, number>>({});
   const [payAheadLoading, setPayAheadLoading] = React.useState<Record<string, boolean>>({});
+
+  const [cart, setCart] = React.useState<Record<string, number>>({});
+  const [checkoutMode, setCheckoutMode] = React.useState<"PAY_NOW" | "INVOICE">("PAY_NOW");
+  const [checkoutMethod, setCheckoutMethod] = React.useState("Cash");
+  const [checkoutNote, setCheckoutNote] = React.useState("");
+  const [checkingOut, setCheckingOut] = React.useState(false);
 
   React.useEffect(() => {
     if (!query.trim()) {
@@ -132,8 +145,99 @@ export default function CounterPageClient() {
 
   const allocationRows = React.useMemo(() => summary?.openInvoices ?? [], [summary?.openInvoices]);
 
+  const counterFamilyOption = React.useMemo<FamilyOption | null>(() => {
+    if (!counterFamily) return null;
+    return {
+      id: counterFamily.id,
+      name: counterFamily.name,
+      primaryContactName: counterFamily.name,
+      primaryPhone: "",
+    };
+  }, [counterFamily]);
+
+  const cartItems = React.useMemo(
+    () =>
+      products
+        .map((product) => ({
+          product,
+          quantity: cart[product.id] ?? 0,
+        }))
+        .filter((item) => item.quantity > 0),
+    [products, cart]
+  );
+
+  const cartTotal = React.useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.product.priceCents * item.quantity, 0),
+    [cartItems]
+  );
+
+  const addToCart = (productId: string) => {
+    setCart((prev) => ({ ...prev, [productId]: (prev[productId] ?? 0) + 1 }));
+  };
+
+  const updateCartQuantity = (productId: string, quantity: number) => {
+    const nextQty = Number.isNaN(quantity) ? 0 : quantity;
+    setCart((prev) => {
+      const next = { ...prev };
+      if (nextQty <= 0) {
+        delete next[productId];
+      } else {
+        next[productId] = nextQty;
+      }
+      return next;
+    });
+  };
+
+  const clearCart = () => setCart({});
+
   const handleManualAllocationChange = (invoiceId: string, value: string) => {
     setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
+  };
+
+  const handleCheckout = async () => {
+    const items = cartItems.map((item) => ({
+      productId: item.product.id,
+      quantity: item.quantity,
+    }));
+
+    if (items.length === 0) {
+      toast.error("Add at least one product to the cart.");
+      return;
+    }
+    if (!selectedFamily && !counterFamilyOption) {
+      toast.error("Select a family or use the Counter Sale fallback.");
+      return;
+    }
+
+    setCheckingOut(true);
+    try {
+      await createCounterInvoice({
+        familyId: selectedFamily?.id,
+        items,
+        payNow: checkoutMode === "PAY_NOW",
+        paymentMethod: checkoutMode === "PAY_NOW" ? checkoutMethod : undefined,
+        note: checkoutNote || undefined,
+      });
+      toast.success(
+        checkoutMode === "PAY_NOW"
+          ? "Sale recorded and paid."
+          : "Invoice created for the selected products."
+      );
+      clearCart();
+      if (selectedFamily) {
+        try {
+          const refreshed = await getFamilyBillingSummary(selectedFamily.id);
+          setSummary(refreshed);
+        } catch {
+          toast.warning("Sale completed but the balance view could not refresh.");
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to complete the sale.";
+      toast.error(message);
+    } finally {
+      setCheckingOut(false);
+    }
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -310,6 +414,178 @@ export default function CounterPageClient() {
               ))}
             </div>
           )}
+
+          {counterFamilyOption ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedFamily(counterFamilyOption);
+                  setQuery(counterFamilyOption.name);
+                  setSummary(null);
+                }}
+              >
+                Use counter sale family
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base">Sell products</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Add products to a basket, invoice, and optionally collect payment immediately.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-2">
+              {products.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No products available.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {products.map((product) => (
+                    <div key={product.id} className="rounded-md border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-semibold">{product.name}</div>
+                          <div className="text-xs text-muted-foreground">{product.sku ?? "No SKU"}</div>
+                        </div>
+                        <div className="text-sm font-semibold">{formatCurrencyFromCents(product.priceCents)}</div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="text-xs text-muted-foreground">
+                          {product.active ? "Active" : "Inactive"}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={() => addToCart(product.id)}>
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-md border p-3 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold">Basket</div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedFamily
+                      ? `For ${selectedFamily.name}`
+                      : counterFamilyOption
+                        ? `Using ${counterFamilyOption.name}`
+                        : "Select a family"}
+                  </div>
+                </div>
+                <Badge variant="secondary">{formatCurrencyFromCents(cartTotal)}</Badge>
+              </div>
+
+              {cartItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No products added yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cartItems.map((item) => (
+                    <div key={item.product.id} className="rounded border p-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">{item.product.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatCurrencyFromCents(item.product.priceCents)} each
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            value={item.quantity}
+                            onChange={(e) => updateCartQuantity(item.product.id, Number(e.target.value))}
+                            className="w-20 text-right"
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => updateCartQuantity(item.product.id, 0)}
+                            aria-label="Remove item"
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-md border p-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Payment</Label>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={checkoutMode === "PAY_NOW" ? "default" : "outline"}
+                      onClick={() => setCheckoutMode("PAY_NOW")}
+                    >
+                      Pay now
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={checkoutMode === "INVOICE" ? "default" : "outline"}
+                      onClick={() => setCheckoutMode("INVOICE")}
+                    >
+                      Invoice only
+                    </Button>
+                  </div>
+                </div>
+                {checkoutMode === "PAY_NOW" ? (
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <Input
+                      placeholder="Method"
+                      value={checkoutMethod}
+                      onChange={(e) => setCheckoutMethod(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Note (optional)"
+                      value={checkoutNote}
+                      onChange={(e) => setCheckoutNote(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-2">
+                    <Input
+                      placeholder="Note (optional)"
+                      value={checkoutNote}
+                      onChange={(e) => setCheckoutNote(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button type="button" onClick={handleCheckout} disabled={checkingOut || cartItems.length === 0}>
+                  {checkingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {checkoutMode === "PAY_NOW" ? "Checkout & pay" : "Create invoice"}
+                </Button>
+                {cartItems.length > 0 ? (
+                  <Button type="button" variant="ghost" onClick={clearCart} disabled={checkingOut}>
+                    Clear basket
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

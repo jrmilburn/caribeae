@@ -113,6 +113,14 @@ export function InvoiceTable({
                 </TableCell>
                 <TableCell className="w-[200px]">
                   <div className="text-sm font-medium">{invoice.family?.name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {invoice.lineItems?.length
+                      ? invoice.lineItems
+                          .slice(0, 3)
+                          .map((item) => item.description)
+                          .join(", ")
+                      : "No line items"}
+                  </div>
                 </TableCell>
                 <TableCell className="w-[140px]">
                   <Badge variant={statusVariant(invoice.status)} className="rounded-full">

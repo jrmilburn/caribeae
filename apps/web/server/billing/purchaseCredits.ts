@@ -1,12 +1,13 @@
 "use server";
 
 import { addDays } from "date-fns";
-import { BillingType, InvoiceStatus } from "@prisma/client";
+import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { createInvoiceWithLineItems } from "./invoiceMutations";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -50,17 +51,22 @@ export async function purchaseCredits(input: PurchaseCreditsInput) {
   const issuedAt = new Date();
   const dueAt = addDays(issuedAt, 7);
 
-  const invoice = await prisma.invoice.create({
-    data: {
-      familyId: enrolment.student.familyId,
-      enrolmentId: enrolment.id,
-      amountCents,
-      amountPaidCents: 0,
-      status: InvoiceStatus.SENT,
-      creditsPurchased,
-      issuedAt,
-      dueAt,
-    },
+  const invoice = await createInvoiceWithLineItems({
+    familyId: enrolment.student.familyId,
+    enrolmentId: enrolment.id,
+    lineItems: [
+      {
+        kind: InvoiceLineItemKind.ENROLMENT,
+        description: enrolment.plan.name,
+        quantity: blocks,
+        unitPriceCents: enrolment.plan.priceCents,
+        amountCents,
+      },
+    ],
+    status: InvoiceStatus.SENT,
+    creditsPurchased,
+    issuedAt,
+    dueAt,
   });
 
   return { invoice, creditsPurchased };

@@ -37,6 +37,7 @@ export default async function getFamily(id: string) {
               plan: { select: { name: true, billingType: true } },
             },
           },
+          lineItems: true,
         },
         orderBy: { issuedAt: "desc" },
       },
