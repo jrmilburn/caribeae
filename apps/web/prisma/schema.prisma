@@ -365,6 +365,7 @@ model Payment {
   paidAt      DateTime @default(now())
   method      String?
   note        String?
+  idempotencyKey String?
 
   allocations PaymentAllocation[]
 
@@ -372,6 +373,7 @@ model Payment {
   updatedAt DateTime @updatedAt
 
   @@index([familyId, paidAt])
+  @@unique([familyId, idempotencyKey])
 }
 
 model PaymentAllocation {

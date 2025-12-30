@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Megaphone,         // or Send
   CreditCard,
+  HandCoins,
   Settings,
   Menu,
   ChevronDown,
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Message", href: "/admin/messages", icon: MessageSquare },     // ✅ direct/inbox
   { label: "Communications", href: "/admin/communications", icon: Megaphone }, // ✅ broadcast/announcements
   { label: "Billing", href: "/admin/billing", icon: CreditCard },         // ✅
+  { label: "Counter", href: "/admin/counter", icon: HandCoins },          // ✅
   { label: "Settings", href: "/admin/settings", icon: Settings },         // ✅
 ];
 
