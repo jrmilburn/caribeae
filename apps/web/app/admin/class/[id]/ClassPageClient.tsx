@@ -52,12 +52,18 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   }, [data.selectedDateKey, tab]);
 
   React.useEffect(() => {
-    if (!data.requestedDateValid && data.selectedDateKey && !isSameDateKey(data.selectedDateKey, requestedDateKey)) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("date", data.selectedDateKey);
-      params.set("tab", tab);
-      router.replace(`/admin/class/${data.template.id}?${params.toString()}`);
-    }
+    if (data.requestedDateValid) return;
+    if (!data.selectedDateKey) return;
+    if (isSameDateKey(data.selectedDateKey, requestedDateKey)) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("date", data.selectedDateKey);
+    params.set("tab", tab);
+
+    const targetSearch = params.toString();
+    if (targetSearch === searchParams.toString()) return;
+
+    router.replace(`/admin/class/${data.template.id}?${targetSearch}`);
   }, [data.requestedDateValid, data.selectedDateKey, requestedDateKey, router, searchParams, tab, data.template.id]);
 
   const classHeading = buildClassHeading(data);

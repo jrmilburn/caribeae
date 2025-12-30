@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { addDays, addMinutes, endOfDay, format, getISODay, startOfDay } from "date-fns";
 import type { Prisma } from "@prisma/client";
+import { formatDateKey } from "@/lib/dateKey";
 
 export type TemplateOccurrence = {
   id: string;
@@ -28,7 +29,32 @@ export async function getTemplateOccurrences(params: { from: Date; to: Date }): 
     include: { level: true, teacher: true },
   });
 
-  return templates.flatMap((template) => expandTemplateToRange(template, from, to));
+  const occurrences = templates.flatMap((template) => expandTemplateToRange(template, from, to));
+
+  if (!occurrences.length) return occurrences;
+
+  const substitutions = await prisma.teacherSubstitution.findMany({
+    where: {
+      templateId: { in: templates.map((t) => t.id) },
+      date: { gte: startOfDay(from), lte: endOfDay(to) },
+    },
+    include: { teacher: true },
+  });
+
+  const substitutionMap = new Map<string, Prisma.TeacherSubstitutionGetPayload<{ include: { teacher: true } }>>();
+  substitutions.forEach((sub) => {
+    substitutionMap.set(`${sub.templateId}-${formatDateKey(sub.date)}`, sub);
+  });
+
+  return occurrences.map((occ) => {
+    const sub = substitutionMap.get(`${occ.templateId}-${formatDateKey(occ.startTime)}`);
+    if (!sub) return occ;
+    return {
+      ...occ,
+      teacher: sub.teacher,
+      teacherId: sub.teacherId,
+    };
+  });
 }
 
 function expandTemplateToRange(

@@ -32,9 +32,6 @@ export async function enrolStudentWithPlan(input: EnrolmentWithPlanInput) {
   if (student?.levelId && student.levelId !== plan.levelId) {
     throw new Error("Student level must match enrolment plan level");
   }
-  if (plan.billingType === "PER_WEEK" && !plan.durationWeeks) {
-    throw new Error("Weekly plans require a duration");
-  }
   if (plan.billingType === "BLOCK" && !plan.blockClassCount) {
     throw new Error("Block plans require a class count");
   }
