@@ -1,0 +1,152 @@
+"use server";
+
+import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import type { Enrolment } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
+import { formatDateKey, parseDateKey } from "@/lib/dateKey";
+import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/class/[id]/types";
+
+export async function getClassPageData(templateId: string, requestedDateKey: string | undefined): Promise<ClassPageData | null> {
+  await getOrCreateUser();
+  await requireAdmin();
+
+  const template = await prisma.classTemplate.findUnique({
+    where: { id: templateId },
+    include: {
+      level: true,
+      teacher: true,
+      enrolments: {
+        include: {
+          student: true,
+          plan: true,
+        },
+      },
+    },
+  });
+
+  if (!template) return null;
+
+  const requestedDate = parseDateKey(requestedDateKey ?? null);
+  const availableDateKeys = buildRecentOccurrenceDateKeys(template, requestedDate);
+  const selectedDateKey =
+    requestedDate && availableDateKeys.includes(formatDateKey(requestedDate))
+      ? formatDateKey(requestedDate)
+      : availableDateKeys[availableDateKeys.length - 1] ?? null;
+
+  const selectedDate = parseDateKey(selectedDateKey);
+  const requestedDateValid =
+    !!requestedDate && !!selectedDate && requestedDate.getTime() === selectedDate.getTime();
+
+  const filteredEnrolments =
+    selectedDate === null
+      ? []
+      : template.enrolments.filter((enrolment) => isEnrolmentActive(enrolment, selectedDate));
+
+  const [teachers, levels, students, enrolmentPlans, substitution, attendance] = await Promise.all([
+    prisma.teacher.findMany({ orderBy: { name: "asc" } }),
+    prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
+    prisma.student.findMany({
+      where: { levelId: template.levelId },
+      orderBy: { name: "asc" },
+    }),
+    prisma.enrolmentPlan.findMany({ where: { levelId: template.levelId } }),
+    selectedDate
+      ? prisma.teacherSubstitution.findUnique({
+          where: { templateId_date: { templateId, date: selectedDate } },
+          include: { teacher: true },
+        })
+      : null,
+    selectedDate
+      ? prisma.attendance.findMany({
+          where: { templateId, date: selectedDate },
+          include: { student: true },
+          orderBy: { student: { name: "asc" } },
+        })
+      : [],
+  ]);
+
+  const effectiveTeacher = substitution?.teacher ?? template.teacher ?? null;
+
+  return {
+    template,
+    enrolmentsForDate: filteredEnrolments,
+    selectedDateKey,
+    requestedDateKey: requestedDateKey ?? null,
+    availableDateKeys: includeDateIfMissing(availableDateKeys, selectedDateKey),
+    requestedDateValid,
+    teacherSubstitution: substitution,
+    effectiveTeacher,
+    attendance,
+    teachers,
+    levels,
+    students,
+    enrolmentPlans,
+  };
+}
+
+function isEnrolmentActive(enrolment: Enrolment, at: Date) {
+  const start = startOfDay(enrolment.startDate);
+  const end = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
+  const onOrAfterStart = !isAfter(start, at);
+  const beforeEnd = end ? !isBefore(end, at) : true;
+  return onOrAfterStart && beforeEnd;
+}
+
+function includeDateIfMissing(dateKeys: string[], maybeDateKey: string | null) {
+  if (!maybeDateKey) return dateKeys;
+  if (dateKeys.includes(maybeDateKey)) return dateKeys;
+  return [...dateKeys, maybeDateKey].sort();
+}
+
+function buildRecentOccurrenceDateKeys(template: ClientTemplateWithInclusions, requestedDate: Date | null): string[] {
+  if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") return [];
+
+  const startDate = startOfDay(template.startDate);
+  const today = startOfDay(new Date());
+  const endDate = template.endDate ? startOfDay(template.endDate) : addDays(today, 28);
+
+  const firstOccurrence = nextMatchingDay(startDate, template.dayOfWeek);
+  const dates: string[] = [];
+
+  for (
+    let cursor = firstOccurrence;
+    !isAfter(cursor, endDate) && dates.length < 40;
+    cursor = addDays(cursor, 7)
+  ) {
+    dates.push(formatDateKey(cursor));
+  }
+
+  if (requestedDate) {
+    const requestedKey = formatDateKey(requestedDate);
+    if (!dates.includes(requestedKey)) dates.push(requestedKey);
+  }
+
+  dates.sort();
+  const cutoffTarget = dates.findIndex((d) => !isBeforeDateKey(d, formatDateKey(today)));
+  if (cutoffTarget === -1) {
+    return dates.slice(-8);
+  }
+
+  const endSlice = Math.min(dates.length, cutoffTarget + 3);
+  const startSlice = Math.max(0, endSlice - 8);
+  return dates.slice(startSlice, endSlice);
+}
+
+function isBeforeDateKey(a: string, b: string) {
+  const aDate = parseDateKey(a);
+  const bDate = parseDateKey(b);
+  if (!aDate || !bDate) return false;
+  return isBefore(aDate, bDate);
+}
+
+function nextMatchingDay(start: Date, targetDow: number) {
+  const target = ((targetDow % 7) + 7) % 7; // normalize
+  let cursor = startOfDay(start);
+  while (cursor.getDay() !== ((target + 1) % 7)) {
+    cursor = addDays(cursor, 1);
+  }
+  return cursor;
+}
