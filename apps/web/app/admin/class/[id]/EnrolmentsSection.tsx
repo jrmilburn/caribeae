@@ -15,19 +15,26 @@ export function EnrolmentsSection({
   classTemplate,
   students,
   enrolmentPlans,
+  dateKey,
 }: {
   classTemplate: ClientTemplateWithInclusions;
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
+  dateKey: string | null;
 }) {
   const [open, setOpen] = React.useState(false);
-
-  console.log(classTemplate);
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle className="text-base">Enrolments</CardTitle>
+        <div>
+          <CardTitle className="text-base">Enrolments</CardTitle>
+          {dateKey ? (
+            <p className="text-xs text-muted-foreground">Showing enrolments active on {dateKey}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">No occurrence selected</p>
+          )}
+        </div>
         <Button onClick={() => setOpen(true)}>Add enrolment</Button>
       </CardHeader>
       <CardContent className="space-y-4">
