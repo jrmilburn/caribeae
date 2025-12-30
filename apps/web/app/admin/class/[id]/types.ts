@@ -21,6 +21,17 @@ export type AttendanceEntryDTO = {
   note: string | null;
 };
 
+export type AttendanceChangeDTO = {
+  studentId: string;
+  status: AttendanceStatus | null;
+  note: string | null;
+};
+
+export type ClassOccurrenceRoster = {
+  enrolments: Prisma.EnrolmentGetPayload<{ include: { student: true; plan: true } }>[];
+  attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
+};
+
 export type ClassPageData = {
   template: ClientTemplateWithInclusions;
   enrolmentsForDate: ClientTemplateWithInclusions["enrolments"];
@@ -35,4 +46,5 @@ export type ClassPageData = {
   levels: Prisma.LevelGetPayload<true>[];
   students: Prisma.StudentGetPayload<true>[];
   enrolmentPlans: Prisma.EnrolmentPlanGetPayload<true>[];
+  roster: ClassOccurrenceRoster | null;
 };

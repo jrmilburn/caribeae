@@ -1,13 +1,13 @@
 "use server";
 
 import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
-import type { Enrolment } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { formatDateKey, parseDateKey } from "@/lib/dateKey";
 import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/class/[id]/types";
+import { getClassOccurrenceRoster } from "./getClassOccurrenceRoster";
 
 export async function getClassPageData(templateId: string, requestedDateKey: string | undefined): Promise<ClassPageData | null> {
   await getOrCreateUser();
@@ -39,12 +39,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
 
   const selectedDate = parseDateKey(selectedDateKey);
 
-  const filteredEnrolments =
-    selectedDate === null
-      ? []
-      : template.enrolments.filter((enrolment) => isEnrolmentActive(enrolment, selectedDate));
-
-  const [teachers, levels, students, enrolmentPlans, substitution, attendance] = await Promise.all([
+  const [teachers, levels, students, enrolmentPlans, substitution] = await Promise.all([
     prisma.teacher.findMany({ orderBy: { name: "asc" } }),
     prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
     prisma.student.findMany({
@@ -58,40 +53,29 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
           include: { teacher: true },
         })
       : null,
-    selectedDate
-      ? prisma.attendance.findMany({
-          where: { templateId, date: selectedDate },
-          include: { student: true },
-          orderBy: { student: { name: "asc" } },
-        })
-      : [],
   ]);
+
+  const roster =
+    selectedDateKey && selectedDate ? await getClassOccurrenceRoster(templateId, selectedDateKey) : null;
 
   const effectiveTeacher = substitution?.teacher ?? template.teacher ?? null;
 
   return {
     template,
-    enrolmentsForDate: filteredEnrolments,
+    enrolmentsForDate: roster?.enrolments ?? [],
     selectedDateKey,
     requestedDateKey: requestedDateKey ?? null,
     availableDateKeys: includeDateIfMissing(availableDateKeys, selectedDateKey),
     requestedDateValid,
     teacherSubstitution: substitution,
     effectiveTeacher,
-    attendance,
+    attendance: roster?.attendance ?? [],
     teachers,
     levels,
     students,
     enrolmentPlans,
+    roster,
   };
-}
-
-function isEnrolmentActive(enrolment: Enrolment, at: Date) {
-  const start = startOfDay(enrolment.startDate);
-  const end = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
-  const onOrAfterStart = !isAfter(start, at);
-  const beforeEnd = end ? !isBefore(end, at) : true;
-  return onOrAfterStart && beforeEnd;
 }
 
 function includeDateIfMissing(dateKeys: string[], maybeDateKey: string | null) {

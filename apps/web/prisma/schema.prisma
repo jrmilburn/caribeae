@@ -193,6 +193,8 @@ model Enrolment {
 
   @@index([studentId])
   @@index([templateId])
+  @@index([templateId, startDate])
+  @@index([templateId, endDate])
 }
 
 enum EnrolmentType {

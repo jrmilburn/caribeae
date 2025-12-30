@@ -32,7 +32,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const searchParams = useSearchParams();
 
   const initialTabValue: TabValue =
-    initialTab === "attendance" && data.selectedDateKey ? "attendance" : "enrolments";
+    data.selectedDateKey && (initialTab === "attendance" || requestedDateKey) ? "attendance" : "enrolments";
   const [tab, setTab] = React.useState<TabValue>(initialTabValue);
   const [effectiveTeacher, setEffectiveTeacher] = React.useState<Teacher | null>(data.effectiveTeacher);
   const [teacherSubstitution, setTeacherSubstitution] = React.useState(data.teacherSubstitution);
@@ -158,8 +158,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
             <AttendanceSection
               templateId={data.template.id}
               dateKey={selectedDateKey}
-              enrolments={data.enrolmentsForDate}
-              initialAttendance={data.attendance}
+              roster={data.roster}
             />
           </TabsContent>
         </Tabs>
