@@ -141,10 +141,11 @@ export function TemplateModal({
   const prefillDateKey = React.useMemo(() => (prefill?.date ? formatDateKey(prefill.date) : null), [prefill?.date]);
   const viewHref = template?.id ? buildClassHref(template.id, prefillDateKey, null) : null;
   const attendanceHref = template?.id ? buildClassHref(template.id, prefillDateKey, "attendance") : null;
-  const effectiveTeacher = React.useMemo(
-    () => teachers.find((t) => t.id === template?.teacherId) ?? null,
-    [teachers, template?.teacherId]
-  );
+  const effectiveTeacher = React.useMemo(() => {
+    const byTemplate = template?.teacherId ? teachers.find((t) => t.id === template.teacherId) ?? null : null;
+    const byPrefill = prefill?.teacherId ? teachers.find((t) => t.id === prefill.teacherId) ?? null : null;
+    return byPrefill ?? byTemplate ?? null;
+  }, [prefill?.teacherId, teachers, template?.teacherId]);
 
   // wizard step: 0 = basics, 1 = schedule/rules
   const [step, setStep] = React.useState<0 | 1>(0);

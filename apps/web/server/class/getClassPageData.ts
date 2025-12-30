@@ -30,15 +30,14 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
   if (!template) return null;
 
   const requestedDate = parseDateKey(requestedDateKey ?? null);
-  const availableDateKeys = buildRecentOccurrenceDateKeys(template, requestedDate);
-  const selectedDateKey =
-    requestedDate && availableDateKeys.includes(formatDateKey(requestedDate))
-      ? formatDateKey(requestedDate)
-      : availableDateKeys[availableDateKeys.length - 1] ?? null;
+  const requestedDateValid = isValidOccurrenceDate(template, requestedDate);
+
+  const availableDateKeys = buildRecentOccurrenceDateKeys(template, requestedDateValid ? requestedDate : null);
+  const selectedDateKey = requestedDateValid
+    ? formatDateKey(requestedDate as Date)
+    : availableDateKeys[availableDateKeys.length - 1] ?? null;
 
   const selectedDate = parseDateKey(selectedDateKey);
-  const requestedDateValid =
-    !!requestedDate && !!selectedDate && requestedDate.getTime() === selectedDate.getTime();
 
   const filteredEnrolments =
     selectedDate === null
@@ -99,6 +98,17 @@ function includeDateIfMissing(dateKeys: string[], maybeDateKey: string | null) {
   if (!maybeDateKey) return dateKeys;
   if (dateKeys.includes(maybeDateKey)) return dateKeys;
   return [...dateKeys, maybeDateKey].sort();
+}
+
+function isValidOccurrenceDate(template: ClientTemplateWithInclusions, date: Date | null) {
+  if (!date) return false;
+  if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") return false;
+  const start = startOfDay(template.startDate);
+  const end = template.endDate ? startOfDay(template.endDate) : null;
+  const matchesDay = date.getDay() === ((template.dayOfWeek + 1) % 7);
+  const afterStart = !isAfter(start, date);
+  const beforeEnd = end ? !isBefore(end, date) : true;
+  return matchesDay && afterStart && beforeEnd;
 }
 
 function buildRecentOccurrenceDateKeys(template: ClientTemplateWithInclusions, requestedDate: Date | null): string[] {
