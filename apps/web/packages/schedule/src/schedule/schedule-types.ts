@@ -55,6 +55,8 @@ export type ScheduleClass = {
   teacher?: Teacher | null;
   teacherId?: string | null;
   template?: ClassTemplate | null;
+  cancelled?: boolean;
+  cancellationReason?: string | null;
 };
 
 export type NormalizedScheduleClass = ScheduleClass & {

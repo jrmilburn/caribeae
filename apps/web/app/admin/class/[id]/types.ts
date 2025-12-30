@@ -42,6 +42,10 @@ export type ClassPageData = {
   teacherSubstitution: Prisma.TeacherSubstitutionGetPayload<{ include: { teacher: true } }> | null;
   effectiveTeacher: Prisma.TeacherGetPayload<true> | null;
   attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
+  cancellation: Prisma.ClassCancellationGetPayload<{ include: { createdBy: true } }> | null;
+  cancellationCredits: Prisma.EnrolmentAdjustmentGetPayload<{
+    include: { enrolment: { include: { student: true; plan: true } } };
+  }>[];
   teachers: Prisma.TeacherGetPayload<true>[];
   levels: Prisma.LevelGetPayload<true>[];
   students: Prisma.StudentGetPayload<true>[];

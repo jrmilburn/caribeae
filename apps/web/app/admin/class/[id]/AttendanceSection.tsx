@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +14,19 @@ type AttendanceSectionProps = {
   templateId: string;
   dateKey: string | null;
   roster: ClassOccurrenceRoster | null;
+  isCancelled?: boolean;
+  cancellationCredits?: Prisma.EnrolmentAdjustmentGetPayload<{
+    include: { enrolment: { include: { student: true; plan: true } } };
+  }>[];
 };
 
-export function AttendanceSection({ templateId, dateKey, roster }: AttendanceSectionProps) {
+export function AttendanceSection({
+  templateId,
+  dateKey,
+  roster,
+  isCancelled,
+  cancellationCredits,
+}: AttendanceSectionProps) {
   const [rows, setRows] = React.useState<AttendanceRowState[]>(() => buildRows(roster));
   const [saving, startSaving] = React.useTransition();
   const [message, setMessage] = React.useState<string | null>(null);
@@ -29,6 +40,7 @@ export function AttendanceSection({ templateId, dateKey, roster }: AttendanceSec
   const hasRoster = hasDate && rows.length > 0;
   const dirtyRows = rows.filter((row) => row.status !== row.initialStatus);
   const hasChanges = dirtyRows.length > 0;
+  const creditsCount = cancellationCredits?.length ?? 0;
 
   const handleStatusChange = (studentId: string, status: AttendanceRowState["status"]) => {
     setRows((prev) =>
@@ -99,18 +111,28 @@ export function AttendanceSection({ templateId, dateKey, roster }: AttendanceSec
               Unsaved changes
             </Badge>
           ) : null}
-          <Button onClick={handleSave} disabled={saving || !hasRoster}>
+          <Button onClick={handleSave} disabled={saving || !hasRoster || isCancelled}>
             {saving ? "Saving…" : "Save attendance"}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isCancelled ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            This occurrence is cancelled. Attendance is locked.
+            {creditsCount ? (
+              <div className="mt-1 text-xs text-muted-foreground">
+                {creditsCount} student{creditsCount === 1 ? "" : "s"} credited for this cancellation.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {!hasDate ? (
           <p className="text-sm text-muted-foreground">Select an occurrence date to view attendance.</p>
         ) : !rows.length ? (
           <p className="text-sm text-muted-foreground">No active enrolments for this date.</p>
         ) : (
-          <AttendanceTable rows={rows} onStatusChange={handleStatusChange} disabled={saving} />
+          <AttendanceTable rows={rows} onStatusChange={handleStatusChange} disabled={saving || isCancelled} />
         )}
 
         {message ? <p className="text-sm text-foreground">{message}</p> : null}
