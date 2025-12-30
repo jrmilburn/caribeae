@@ -23,8 +23,10 @@ model User {
 
   admin Boolean @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  classCancellations   ClassCancellation[]
+  enrolmentAdjustments EnrolmentAdjustment[]
 }
 
 model Family {
@@ -66,10 +68,11 @@ model Student {
   level   Level?  @relation(fields: [levelId], references: [id])
   levelId String?
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  enrolments  Enrolment[]
-  attendances Attendance[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  enrolments       Enrolment[]
+  attendances      Attendance[]
+  invoiceLineItems InvoiceLineItem[]
 }
 
 model ClassTemplate {
@@ -134,7 +137,7 @@ model ClassCancellation {
   reason String?
 
   createdById String?
-  createdBy   User? @relation(fields: [createdById], references: [id])
+  createdBy   User?   @relation(fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -185,7 +188,7 @@ model EnrolmentAdjustment {
   note                 String?
 
   createdById String?
-  createdBy   User? @relation(fields: [createdById], references: [id])
+  createdBy   User?   @relation(fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -251,8 +254,9 @@ model Enrolment {
 
   invoices Invoice[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  invoiceLineItems InvoiceLineItem[]
 
   @@index([studentId])
   @@index([templateId])
@@ -387,10 +391,10 @@ model Payment {
   familyId String
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
-  amountCents Int
-  paidAt      DateTime @default(now())
-  method      String?
-  note        String?
+  amountCents    Int
+  paidAt         DateTime @default(now())
+  method         String?
+  note           String?
   idempotencyKey String?
 
   allocations PaymentAllocation[]
@@ -398,9 +402,9 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([familyId, idempotencyKey])
   @@index([familyId, paidAt])
   @@index([paidAt])
-  @@unique([familyId, idempotencyKey])
 }
 
 model PaymentAllocation {
@@ -429,13 +433,13 @@ model InvoiceLineItem {
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   invoiceId String
 
-  kind        InvoiceLineItemKind
-  description String
-  quantity    Int  @default(1)
+  kind           InvoiceLineItemKind
+  description    String
+  quantity       Int                 @default(1)
   unitPriceCents Int
-  amountCents Int
+  amountCents    Int
 
-  product   Product?  @relation(fields: [productId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
   productId String?
 
   enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)

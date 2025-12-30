@@ -12,9 +12,12 @@ export const metadata: Metadata = {
 };
 
 export default async function AuditReportsPage({ searchParams }: { searchParams?: PageSearchParams }) {
-  const from = parseDateParam(searchParams?.from);
-  const to = parseDateParam(searchParams?.to);
-  const includeVoided = searchParams?.includeVoided === "true";
+
+  const search = await searchParams;
+
+  const from = parseDateParam(search?.from);
+  const to = parseDateParam(search?.to);
+  const includeVoided = search?.includeVoided === "true";
 
   const report = await getAuditReport({ from: from ?? undefined, to: to ?? undefined, includeVoided });
 
