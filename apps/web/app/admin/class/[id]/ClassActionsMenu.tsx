@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MoreHorizontal, NotebookText, Users2 } from "lucide-react";
+import { Ban, MoreHorizontal, NotebookText, RotateCcw, Users2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,9 +16,21 @@ type ClassActionsMenuProps = {
   templateId: string;
   dateKey: string | null;
   onSubstituteClick: () => void;
+  onCancelClick?: () => void;
+  onUncancelClick?: () => void;
+  isCancelled?: boolean;
+  busy?: boolean;
 };
 
-export function ClassActionsMenu({ templateId, dateKey, onSubstituteClick }: ClassActionsMenuProps) {
+export function ClassActionsMenu({
+  templateId,
+  dateKey,
+  onSubstituteClick,
+  onCancelClick,
+  onUncancelClick,
+  isCancelled,
+  busy,
+}: ClassActionsMenuProps) {
   const viewHref = buildHref(templateId, dateKey, null);
   const attendanceHref = buildHref(templateId, dateKey, "attendance");
 
@@ -60,6 +72,26 @@ export function ClassActionsMenu({ templateId, dateKey, onSubstituteClick }: Cla
           <DropdownMenuItem disabled className="flex items-center gap-2">
             <NotebookText className="h-4 w-4" />
             Take attendance
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        {isCancelled ? (
+          <DropdownMenuItem
+            onSelect={onUncancelClick}
+            disabled={!dateKey || !onUncancelClick || busy}
+            className="text-foreground"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reopen class
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            onSelect={onCancelClick}
+            disabled={!dateKey || !onCancelClick || busy}
+            className="text-destructive focus:text-destructive"
+          >
+            <Ban className="h-4 w-4" />
+            Cancel class
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

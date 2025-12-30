@@ -15,6 +15,8 @@ export type TemplateOccurrence = {
   teacher?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>['teacher'];
   teacherId?: string | null;
   template?: Prisma.ClassTemplateGetPayload<{ include: { level: true; teacher: true } }>;
+  cancelled?: boolean;
+  cancellationReason?: string | null;
 };
 
 export async function getTemplateOccurrences(params: { from: Date; to: Date }): Promise<TemplateOccurrence[]> {
@@ -41,18 +43,38 @@ export async function getTemplateOccurrences(params: { from: Date; to: Date }): 
     include: { teacher: true },
   });
 
+  const cancellations = await prisma.classCancellation.findMany({
+    where: {
+      templateId: { in: templates.map((t) => t.id) },
+      date: { gte: startOfDay(from), lte: endOfDay(to) },
+    },
+  });
+
   const substitutionMap = new Map<string, Prisma.TeacherSubstitutionGetPayload<{ include: { teacher: true } }>>();
   substitutions.forEach((sub) => {
     substitutionMap.set(`${sub.templateId}-${formatDateKey(sub.date)}`, sub);
   });
 
+  const cancellationMap = new Map<string, Prisma.ClassCancellation>();
+  cancellations.forEach((cancellation) => {
+    cancellationMap.set(`${cancellation.templateId}-${formatDateKey(cancellation.date)}`, cancellation);
+  });
+
   return occurrences.map((occ) => {
     const sub = substitutionMap.get(`${occ.templateId}-${formatDateKey(occ.startTime)}`);
-    if (!sub) return occ;
+    const cancellation = cancellationMap.get(`${occ.templateId}-${formatDateKey(occ.startTime)}`);
+    const withSubstitution = sub
+      ? {
+          ...occ,
+          teacher: sub.teacher,
+          teacherId: sub.teacherId,
+        }
+      : occ;
+
     return {
-      ...occ,
-      teacher: sub.teacher,
-      teacherId: sub.teacherId,
+      ...withSubstitution,
+      cancelled: Boolean(cancellation),
+      cancellationReason: cancellation?.reason ?? null,
     };
   });
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { EnrolmentAdjustmentType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -39,21 +40,39 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
 
   const selectedDate = parseDateKey(selectedDateKey);
 
-  const [teachers, levels, students, enrolmentPlans, substitution] = await Promise.all([
-    prisma.teacher.findMany({ orderBy: { name: "asc" } }),
-    prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
-    prisma.student.findMany({
-      where: { levelId: template.levelId },
-      orderBy: { name: "asc" },
-    }),
-    prisma.enrolmentPlan.findMany({ where: { levelId: template.levelId } }),
-    selectedDate
-      ? prisma.teacherSubstitution.findUnique({
-          where: { templateId_date: { templateId, date: selectedDate } },
-          include: { teacher: true },
-        })
-      : null,
-  ]);
+  const [teachers, levels, students, enrolmentPlans, substitution, cancellation, cancellationCredits] =
+    await Promise.all([
+      prisma.teacher.findMany({ orderBy: { name: "asc" } }),
+      prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
+      prisma.student.findMany({
+        where: { levelId: template.levelId },
+        orderBy: { name: "asc" },
+      }),
+      prisma.enrolmentPlan.findMany({ where: { levelId: template.levelId } }),
+      selectedDate
+        ? prisma.teacherSubstitution.findUnique({
+            where: { templateId_date: { templateId, date: selectedDate } },
+            include: { teacher: true },
+          })
+        : null,
+      selectedDate
+        ? prisma.classCancellation.findUnique({
+            where: { templateId_date: { templateId, date: selectedDate } },
+            include: { createdBy: true },
+          })
+        : null,
+      selectedDate
+        ? prisma.enrolmentAdjustment.findMany({
+            where: {
+              templateId,
+              date: selectedDate,
+              type: EnrolmentAdjustmentType.CANCELLATION_CREDIT,
+            },
+            include: { enrolment: { include: { student: true, plan: true } } },
+            orderBy: [{ enrolment: { student: { name: "asc" } } }],
+          })
+        : [],
+    ]);
 
   const roster =
     selectedDateKey && selectedDate ? await getClassOccurrenceRoster(templateId, selectedDateKey) : null;
@@ -70,6 +89,8 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     teacherSubstitution: substitution,
     effectiveTeacher,
     attendance: roster?.attendance ?? [],
+    cancellation,
+    cancellationCredits,
     teachers,
     levels,
     students,

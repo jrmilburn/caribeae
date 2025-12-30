@@ -177,6 +177,8 @@ export default function DayView(props: DayViewProps) {
           {/* Class blocks */}
           {classes.map((c) => {
             const colors = getTeacherColor(c.teacher?.id);
+            const isCancelled = Boolean(c.cancelled);
+            const canDrag = isDraggable && !isCancelled;
             const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
             const top = (startMinutes - GRID_START_MIN) * minuteHeight;
             const widthPct = 100 / c.columns;
@@ -184,9 +186,9 @@ export default function DayView(props: DayViewProps) {
             return (
               <div
                 key={c.id}
-                draggable={isDraggable}
+                draggable={canDrag}
                 onDragStart={
-                  isDraggable
+                  canDrag
                     ? (e) => {
                         e.dataTransfer.effectAllowed = "move";
                         e.dataTransfer.setData("text/plain", c.templateId ?? c.id);
@@ -196,7 +198,7 @@ export default function DayView(props: DayViewProps) {
                     : undefined
                 }
                 onDragEnd={
-                  isDraggable
+                  canDrag
                     ? () => {
                         clearDragImage();
                         setDraggingId(null);
@@ -212,8 +214,7 @@ export default function DayView(props: DayViewProps) {
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   draggingId === (c.templateId ?? c.id) && "opacity-0",
-                  colors.bg,
-                  colors.border
+                  isCancelled ? "bg-destructive/10 border-destructive text-destructive" : cn(colors.bg, colors.border)
                 )}
                 style={{
                   top: `${Math.max(0, top)}px`,
@@ -221,20 +222,24 @@ export default function DayView(props: DayViewProps) {
                   width: `calc(${widthPct}% - 6px)`,
                   left: `calc(${c.column * widthPct}% + 3px)`,
                 }}
-                title={c.level?.name ?? "Class"}
+                title={c.cancellationReason ?? c.level?.name ?? "Class"}
               >
                 <div className="flex flex-col gap-1 overflow-hidden leading-tight text-xs">
                   <div className="flex items-center gap-2 text-[11px]">
-                    <div className={cn("font-medium truncate", colors.text)}>
+                    <div className={cn("font-medium truncate", isCancelled ? "text-destructive" : colors.text)}>
                       {c.level?.name ?? "Class"}
                     </div>
                     <div className="ml-auto whitespace-nowrap text-muted-foreground">
                       {format(c.startTime, "h:mm a")} – {format(c.endTime, "h:mm a")}
                     </div>
                   </div>
-                  {c.teacher && (
+                  {isCancelled ? (
+                    <div className="text-[11px] font-semibold text-destructive">
+                      Cancelled{c.cancellationReason ? ` — ${c.cancellationReason}` : ""}
+                    </div>
+                  ) : c.teacher ? (
                     <div className={cn("text-[11px] truncate", colors.text)}>{c.teacher.name}</div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             );
