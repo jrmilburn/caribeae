@@ -35,6 +35,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
+import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
@@ -317,6 +318,14 @@ export default function FamilyInvoices({ family, billing }: Props) {
 
                       <AccordionContent className="pb-4">
                         <div className="space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs text-muted-foreground">Printable receipt</div>
+                            <PrintReceiptButton
+                              href={`/admin/invoice/${invoice.id}/receipt`}
+                              label="Print invoice receipt"
+                              size="sm"
+                            />
+                          </div>
                           {/* Line items */}
                           <div className="rounded-lg border bg-muted/10 p-3">
                             <div className="flex items-center justify-between">
@@ -386,6 +395,13 @@ export default function FamilyInvoices({ family, billing }: Props) {
                                       <span className="font-semibold">
                                         {formatCurrencyFromCents(a.amountCents)}
                                       </span>
+                                      <PrintReceiptButton
+                                        href={`/admin/payment/${a.paymentId}/receipt`}
+                                        label="Payment receipt"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs"
+                                      />
                                     </div>
 
                                     {a.note ? (
@@ -428,7 +444,15 @@ export default function FamilyInvoices({ family, billing }: Props) {
                         <span className="text-xs text-muted-foreground">{payment.method}</span>
                       ) : null}
                     </div>
-                    <span className="text-xs text-muted-foreground">ID: {payment.id}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">ID: {payment.id}</span>
+                      <PrintReceiptButton
+                        href={`/admin/payment/${payment.id}/receipt`}
+                        label="Print receipt"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
+                      />
+                    </div>
                   </div>
                   {payment.note ? (
                     <p className="mt-1 text-xs text-muted-foreground">{payment.note}</p>
