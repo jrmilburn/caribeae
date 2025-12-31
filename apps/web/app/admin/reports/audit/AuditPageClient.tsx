@@ -3,10 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, FileText, Loader2, Receipt, Wallet } from "lucide-react";
-import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, subDays } from "date-fns";
+import { endOfMonth, format, startOfMonth } from "date-fns";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrencyFromCents } from "@/lib/currency";
 
@@ -14,7 +14,6 @@ import type { AuditReport } from "@/server/reports/getAuditReport";
 
 import AuditFilters from "./components/AuditFilters";
 import CashReport from "./components/CashReport";
-import PresetRangeButtons from "./components/PresetRangeButtons";
 import SalesReport from "./components/SalesReport";
 
 function toDateInput(date: Date | null | undefined) {
@@ -91,13 +90,6 @@ export default function AuditPageClient({ report }: { report: AuditReport }) {
         </div>
       </div>
 
-      <Card className="border bg-card shadow-sm">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-base">Filters</CardTitle>
-          <p className="text-sm text-muted-foreground">Choose a date range or use quick presets.</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <AuditFilters
               from={from}
               to={to}
@@ -109,18 +101,6 @@ export default function AuditPageClient({ report }: { report: AuditReport }) {
               onReset={resetToThisMonth}
               isPending={isPending}
             />
-            <PresetRangeButtons
-              onSelect={setPresetRange}
-              presets={{
-                thisMonth: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) },
-                lastMonth: { from: startOfMonth(subDays(startOfMonth(new Date()), 1)), to: endOfMonth(subDays(startOfMonth(new Date()), 1)) },
-                last7: { from: subDays(new Date(), 6), to: new Date() },
-                thisWeek: { from: startOfWeek(new Date()), to: endOfWeek(new Date()) },
-              }}
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       <Tabs defaultValue="sales" className="space-y-4">
         <TabsList>

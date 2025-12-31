@@ -15,6 +15,8 @@ export default async function AuditReportsPage({ searchParams }: { searchParams?
 
   const search = await searchParams;
 
+  console.log(search);
+
   const from = parseDateParam(search?.from);
   const to = parseDateParam(search?.to);
   const includeVoided = search?.includeVoided === "true";
