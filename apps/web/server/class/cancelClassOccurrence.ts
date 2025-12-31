@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
+import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type CancelClassOccurrenceInput = {
   templateId: string;
@@ -40,7 +41,7 @@ export async function cancelClassOccurrence({ templateId, dateKey, reason }: Can
 
   const cleanReason = normalizeReason(reason);
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const template = await tx.classTemplate.findUnique({ where: { id: templateId } });
     if (!template) throw new Error("Class template not found");
 
@@ -126,4 +127,7 @@ export async function cancelClassOccurrence({ templateId, dateKey, reason }: Can
 
     return { cancellation, creditedAdjustments };
   });
+
+  await upsertTimesheetEntryForOccurrence({ templateId, date });
+  return result;
 }

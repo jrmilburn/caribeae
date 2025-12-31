@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
+import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type UncancelInput = {
   templateId: string;
@@ -20,7 +21,7 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
   const date = parseDateKey(dateKey);
   if (!date) throw new Error("Invalid date");
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const cancellation = await tx.classCancellation.findUnique({
       where: { templateId_date: { templateId, date } },
     });
@@ -62,4 +63,7 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
 
     return { removed: true, adjustmentsRemoved: adjustments.length };
   });
+
+  await upsertTimesheetEntryForOccurrence({ templateId, date });
+  return result;
 }

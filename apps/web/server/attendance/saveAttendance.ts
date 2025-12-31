@@ -1,12 +1,13 @@
 "use server";
 
-import { AttendanceStatus, EnrolmentStatus } from "@prisma/client";
+import { AttendanceStatus, EnrolmentStatus, TimesheetSource, TimesheetStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { AttendanceChangeDTO, AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
+import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type SaveAttendancePayload = {
   templateId: string;
@@ -88,6 +89,13 @@ export async function saveAttendance({
   );
 
   await prisma.$transaction(operations);
+
+  await upsertTimesheetEntryForOccurrence({
+    templateId,
+    date,
+    status: TimesheetStatus.CONFIRMED,
+    source: TimesheetSource.ATTENDANCE,
+  });
 
   return loadAttendance(templateId, date);
 }
