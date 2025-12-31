@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { formatCurrencyFromCents } from "@/lib/currency";
 
 import type { BillingPayment } from "@/server/billing/types";
@@ -146,6 +147,14 @@ function PaymentActions({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Payment</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onEdit(payment)}>View / Edit</DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <PrintReceiptButton
+            asChild
+            href={`/admin/payment/${payment.id}/receipt`}
+            label="Print receipt"
+            className="w-full justify-start text-sm"
+          />
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"

@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -199,6 +200,14 @@ function InvoiceActions({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Invoice</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onEdit(invoice)}>View / Edit</DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <PrintReceiptButton
+            asChild
+            href={`/admin/invoice/${invoice.id}/receipt`}
+            label="Print receipt"
+            className="w-full justify-start text-sm"
+          />
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={pending === "sent"}
