@@ -63,10 +63,15 @@ export function PayrollPageClient({ payRuns }: Props) {
           <h1 className="text-xl font-semibold">Payroll</h1>
           <p className="text-sm text-muted-foreground">Manage pay runs, lock, and mark paid.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create pay run
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push("/admin/payroll/hours")}>
+            Manual hours
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create pay run
+          </Button>
+        </div>
       </div>
 
       <Card>

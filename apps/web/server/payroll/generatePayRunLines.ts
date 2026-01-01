@@ -90,6 +90,7 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
       string,
       {
         teacherId: string;
+        staffName?: string | null;
         minutesTotal: number;
         grossCents: number;
         breakdown: RateBreakdown[];

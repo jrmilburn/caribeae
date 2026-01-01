@@ -13,14 +13,15 @@ import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
  * Audit-first notes (manual pay run lines):
  * - Only DRAFT pay runs can be mutated; locked/paid runs require retro adjustments.
  * - Dates normalized via normalizeLocalDate/startOfDay to align with timesheet entry.date.
- * - Manual lines are for non-teaching staff; they are stored as pay run lines with no teacherId and a staffName.
+ * - Manual lines are for non-teaching staff or ad-hoc shifts; they are stored as pay run lines with optional teacherId and staffName.
  * - rateBreakdownJson captures per-day minutes/rate for CSV exports.
  * - Uses integer math (minutes + cents) to avoid floating point issues.
  */
 
 const schema = z.object({
   payRunId: z.string().min(1),
-  staffName: z.string().trim().min(1),
+  teacherId: z.string().min(1).optional(),
+  staffName: z.string().trim().min(1).optional(),
   date: z.union([z.date(), z.string()]),
   minutes: z.number().int().positive(),
   hourlyRateCents: z.number().int().nonnegative(),
@@ -41,8 +42,11 @@ export async function addManualPayRunLine(input: AddManualPayRunLineInput) {
     if (!payRun) throw new Error("Pay run not found.");
     if (payRun.status !== PayRunStatus.DRAFT) throw new Error("Only draft pay runs can be edited.");
 
+    const staffLabel = payload.staffName ?? null;
+    const teacherId = payload.teacherId ?? null;
+
     const existing = await tx.payRunLine.findFirst({
-      where: { payRunId: payload.payRunId, teacherId: null, staffName: payload.staffName },
+      where: { payRunId: payload.payRunId, teacherId, staffName: staffLabel },
     });
 
     if (existing) {
@@ -66,7 +70,8 @@ export async function addManualPayRunLine(input: AddManualPayRunLineInput) {
       await tx.payRunLine.create({
         data: {
           payRunId: payload.payRunId,
-          staffName: payload.staffName,
+          staffName: staffLabel,
+          teacherId,
           minutesTotal: payload.minutes,
           grossCents: cents,
           hourlyRateCentsSnapshot: payload.hourlyRateCents,
