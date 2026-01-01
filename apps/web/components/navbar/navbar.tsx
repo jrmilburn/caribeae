@@ -57,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Communications", href: "/admin/communications", icon: Megaphone }, // ✅ broadcast/announcements
   { label: "Billing", href: "/admin/billing", icon: CreditCard },         // ✅
   { label: "Counter", href: "/admin/counter", icon: HandCoins },          // ✅
+  { label: "Payroll", href: "/admin/payroll", icon: HandCoins },          // ✅
   { label: "Teacher hours", href: "/admin/reports/teacher-hours", icon: Clock3 }, // ✅
   { label: "Reports", href: "/admin/reports/audit", icon: FileText },     // ✅
   { label: "Settings", href: "/admin/settings", icon: Settings },         // ✅
