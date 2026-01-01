@@ -27,6 +27,11 @@ model User {
   updatedAt            DateTime              @updatedAt
   classCancellations   ClassCancellation[]
   enrolmentAdjustments EnrolmentAdjustment[]
+  timesheetEntries     TeacherTimesheetEntry[]     @relation("TimesheetEntryCreator")
+  timesheetAdjustments TeacherTimesheetAdjustment[] @relation("TimesheetAdjustmentCreator")
+  teacherPayRates      TeacherPayRate[]            @relation("TeacherPayRateCreator")
+  payRuns              PayRun[]                    @relation("PayRunCreator")
+  payrollAdjustments   PayrollAdjustment[]         @relation("PayrollAdjustmentCreator")
 }
 
 model Family {
@@ -93,7 +98,7 @@ model ClassTemplate {
   level   Level  @relation(fields: [levelId], references: [id])
 
   teacherId String?
-  teacher   Teacher? @relation(fields: [teacherId], references: [id])
+  teacher   Teacher? @relation("ClassTemplateTeacher", fields: [teacherId], references: [id])
 
   timesheetEntries     TeacherTimesheetEntry[]
 
@@ -137,7 +142,10 @@ model TeacherTimesheetEntry {
   date DateTime
 
   teacherId String?
-  teacher   Teacher? @relation(fields: [teacherId], references: [id])
+  teacher   Teacher? @relation("TeacherTimesheetEntries", fields: [teacherId], references: [id])
+
+  payRunId String?
+  payRun   PayRun? @relation("PayRunEntries", fields: [payRunId], references: [id])
 
   minutesBase       Int
   minutesAdjustment Int   @default(0)
@@ -148,7 +156,7 @@ model TeacherTimesheetEntry {
 
   note        String?
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdBy   User?   @relation("TimesheetEntryCreator", fields: [createdById], references: [id])
 
   adjustments TeacherTimesheetAdjustment[]
 
@@ -158,6 +166,7 @@ model TeacherTimesheetEntry {
   @@unique([templateId, date])
   @@index([teacherId, date])
   @@index([date])
+  @@index([payRunId])
   @@index([templateId, date])
 }
 
@@ -171,7 +180,7 @@ model TeacherTimesheetAdjustment {
   reason       String?
 
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdBy   User?   @relation("TimesheetAdjustmentCreator", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -394,8 +403,106 @@ model Teacher {
 
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
-  classTemplates       ClassTemplate[]
+  classTemplates       ClassTemplate[]         @relation("ClassTemplateTeacher")
   teacherSubstitutions TeacherSubstitution[]
+  timesheetEntries     TeacherTimesheetEntry[] @relation("TeacherTimesheetEntries")
+  payRates             TeacherPayRate[]
+  payRunLines          PayRunLine[]
+  payrollAdjustments   PayrollAdjustment[]
+}
+
+model TeacherPayRate {
+  id String @id @default(cuid())
+
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+
+  hourlyRateCents Int
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("TeacherPayRateCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId, effectiveFrom])
+  @@unique([teacherId, effectiveFrom])
+}
+
+model PayRun {
+  id String @id @default(cuid())
+
+  periodStart DateTime
+  periodEnd   DateTime
+  status      PayRunStatus @default(DRAFT)
+
+  createdById String?
+  createdBy   User?   @relation("PayRunCreator", fields: [createdById], references: [id])
+
+  grossCents Int @default(0)
+
+  lines   PayRunLine[]
+  entries TeacherTimesheetEntry[] @relation("PayRunEntries")
+  payrollAdjustments PayrollAdjustment[] @relation("PayRunAdjustments")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([periodStart, periodEnd])
+}
+
+model PayRunLine {
+  id String @id @default(cuid())
+
+  payRunId String
+  payRun   PayRun @relation(fields: [payRunId], references: [id])
+
+  teacherId String?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id])
+  staffName String?
+
+  minutesTotal            Int
+  grossCents              Int
+  hourlyRateCentsSnapshot Int?
+  rateBreakdownJson       Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([payRunId, teacherId, staffName])
+}
+
+model PayrollAdjustment {
+  id String @id @default(cuid())
+
+  teacherId String
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+
+  date         DateTime
+  minutesDelta Int
+  centsDelta   Int   @default(0)
+  reason       String?
+
+  createdById String?
+  createdBy   User?   @relation("PayrollAdjustmentCreator", fields: [createdById], references: [id])
+
+  appliedPayRunId String?
+  appliedPayRun   PayRun? @relation("PayRunAdjustments", fields: [appliedPayRunId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId, date])
+  @@index([appliedPayRunId])
+}
+
+enum PayRunStatus {
+  DRAFT
+  LOCKED
+  PAID
+  VOID
 }
 
 model Product {
