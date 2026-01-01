@@ -6,8 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getPayRunDetail } from "@/server/payroll/getPayRunDetail";
 import { exportPayRunEntriesCsv, exportPayRunSummaryCsv } from "@/server/reports/payroll/exports";
+import { addManualPayRunLine } from "@/server/payroll/addManualPayRunLine";
+import { revalidatePath } from "next/cache";
 
 export const metadata: Metadata = {
   title: "Pay run",
@@ -19,6 +23,7 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
 
   const summaryExport = await exportPayRunSummaryCsv(params.id);
   const entryExport = await exportPayRunEntriesCsv(params.id);
+  const isDraft = payRun.status === "DRAFT";
 
   return (
     <div className="space-y-4 p-4 md:p-6">
@@ -45,6 +50,8 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
         </Button>
       </div>
 
+      {isDraft ? <ManualHoursForm payRunId={payRun.id} /> : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Lines</CardTitle>
@@ -53,7 +60,7 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Teacher</TableHead>
+                <TableHead>Staff</TableHead>
                 <TableHead className="text-right">Minutes</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
               </TableRow>
@@ -61,7 +68,7 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
             <TableBody>
               {payRun.lines.map((line) => (
                 <TableRow key={line.id}>
-                  <TableCell>{line.teacher.name}</TableCell>
+                  <TableCell>{line.teacher?.name ?? line.staffName ?? "Unassigned"}</TableCell>
                   <TableCell className="text-right text-sm">{line.minutesTotal}</TableCell>
                   <TableCell className="text-right text-sm font-medium">{formatCurrencyFromCents(line.grossCents)}</TableCell>
                 </TableRow>
@@ -105,5 +112,48 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ManualHoursForm({ payRunId }: { payRunId: string }) {
+  const handleAction = async (formData: FormData) => {
+    "use server";
+    const staffName = String(formData.get("staffName") ?? "");
+    const date = String(formData.get("date") ?? "");
+    const minutes = Number(formData.get("minutes") ?? 0);
+    const hourlyRateCents = Number(formData.get("hourlyRateCents") ?? 0);
+    await addManualPayRunLine({ payRunId, staffName, date, minutes, hourlyRateCents });
+    revalidatePath(`/admin/payroll/${payRunId}`);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Manual hours (non-teaching staff)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form action={handleAction} className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="space-y-1">
+            <Label>Staff name</Label>
+            <Input name="staffName" placeholder="Office staff" required />
+          </div>
+          <div className="space-y-1">
+            <Label>Date</Label>
+            <Input name="date" type="date" required />
+          </div>
+          <div className="space-y-1">
+            <Label>Minutes</Label>
+            <Input name="minutes" type="number" min="1" required />
+          </div>
+          <div className="space-y-1">
+            <Label>Hourly rate (cents)</Label>
+            <Input name="hourlyRateCents" type="number" min="0" required />
+          </div>
+          <div className="md:col-span-4">
+            <Button type="submit">Add hours</Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

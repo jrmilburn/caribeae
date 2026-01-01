@@ -19,7 +19,7 @@ export async function getPayRunDetail(id: string) {
     include: {
       lines: {
         include: { teacher: true },
-        orderBy: { teacher: { name: "asc" } },
+        orderBy: [{ staffName: "asc" }, { teacher: { name: "asc" } }],
       },
       entries: {
         include: {

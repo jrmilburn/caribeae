@@ -459,8 +459,9 @@ model PayRunLine {
   payRunId String
   payRun   PayRun @relation(fields: [payRunId], references: [id])
 
-  teacherId String
-  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  teacherId String?
+  teacher   Teacher? @relation(fields: [teacherId], references: [id])
+  staffName String?
 
   minutesTotal            Int
   grossCents              Int
@@ -470,7 +471,7 @@ model PayRunLine {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([payRunId, teacherId])
+  @@unique([payRunId, teacherId, staffName])
 }
 
 model PayrollAdjustment {

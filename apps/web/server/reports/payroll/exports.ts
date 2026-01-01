@@ -22,17 +22,51 @@ function toCsv(rows: (string | number | null | undefined)[][]) {
   return rows.map((row) => row.map((cell) => toCsvValue(cell)).join(",")).join("\n");
 }
 
+function minutesToHours(minutes: number) {
+  return (minutes / 60).toFixed(2);
+}
+
 export async function exportPayRunSummaryCsv(id: string) {
   const payRun = await getPayRunDetail(id);
   if (!payRun) throw new Error("Pay run not found");
 
   const rows: (string | number | null | undefined)[][] = [];
-  rows.push(["Teacher", "Minutes", "Gross"]);
+  rows.push(["Name", "Hours", "Minutes", "Days worked", "Gross"]);
+
+  const entryDatesByTeacher = new Map<string, Set<string>>();
+  payRun.entries.forEach((entry) => {
+    if (!entry.teacherId) return;
+    const set = entryDatesByTeacher.get(entry.teacherId) ?? new Set<string>();
+    set.add(format(entry.date, "yyyy-MM-dd"));
+    entryDatesByTeacher.set(entry.teacherId, set);
+  });
+
   payRun.lines.forEach((line) => {
-    rows.push([line.teacher.name, line.minutesTotal, formatCurrencyFromCents(line.grossCents)]);
+    const hours = minutesToHours(line.minutesTotal);
+    const dates =
+      line.teacherId && entryDatesByTeacher.has(line.teacherId)
+        ? Array.from(entryDatesByTeacher.get(line.teacherId) ?? []).sort().join(" | ")
+        : Array.isArray(line.rateBreakdownJson)
+          ? Array.from(
+              new Set(
+                (line.rateBreakdownJson as { date?: string }[])
+                  .map((b) => (b.date ? format(new Date(b.date), "yyyy-MM-dd") : undefined))
+                  .filter(Boolean) as string[]
+              )
+            )
+              .sort()
+              .join(" | ")
+          : "";
+    rows.push([
+      line.teacher?.name ?? line.staffName ?? "Unassigned",
+      hours,
+      line.minutesTotal,
+      dates,
+      formatCurrencyFromCents(line.grossCents),
+    ]);
   });
   rows.push([]);
-  rows.push(["Total gross", formatCurrencyFromCents(payRun.grossCents)]);
+  rows.push(["Total gross", "", "", "", formatCurrencyFromCents(payRun.grossCents)]);
 
   const filename = `pay-run-${format(payRun.periodStart, "yyyyMMdd")}-to-${format(payRun.periodEnd, "yyyyMMdd")}-summary.csv`;
   return { filename, content: toCsv(rows) };
@@ -44,32 +78,56 @@ export async function exportPayRunEntriesCsv(id: string) {
 
   const rows: (string | number | null | undefined)[][] = [];
   rows.push([
-    "Teacher",
+    "Name",
     "Date",
-    "Template",
-    "Level",
+    "Template/Source",
     "Status",
-    "Minutes final",
+    "Minutes",
+    "Hours",
     "Gross at rate",
     "Rate cents",
   ]);
 
-  const rateByTeacher = new Map(payRun.lines.map((l) => [l.teacherId, l.hourlyRateCentsSnapshot ?? null]));
+  const rateByKey = new Map(
+    payRun.lines.map((l) => {
+      const key = l.teacherId ?? `staff:${l.staffName ?? ""}`;
+      return [key, l.hourlyRateCentsSnapshot ?? null];
+    })
+  );
 
   payRun.entries.forEach((entry) => {
-    const rate = rateByTeacher.get(entry.teacherId ?? "");
+    const rate = rateByKey.get(entry.teacherId ?? "");
     const cents = rate ? Math.round((entry.minutesFinal * rate) / 60) : null;
     rows.push([
       entry.teacher?.name ?? "Unassigned",
       format(entry.date, "yyyy-MM-dd"),
       entry.template.name ?? "Class",
-      entry.template.level.name,
       entry.status,
       entry.minutesFinal,
+      minutesToHours(entry.minutesFinal),
       cents ? formatCurrencyFromCents(cents) : "",
       rate ?? "",
     ]);
   });
+
+  payRun.lines
+    .filter((line) => !line.teacherId && Array.isArray(line.rateBreakdownJson))
+    .forEach((line) => {
+      (line.rateBreakdownJson as { date?: string; minutes?: number; hourlyRateCents?: number; cents?: number }[]).forEach(
+        (b) => {
+          rows.push([
+            line.staffName ?? "Staff",
+            b.date ? format(new Date(b.date), "yyyy-MM-dd") : "",
+            "Manual",
+            "CONFIRMED",
+            b.minutes ?? line.minutesTotal,
+            minutesToHours(b.minutes ?? line.minutesTotal),
+            b.cents ? formatCurrencyFromCents(b.cents) : formatCurrencyFromCents(line.grossCents),
+            b.hourlyRateCents ?? line.hourlyRateCentsSnapshot ?? "",
+          ]);
+        }
+      );
+    });
 
   const filename = `pay-run-${format(payRun.periodStart, "yyyyMMdd")}-to-${format(payRun.periodEnd, "yyyyMMdd")}-entries.csv`;
   return { filename, content: toCsv(rows) };

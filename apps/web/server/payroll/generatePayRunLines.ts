@@ -47,7 +47,7 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
       throw new Error("Only draft pay runs can be regenerated.");
     }
 
-    const [entries, rateWindows, retroAdjustments] = await Promise.all([
+    const [entries, rateWindows, retroAdjustments, manualLines] = await Promise.all([
       tx.teacherTimesheetEntry.findMany({
         where: {
           date: { gte: payRun.periodStart, lte: payRun.periodEnd },
@@ -65,6 +65,9 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
           appliedPayRunId: null,
           date: { gte: payRun.periodStart, lte: payRun.periodEnd },
         },
+      }),
+      tx.payRunLine.findMany({
+        where: { payRunId: payRun.id, teacherId: null },
       }),
     ]);
 
@@ -149,12 +152,12 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
       throw new Error(`Missing pay rates for: ${Array.from(new Set(missingRates)).join(", ")}`);
     }
 
-    // Clean slate before re-linking.
+    // Clean slate before re-linking: keep manual lines (teacherId null) intact.
     await tx.teacherTimesheetEntry.updateMany({
       where: { payRunId: payRun.id },
       data: { payRunId: null },
     });
-    await tx.payRunLine.deleteMany({ where: { payRunId: payRun.id } });
+    await tx.payRunLine.deleteMany({ where: { payRunId: payRun.id, teacherId: { not: null } } });
 
     const eligibleEntryIds = entries
       .filter((e) => e.teacherId && e.status !== TimesheetStatus.CANCELLED)
@@ -167,7 +170,7 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
       });
     }
 
-    let grossTotal = 0;
+    let grossTotal = manualLines.reduce((acc, line) => acc + line.grossCents, 0);
     if (lines.size > 0) {
       const createData: Prisma.PayRunLineCreateManyInput[] = [];
       lines.forEach((line) => {
