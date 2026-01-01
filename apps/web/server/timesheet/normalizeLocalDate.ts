@@ -1,4 +1,3 @@
-"use server";
 
 import { isValid, parseISO, startOfDay } from "date-fns";
 import { z } from "zod";

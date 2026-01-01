@@ -18,11 +18,12 @@ export const metadata: Metadata = {
 };
 
 export default async function PayRunDetailPage({ params }: { params: { id: string } }) {
-  const payRun = await getPayRunDetail(params.id);
+  const payRunParams = await params;
+  const payRun = await getPayRunDetail(payRunParams.id);
   if (!payRun) return notFound();
 
-  const summaryExport = await exportPayRunSummaryCsv(params.id);
-  const entryExport = await exportPayRunEntriesCsv(params.id);
+  const summaryExport = await exportPayRunSummaryCsv(payRunParams.id);
+  const entryExport = await exportPayRunEntriesCsv(payRunParams.id);
   const isDraft = payRun.status === "DRAFT";
 
   return (

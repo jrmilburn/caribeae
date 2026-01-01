@@ -23,15 +23,15 @@ model User {
 
   admin Boolean @default(false)
 
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
   classCancellations   ClassCancellation[]
   enrolmentAdjustments EnrolmentAdjustment[]
-  timesheetEntries     TeacherTimesheetEntry[]     @relation("TimesheetEntryCreator")
+  timesheetEntries     TeacherTimesheetEntry[]      @relation("TimesheetEntryCreator")
   timesheetAdjustments TeacherTimesheetAdjustment[] @relation("TimesheetAdjustmentCreator")
-  teacherPayRates      TeacherPayRate[]            @relation("TeacherPayRateCreator")
-  payRuns              PayRun[]                    @relation("PayRunCreator")
-  payrollAdjustments   PayrollAdjustment[]         @relation("PayrollAdjustmentCreator")
+  teacherPayRates      TeacherPayRate[]             @relation("TeacherPayRateCreator")
+  payRuns              PayRun[]                     @relation("PayRunCreator")
+  payrollAdjustments   PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
 }
 
 model Family {
@@ -100,7 +100,7 @@ model ClassTemplate {
   teacherId String?
   teacher   Teacher? @relation("ClassTemplateTeacher", fields: [teacherId], references: [id])
 
-  timesheetEntries     TeacherTimesheetEntry[]
+  timesheetEntries TeacherTimesheetEntry[]
 
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
@@ -148,7 +148,7 @@ model TeacherTimesheetEntry {
   payRun   PayRun? @relation("PayRunEntries", fields: [payRunId], references: [id])
 
   minutesBase       Int
-  minutesAdjustment Int   @default(0)
+  minutesAdjustment Int @default(0)
   minutesFinal      Int
 
   status TimesheetStatus
@@ -401,8 +401,8 @@ model Teacher {
   phone    String?
   email    String?
 
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
   classTemplates       ClassTemplate[]         @relation("ClassTemplateTeacher")
   teacherSubstitutions TeacherSubstitution[]
   timesheetEntries     TeacherTimesheetEntry[] @relation("TeacherTimesheetEntries")
@@ -427,8 +427,8 @@ model TeacherPayRate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([teacherId, effectiveFrom])
   @@unique([teacherId, effectiveFrom])
+  @@index([teacherId, effectiveFrom])
 }
 
 model PayRun {
@@ -443,9 +443,9 @@ model PayRun {
 
   grossCents Int @default(0)
 
-  lines   PayRunLine[]
-  entries TeacherTimesheetEntry[] @relation("PayRunEntries")
-  payrollAdjustments PayrollAdjustment[] @relation("PayRunAdjustments")
+  lines              PayRunLine[]
+  entries            TeacherTimesheetEntry[] @relation("PayRunEntries")
+  payrollAdjustments PayrollAdjustment[]     @relation("PayRunAdjustments")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -482,7 +482,7 @@ model PayrollAdjustment {
 
   date         DateTime
   minutesDelta Int
-  centsDelta   Int   @default(0)
+  centsDelta   Int      @default(0)
   reason       String?
 
   createdById String?

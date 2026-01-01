@@ -1,4 +1,3 @@
-"use server";
 
 import type { Prisma } from "@prisma/client";
 
