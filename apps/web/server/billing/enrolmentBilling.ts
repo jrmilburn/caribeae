@@ -325,6 +325,23 @@ async function computeBillingSnapshot(
   return computeCreditPaidThroughInternal(tx, enrolment, asOfDate);
 }
 
+function paidThroughFromClassCount(params: {
+  enrolment: EnrolmentWithPlanTemplate;
+  totalClasses: number;
+}) {
+  const { enrolment, totalClasses } = params;
+  if (totalClasses <= 0) return startOfDay(enrolment.startDate);
+
+  const startWindow = startOfDay(enrolment.startDate);
+  const first = nextOccurrenceOnOrAfter(startWindow, enrolment.template.dayOfWeek) ?? startWindow;
+  const last = addDays(first, 7 * Math.max(totalClasses - 1, 0));
+  if (enrolment.endDate) {
+    const end = startOfDay(enrolment.endDate);
+    return isAfter(last, end) ? end : last;
+  }
+  return last;
+}
+
 async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: EnrolmentBillingSnapshot) {
   await tx.enrolment.update({
     where: { id: snapshot.enrolmentId },
@@ -433,8 +450,10 @@ export async function applyEntitlementsForInvoice(
             ? plan.blockLength
             : 1;
       const totalClasses = classesPerBlock * Math.max(enrolmentItemsQuantity, 1);
-      const rawPaidThrough = addWeeks(enrolmentStart, totalClasses);
-      const boundedPaidThrough = enrolmentEnd && isAfter(rawPaidThrough, enrolmentEnd) ? enrolmentEnd : rawPaidThrough;
+      const boundedPaidThrough = paidThroughFromClassCount({
+        enrolment,
+        totalClasses,
+      });
       await tx.enrolment.update({
         where: { id: invoice.enrolment.id },
         data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
