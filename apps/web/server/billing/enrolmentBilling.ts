@@ -19,7 +19,7 @@
  *   getEnrolmentBillingStatus, ensuring all surfaces share the same selector.
  */
 
-import { addDays, isAfter, startOfDay } from "date-fns";
+import { addDays, addWeeks, isAfter, startOfDay } from "date-fns";
 import {
   BillingType,
   EnrolmentAdjustmentType,
@@ -244,7 +244,7 @@ async function computeCreditPaidThroughInternal(
 
   const startWindow = isAfter(today, enrolment.startDate) ? today : startOfDay(enrolment.startDate);
   const endWindow = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
-  const horizon = endWindow ?? addDays(startWindow, Math.max(remaining, 1) * 7 + 28);
+  const horizon = endWindow ?? addDays(startWindow, Math.max(balance, 1) * 7 + 28);
   const cancelled = await tx.classCancellation.findMany({
     where: {
       templateId: enrolment.templateId,
@@ -392,7 +392,7 @@ export async function applyEntitlementsForInvoice(
       where: { id: invoiceId },
       include: {
         enrolment: { include: { plan: true, template: true } },
-        lineItems: { select: { kind: true } },
+        lineItems: { select: { kind: true, quantity: true } },
       },
     });
 
@@ -402,23 +402,41 @@ export async function applyEntitlementsForInvoice(
     if (invoice.status !== InvoiceStatus.PAID) return invoice;
 
     const plan = invoice.enrolment.plan;
+    const enrolmentStart = startOfDay(invoice.enrolment.startDate);
+    const enrolmentEnd = invoice.enrolment.endDate ? startOfDay(invoice.enrolment.endDate) : null;
+    const enrolmentItemsQuantity = invoice.lineItems
+      .filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT)
+      .reduce((sum, li) => sum + (li.quantity ?? 1), 0);
 
     if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
       await tx.enrolment.update({
         where: { id: invoice.enrolment.id },
         data: { paidThroughDate: invoice.coverageEnd },
       });
-    } else if (
-      [BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType) &&
-      invoice.creditsPurchased
-    ) {
-      await recordCreditEvent(tx, {
-        enrolmentId: invoice.enrolment.id,
-        type: EnrolmentCreditEventType.PURCHASE,
-        creditsDelta: invoice.creditsPurchased,
-        occurredOn: invoice.paidAt ?? new Date(),
-        note: "Invoice paid",
-        invoiceId: invoice.id,
+    } else if ([BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType)) {
+      if (invoice.creditsPurchased) {
+        await recordCreditEvent(tx, {
+          enrolmentId: invoice.enrolment.id,
+          type: EnrolmentCreditEventType.PURCHASE,
+          creditsDelta: invoice.creditsPurchased,
+          occurredOn: invoice.paidAt ?? new Date(),
+          note: "Invoice paid",
+          invoiceId: invoice.id,
+        });
+      }
+
+      const classesPerBlock =
+        plan.blockClassCount && plan.blockClassCount > 0
+          ? plan.blockClassCount
+          : plan.blockLength && plan.blockLength > 0
+            ? plan.blockLength
+            : 1;
+      const totalClasses = classesPerBlock * Math.max(enrolmentItemsQuantity, 1);
+      const rawPaidThrough = addWeeks(enrolmentStart, totalClasses);
+      const boundedPaidThrough = enrolmentEnd && isAfter(rawPaidThrough, enrolmentEnd) ? enrolmentEnd : rawPaidThrough;
+      await tx.enrolment.update({
+        where: { id: invoice.enrolment.id },
+        data: { paidThroughDate: boundedPaidThrough },
       });
     }
 
