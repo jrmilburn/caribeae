@@ -1,6 +1,6 @@
 "use server";
 
-import { differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
+import { addDays, differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
 import { BillingType, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -64,6 +64,46 @@ function blockSize(plan: Prisma.EnrolmentPlan | null | undefined) {
     return plan.blockClassCount ?? 1;
   }
   return 0;
+}
+
+function nextOccurrenceOnOrAfter(start: Date, templateDayOfWeek: number | null | undefined) {
+  if (templateDayOfWeek == null) return null;
+  const target = ((templateDayOfWeek % 7) + 7) % 7; // 0 = Monday
+  let cursor = startOfDay(start);
+  while (cursor.getDay() !== ((target + 1) % 7)) {
+    cursor = addDays(cursor, 1);
+  }
+  return cursor;
+}
+
+function projectCreditCoverageEnd(params: {
+  creditsRemaining: number;
+  template: { dayOfWeek: number | null; startDate: Date | string; endDate?: Date | string | null } | null;
+  enrolmentStart: Date | string;
+}) {
+  const { creditsRemaining, template } = params;
+  if (!template || creditsRemaining <= 0) return null;
+
+  const enrolmentStart = startOfDay(params.enrolmentStart instanceof Date ? params.enrolmentStart : new Date(params.enrolmentStart));
+  const today = startOfDay(new Date());
+  const windowStart = isAfter(today, enrolmentStart) ? today : enrolmentStart;
+  const windowEnd = template.endDate ? startOfDay(template.endDate instanceof Date ? template.endDate : new Date(template.endDate)) : null;
+
+  if (windowEnd && isAfter(windowStart, windowEnd)) return null;
+
+  let occurrence = nextOccurrenceOnOrAfter(windowStart, template.dayOfWeek);
+  if (!occurrence) return null;
+
+  let remaining = creditsRemaining;
+  let lastCovered: Date | null = null;
+
+  while (remaining > 0 && occurrence && (!windowEnd || !isAfter(occurrence, windowEnd))) {
+    lastCovered = occurrence;
+    remaining -= 1;
+    occurrence = addDays(occurrence, 7);
+  }
+
+  return lastCovered;
 }
 
 export async function getFamilyBillingPosition(familyId: string, options?: { client?: PrismaClientOrTx }) {
@@ -168,6 +208,20 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       const paidThroughDate = asDate(enrolment.paidThroughDate);
       const creditsRemaining = enrolment.creditsRemaining ?? 0;
       const latestCoverageEnd = latestCoverageMap.get(enrolment.id) ?? null;
+      const projectedCoverageEnd =
+        plan?.billingType === BillingType.PER_WEEK
+          ? paidThroughDate ?? latestCoverageEnd
+          : projectCreditCoverageEnd({
+              creditsRemaining,
+              template: enrolment.template
+                ? {
+                    dayOfWeek: enrolment.template.dayOfWeek,
+                    startDate: enrolment.template.startDate,
+                    endDate: enrolment.template.endDate,
+                  }
+                : null,
+              enrolmentStart: enrolment.startDate,
+            });
       const thresholdCredits = blockSize(plan);
 
       const { status } = evaluateEntitlement({
@@ -189,6 +243,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         blockClassCount: plan?.blockClassCount ?? plan?.blockLength ?? null,
         creditsRemaining,
         paidThroughDate,
+        projectedCoverageEnd,
         startDate: asDate(enrolment.startDate),
         endDate: asDate(enrolment.endDate),
         templateName: enrolment.template?.name ?? null,
@@ -202,7 +257,9 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   });
 
   const enrolmentsFlat = students.flatMap((s) => s.enrolments);
-  const latestPaidThroughDates = enrolmentsFlat.map((e) => e.paidThroughDate).filter(Boolean) as Date[];
+  const latestPaidThroughDates = enrolmentsFlat
+    .map((e) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
+    .filter(Boolean) as Date[];
   const paidThroughLatest = latestPaidThroughDates.length
     ? latestPaidThroughDates.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
     : null;
