@@ -435,34 +435,34 @@ export async function applyEntitlementsForInvoice(
     if (invoice.creditsPurchased) {
       await recordCreditEvent(tx, {
         enrolmentId: invoice.enrolment.id,
-          type: EnrolmentCreditEventType.PURCHASE,
-          creditsDelta: invoice.creditsPurchased,
-          occurredOn: invoice.paidAt ?? new Date(),
-          note: "Invoice paid",
-          invoiceId: invoice.id,
-        });
-      }
-
-      const classesPerBlock =
-        plan.blockClassCount && plan.blockClassCount > 0
-          ? plan.blockClassCount
-          : plan.blockLength && plan.blockLength > 0
-            ? plan.blockLength
-            : 1;
-      const totalClasses = classesPerBlock * Math.max(enrolmentItemsQuantity, 1);
-      const boundedPaidThrough = paidThroughFromClassCount({
-        enrolment,
-        totalClasses,
-      });
-      await tx.enrolment.update({
-        where: { id: invoice.enrolment.id },
-        data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
+        type: EnrolmentCreditEventType.PURCHASE,
+        creditsDelta: invoice.creditsPurchased,
+        occurredOn: invoice.paidAt ?? new Date(),
+        note: "Invoice paid",
+        invoiceId: invoice.id,
       });
     }
 
-    await getEnrolmentBillingStatus(invoice.enrolment.id, { client: tx });
-    return invoice;
-  });
+    const classesPerBlock =
+      plan.blockClassCount && plan.blockClassCount > 0
+        ? plan.blockClassCount
+        : plan.blockLength && plan.blockLength > 0
+          ? plan.blockLength
+          : 1;
+    const totalClasses = classesPerBlock * Math.max(enrolmentItemsQuantity, 1);
+    const boundedPaidThrough = paidThroughFromClassCount({
+      enrolment: invoice.enrolment,
+      totalClasses,
+    });
+    await tx.enrolment.update({
+      where: { id: invoice.enrolment.id },
+      data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
+    });
+  }
+
+  await getEnrolmentBillingStatus(invoice.enrolment.id, { client: tx });
+  return invoice;
+});
 }
 
 export async function registerCancellationCredit(
