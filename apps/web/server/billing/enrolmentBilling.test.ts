@@ -1,5 +1,4 @@
 import assert from "node:assert";
-import { startOfDay } from "date-fns";
 
 import { buildOccurrenceSchedule, consumeOccurrencesForCredits } from "./occurrenceWalker";
 
@@ -9,7 +8,7 @@ type TemplateSeed = {
 };
 
 function d(input: string) {
-  return startOfDay(new Date(input));
+  return new Date(`${input}T00:00:00.000Z`);
 }
 
 function scheduleFromTemplates(
