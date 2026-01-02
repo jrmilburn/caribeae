@@ -553,6 +553,7 @@ model Invoice {
   coverageStart    DateTime?
   coverageEnd      DateTime?
   creditsPurchased Int?
+  entitlementsAppliedAt DateTime?
 
   issuedAt DateTime  @default(now())
   dueAt    DateTime?

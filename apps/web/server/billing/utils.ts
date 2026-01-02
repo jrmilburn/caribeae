@@ -2,7 +2,7 @@
 import { isBefore } from "date-fns";
 import { InvoiceStatus, Prisma } from "@prisma/client";
 
-import { applyEntitlementsForInvoice } from "./enrolmentBilling";
+import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 
 export function nextInvoiceStatus(params: {
   invoice: { status: InvoiceStatus; amountCents: number; dueAt: Date | null; issuedAt: Date | null };
@@ -43,7 +43,7 @@ export async function adjustInvoicePayment(
     where: { id: invoiceId },
     include: {
       enrolment: { include: { plan: true } },
-      lineItems: { select: { kind: true } },
+      lineItems: { select: { kind: true, quantity: true } },
       _count: { select: { lineItems: true } },
     },
   });
@@ -68,7 +68,10 @@ export async function adjustInvoicePayment(
 
   const hasEnrolmentLineItem = (invoice._count?.lineItems ?? 0) === 0 ? false : true;
   if (status === InvoiceStatus.PAID && invoice.status !== InvoiceStatus.PAID && hasEnrolmentLineItem) {
-    await applyEntitlementsForInvoice(invoiceId, { client: tx });
+    await applyPaidInvoiceToEnrolment(invoiceId, {
+      client: tx,
+      invoice: { ...invoice, status },
+    });
   }
 
   return updated;

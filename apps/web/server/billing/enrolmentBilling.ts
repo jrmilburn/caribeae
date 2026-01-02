@@ -18,15 +18,7 @@
  */
 
 import { isAfter } from "date-fns";
-import {
-  BillingType,
-  EnrolmentAdjustmentType,
-  EnrolmentCreditEventType,
-  EnrolmentStatus,
-  InvoiceLineItemKind,
-  InvoiceStatus,
-  type Prisma,
-} from "@prisma/client";
+import { BillingType, EnrolmentAdjustmentType, EnrolmentCreditEventType, EnrolmentStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -395,103 +387,6 @@ export async function getBillingStatusForEnrolments(
     }
     return map;
   });
-}
-
-export async function applyEntitlementsForInvoice(
-  invoiceId: string,
-  options?: { client?: PrismaClientOrTx }
-) {
-  return withTx(options?.client, async (tx) => {
-    const invoice = await tx.invoice.findUnique({
-      where: { id: invoiceId },
-      include: {
-        enrolment: { include: { plan: true, template: true } },
-        lineItems: { select: { kind: true, quantity: true } },
-      },
-    });
-
-    if (!invoice?.enrolment?.plan) return invoice;
-    const hasEnrolmentItem = invoice.lineItems.some((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
-    if (!hasEnrolmentItem) return invoice;
-    if (invoice.status !== InvoiceStatus.PAID) return invoice;
-
-    const plan = invoice.enrolment.plan;
-    const enrolmentStart = normalizeDate(invoice.enrolment.startDate);
-    const enrolmentEnd = invoice.enrolment.endDate ? normalizeDate(invoice.enrolment.endDate) : null;
-    const enrolmentItemsQuantity = invoice.lineItems
-      .filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT)
-      .reduce((sum, li) => sum + (li.quantity ?? 1), 0);
-
-  if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
-    await tx.enrolment.update({
-      where: { id: invoice.enrolment.id },
-      data: { paidThroughDate: invoice.coverageEnd, paidThroughDateComputed: invoice.coverageEnd },
-    });
-  } else if ([BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType)) {
-    const classesPerBlock =
-      plan.blockClassCount && plan.blockClassCount > 0
-        ? plan.blockClassCount
-        : plan.blockLength && plan.blockLength > 0
-          ? plan.blockLength
-          : 1;
-    const totalClasses =
-      (invoice.creditsPurchased && invoice.creditsPurchased > 0
-        ? invoice.creditsPurchased
-        : classesPerBlock * Math.max(enrolmentItemsQuantity, 1)) ?? 0;
-
-    if (totalClasses > 0) {
-      await recordCreditEvent(tx, {
-        enrolmentId: invoice.enrolment.id,
-        type: EnrolmentCreditEventType.PURCHASE,
-        creditsDelta: totalClasses,
-        occurredOn: invoice.paidAt ?? new Date(),
-        note: "Invoice paid",
-        invoiceId: invoice.id,
-      });
-    }
-    const cadence = sessionsPerWeek(plan);
-    const horizon = resolveOccurrenceHorizon({
-      startDate: enrolmentStart,
-      endDate: enrolmentEnd,
-      occurrencesNeeded: Math.max(totalClasses, 1),
-      sessionsPerWeek: cadence,
-    });
-    const cancellations = await tx.classCancellation.findMany({
-      where: {
-        templateId: invoice.enrolment.templateId,
-        date: { gte: enrolmentStart, lte: horizon },
-      },
-      select: { templateId: true, date: true },
-    });
-    const occurrences = buildOccurrenceSchedule({
-      startDate: enrolmentStart,
-      endDate: enrolmentEnd,
-      templates: [
-        {
-          templateId: invoice.enrolment.templateId,
-          dayOfWeek: invoice.enrolment.template?.dayOfWeek ?? null,
-          startDate: invoice.enrolment.template?.startDate,
-          endDate: invoice.enrolment.template?.endDate,
-        },
-      ],
-      cancellations,
-      occurrencesNeeded: totalClasses,
-      sessionsPerWeek: cadence,
-      horizon,
-    });
-    const walk = consumeOccurrencesForCredits({ occurrences, credits: totalClasses });
-    const boundedPaidThrough =
-      walk.paidThrough ??
-      (occurrences.length ? occurrences[Math.min(occurrences.length - 1, totalClasses - 1)] : enrolmentStart);
-    await tx.enrolment.update({
-      where: { id: invoice.enrolment.id },
-      data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
-    });
-  }
-
-  await getEnrolmentBillingStatus(invoice.enrolment.id, { client: tx });
-  return invoice;
-});
 }
 
 export async function registerCancellationCredit(
