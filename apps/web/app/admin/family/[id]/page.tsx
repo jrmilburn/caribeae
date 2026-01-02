@@ -14,6 +14,7 @@ type PageProps = {
 
 export default async function FamilyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const search = await searchParams;
 
   await maybeRunInvoicingSweep();
   const [family, levels, unpaidSummary, billing] = await Promise.all([
@@ -24,10 +25,10 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   ]);
 
   const enrolContext =
-    searchParams?.enrolToTemplateId
+    search?.enrolToTemplateId
       ? {
-          templateId: searchParams.enrolToTemplateId,
-          startDate: searchParams.startDate,
+          templateId: search.enrolToTemplateId,
+          startDate: search.startDate,
         }
       : null;
 
