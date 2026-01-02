@@ -7,6 +7,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { AttendanceChangeDTO, AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
+import { registerCreditConsumptionForDate } from "@/server/billing/enrolmentBilling";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type SaveAttendancePayload = {
@@ -89,6 +90,11 @@ export async function saveAttendance({
   );
 
   await prisma.$transaction(operations);
+  await Promise.all(
+    uniqueChanges.map((entry) =>
+      registerCreditConsumptionForDate({ templateId, studentId: entry.studentId, date })
+    )
+  );
 
   await upsertTimesheetEntryForOccurrence({
     templateId,

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
+import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBilling";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -40,6 +41,8 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
     throw new Error("Weekly plans require a duration in weeks.");
   }
 
+  const billing = await getEnrolmentBillingStatus(enrolment.id, { client: prisma });
+
   const durationWeeks = enrolment.plan.durationWeeks;
 
   const latestCoverage = await prisma.invoice.aggregate({
@@ -48,10 +51,9 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
   });
 
   const today = new Date();
+  const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
   const coverageStart = maxDate(
-    [enrolment.startDate, enrolment.paidThroughDate ?? enrolment.startDate, latestCoverage._max.coverageEnd ?? enrolment.startDate, today].filter(
-      Boolean
-    ) as Date[]
+    [enrolment.startDate, paidThrough ?? enrolment.startDate, latestCoverage._max.coverageEnd ?? enrolment.startDate, today].filter(Boolean) as Date[]
   );
 
   if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
