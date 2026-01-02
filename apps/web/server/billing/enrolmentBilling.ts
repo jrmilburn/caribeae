@@ -17,7 +17,7 @@
  *   getEnrolmentBillingStatus, ensuring all surfaces share the same selector.
  */
 
-import { addDays, addWeeks, isAfter, startOfDay } from "date-fns";
+import { addDays, isAfter, startOfDay } from "date-fns";
 import {
   BillingType,
   EnrolmentAdjustmentType,
@@ -29,6 +29,11 @@ import {
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import {
+  buildOccurrenceSchedule,
+  consumeOccurrencesForCredits,
+  resolveOccurrenceHorizon,
+} from "./occurrenceWalker";
 
 type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
 
@@ -242,8 +247,15 @@ async function computeCreditPaidThroughInternal(
 
   const startWindow = isAfter(today, enrolment.startDate) ? today : startOfDay(enrolment.startDate);
   const endWindow = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
-  const horizon = endWindow ?? addDays(startWindow, Math.max(balance, 1) * 7 + 28);
-  const cancelled = await tx.classCancellation.findMany({
+  const cadence = sessionsPerWeek(enrolment.plan);
+  const occurrencesNeeded = Math.max(balance + cadence, 1);
+  const horizon = resolveOccurrenceHorizon({
+    startDate: startWindow,
+    endDate: endWindow,
+    occurrencesNeeded,
+    sessionsPerWeek: cadence,
+  });
+  const cancellations = await tx.classCancellation.findMany({
     where: {
       templateId: enrolment.templateId,
       date: {
@@ -251,42 +263,35 @@ async function computeCreditPaidThroughInternal(
         lte: horizon,
       },
     },
-    select: { date: true },
+    select: { templateId: true, date: true },
   });
-  const cancelledSet = new Set(cancelled.map((c) => dateKey(c.date)));
 
-  let remaining = balance;
-  let coveredOccurrences = 0;
-  let paidThrough: Date | null = null;
-  let nextDue: Date | null = null;
+  const occurrences = buildOccurrenceSchedule({
+    startDate: startWindow,
+    endDate: endWindow,
+    templates: [
+      {
+        templateId: enrolment.templateId,
+        dayOfWeek: enrolment.template.dayOfWeek ?? null,
+        startDate: enrolment.template.startDate,
+        endDate: enrolment.template.endDate,
+      },
+    ],
+    cancellations,
+    occurrencesNeeded,
+    sessionsPerWeek: cadence,
+    horizon,
+  });
 
-  const firstOccurrence = nextOccurrenceOnOrAfter(startWindow, enrolment.template.dayOfWeek);
-  let occurrence = firstOccurrence;
-
-  while (occurrence && !isAfter(occurrence, horizon)) {
-    if (cancelledSet.has(dateKey(occurrence))) {
-      occurrence = addDays(occurrence, 7);
-      continue;
-    }
-
-    if (remaining <= 0) {
-      nextDue = occurrence;
-      break;
-    }
-
-    remaining -= 1;
-    coveredOccurrences += 1;
-    paidThrough = occurrence;
-    occurrence = addDays(occurrence, 7);
-  }
+  const walk = consumeOccurrencesForCredits({ occurrences, credits: balance });
 
   return {
     enrolmentId: enrolment.id,
     billingType: enrolment.plan?.billingType ?? null,
-    paidThroughDate: paidThrough,
-    nextPaymentDueDate: nextDue,
-    remainingCredits: remaining,
-    coveredOccurrences,
+    paidThroughDate: walk.paidThrough,
+    nextPaymentDueDate: walk.nextDue,
+    remainingCredits: walk.remaining,
+    coveredOccurrences: walk.covered,
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
   };
 }
@@ -323,23 +328,6 @@ async function computeBillingSnapshot(
   }
 
   return computeCreditPaidThroughInternal(tx, enrolment, asOfDate);
-}
-
-function paidThroughFromClassCount(params: {
-  enrolment: EnrolmentWithPlanTemplate;
-  totalClasses: number;
-}) {
-  const { enrolment, totalClasses } = params;
-  if (totalClasses <= 0) return startOfDay(enrolment.startDate);
-
-  const startWindow = startOfDay(enrolment.startDate);
-  const first = nextOccurrenceOnOrAfter(startWindow, enrolment.template.dayOfWeek) ?? startWindow;
-  const last = addDays(first, 7 * Math.max(totalClasses - 1, 0));
-  if (enrolment.endDate) {
-    const end = startOfDay(enrolment.endDate);
-    return isAfter(last, end) ? end : last;
-  }
-  return last;
 }
 
 async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: EnrolmentBillingSnapshot) {
@@ -453,10 +441,40 @@ export async function applyEntitlementsForInvoice(
       (invoice.creditsPurchased && invoice.creditsPurchased > 0
         ? invoice.creditsPurchased
         : classesPerBlock * Math.max(enrolmentItemsQuantity, 1)) ?? 0;
-    const boundedPaidThrough = paidThroughFromClassCount({
-      enrolment: invoice.enrolment,
-      totalClasses,
+    const cadence = sessionsPerWeek(plan);
+    const horizon = resolveOccurrenceHorizon({
+      startDate: enrolmentStart,
+      endDate: enrolmentEnd,
+      occurrencesNeeded: Math.max(totalClasses, 1),
+      sessionsPerWeek: cadence,
     });
+    const cancellations = await tx.classCancellation.findMany({
+      where: {
+        templateId: invoice.enrolment.templateId,
+        date: { gte: enrolmentStart, lte: horizon },
+      },
+      select: { templateId: true, date: true },
+    });
+    const occurrences = buildOccurrenceSchedule({
+      startDate: enrolmentStart,
+      endDate: enrolmentEnd,
+      templates: [
+        {
+          templateId: invoice.enrolment.templateId,
+          dayOfWeek: invoice.enrolment.template?.dayOfWeek ?? null,
+          startDate: invoice.enrolment.template?.startDate,
+          endDate: invoice.enrolment.template?.endDate,
+        },
+      ],
+      cancellations,
+      occurrencesNeeded: totalClasses,
+      sessionsPerWeek: cadence,
+      horizon,
+    });
+    const walk = consumeOccurrencesForCredits({ occurrences, credits: totalClasses });
+    const boundedPaidThrough =
+      walk.paidThrough ??
+      (occurrences.length ? occurrences[Math.min(occurrences.length - 1, totalClasses - 1)] : enrolmentStart);
     await tx.enrolment.update({
       where: { id: invoice.enrolment.id },
       data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
