@@ -336,7 +336,7 @@ model Enrolment {
   creditsRemaining        Int?
   creditsBalanceCached    Int?
 
-  adjustments EnrolmentAdjustment[]
+  adjustments  EnrolmentAdjustment[]
   creditEvents EnrolmentCreditEvent[]
 
   invoices Invoice[]
@@ -561,8 +561,9 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  allocations PaymentAllocation[]
-  lineItems   InvoiceLineItem[]
+  allocations           PaymentAllocation[]
+  lineItems             InvoiceLineItem[]
+  enrolmentCreditEvents EnrolmentCreditEvent[]
 
   @@index([familyId, status])
   @@index([enrolmentId, status])
@@ -655,10 +656,10 @@ model EnrolmentCreditEvent {
   occurredOn   DateTime // normalized to local midnight
   note         String?
 
-  invoiceId   String?
-  invoice     Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId    String?
+  invoice      Invoice?             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   attendanceId String?
-  attendance   Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  attendance   Attendance?          @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
   adjustmentId String?
   adjustment   EnrolmentAdjustment? @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
 
