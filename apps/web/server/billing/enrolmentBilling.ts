@@ -329,10 +329,13 @@ async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: Enrolment
   await tx.enrolment.update({
     where: { id: snapshot.enrolmentId },
     data: {
-      paidThroughDateComputed: snapshot.paidThroughDate,
+      paidThroughDateComputed: snapshot.paidThroughDate ?? undefined,
       nextDueDateComputed: snapshot.nextPaymentDueDate,
       creditsBalanceCached: snapshot.remainingCredits ?? undefined,
       creditsRemaining: snapshot.remainingCredits ?? undefined,
+      ...(snapshot.paidThroughDate
+        ? { paidThroughDate: snapshot.paidThroughDate }
+        : {}),
     },
   });
 }
@@ -406,15 +409,15 @@ export async function applyEntitlementsForInvoice(
       .filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT)
       .reduce((sum, li) => sum + (li.quantity ?? 1), 0);
 
-    if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
-      await tx.enrolment.update({
-        where: { id: invoice.enrolment.id },
-        data: { paidThroughDate: invoice.coverageEnd },
-      });
-    } else if ([BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType)) {
-      if (invoice.creditsPurchased) {
-        await recordCreditEvent(tx, {
-          enrolmentId: invoice.enrolment.id,
+  if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
+    await tx.enrolment.update({
+      where: { id: invoice.enrolment.id },
+      data: { paidThroughDate: invoice.coverageEnd, paidThroughDateComputed: invoice.coverageEnd },
+    });
+  } else if ([BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType)) {
+    if (invoice.creditsPurchased) {
+      await recordCreditEvent(tx, {
+        enrolmentId: invoice.enrolment.id,
           type: EnrolmentCreditEventType.PURCHASE,
           creditsDelta: invoice.creditsPurchased,
           occurredOn: invoice.paidAt ?? new Date(),
@@ -434,7 +437,7 @@ export async function applyEntitlementsForInvoice(
       const boundedPaidThrough = enrolmentEnd && isAfter(rawPaidThrough, enrolmentEnd) ? enrolmentEnd : rawPaidThrough;
       await tx.enrolment.update({
         where: { id: invoice.enrolment.id },
-        data: { paidThroughDate: boundedPaidThrough },
+        data: { paidThroughDate: boundedPaidThrough, paidThroughDateComputed: boundedPaidThrough },
       });
     }
 
