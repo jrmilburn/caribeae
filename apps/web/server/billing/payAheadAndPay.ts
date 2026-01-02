@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
+import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { adjustInvoicePayment } from "./utils";
 
 const payAheadItemSchema = z.object({
@@ -70,6 +71,11 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       latestCoverage.map((c) => [c.enrolmentId, c._max.coverageEnd ? new Date(c._max.coverageEnd) : null])
     );
 
+    const statusMap = await getBillingStatusForEnrolments(
+      enrolments.map((e) => e.id),
+      { client: tx }
+    );
+
     const today = new Date();
     const createdInvoices: { invoice: Prisma.Invoice; enrolmentId: string }[] = [];
 
@@ -89,8 +95,9 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         }
 
         const latestEnd = latestCoverageMap.get(enrolment.id) ?? enrolment.startDate;
+        const paidThrough = statusMap.get(enrolment.id)?.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
         const coverageStart = maxDate(
-          [enrolment.startDate, enrolment.paidThroughDate ?? enrolment.startDate, latestEnd, today].filter(Boolean) as Date[]
+          [enrolment.startDate, paidThrough ?? enrolment.startDate, latestEnd, today].filter(Boolean) as Date[]
         );
 
         if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {

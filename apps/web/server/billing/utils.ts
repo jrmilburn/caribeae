@@ -1,6 +1,8 @@
 
 import { isBefore } from "date-fns";
-import { BillingType, InvoiceLineItemKind, InvoiceStatus, Prisma } from "@prisma/client";
+import { InvoiceStatus, Prisma } from "@prisma/client";
+
+import { applyEntitlementsForInvoice } from "./enrolmentBilling";
 
 export function nextInvoiceStatus(params: {
   invoice: { status: InvoiceStatus; amountCents: number; dueAt: Date | null; issuedAt: Date | null };
@@ -64,33 +66,9 @@ export async function adjustInvoicePayment(
     },
   });
 
-  const hasEnrolmentLineItem =
-    (invoice._count?.lineItems ?? 0) === 0
-      ? false
-      : invoice.lineItems.some((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
-  if (
-    status === InvoiceStatus.PAID &&
-    invoice.status !== InvoiceStatus.PAID &&
-    hasEnrolmentLineItem &&
-    invoice.enrolment?.plan
-  ) {
-    const plan = invoice.enrolment.plan;
-    if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
-      await tx.enrolment.update({
-        where: { id: invoice.enrolment.id },
-        data: { paidThroughDate: invoice.coverageEnd },
-      });
-    } else if (
-      (plan.billingType === BillingType.BLOCK || plan.billingType === BillingType.PER_CLASS) &&
-      invoice.creditsPurchased
-    ) {
-      await tx.enrolment.update({
-        where: { id: invoice.enrolment.id },
-        data: {
-          creditsRemaining: (invoice.enrolment.creditsRemaining ?? 0) + invoice.creditsPurchased,
-        },
-      });
-    }
+  const hasEnrolmentLineItem = (invoice._count?.lineItems ?? 0) === 0 ? false : true;
+  if (status === InvoiceStatus.PAID && invoice.status !== InvoiceStatus.PAID && hasEnrolmentLineItem) {
+    await applyEntitlementsForInvoice(invoiceId, { client: tx });
   }
 
   return updated;

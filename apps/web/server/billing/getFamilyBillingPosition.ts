@@ -1,11 +1,12 @@
 "use server";
 
-import { addDays, differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
+import { differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
 import { BillingType, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 
 type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
@@ -66,46 +67,6 @@ function blockSize(plan: Prisma.EnrolmentPlan | null | undefined) {
   return 0;
 }
 
-function nextOccurrenceOnOrAfter(start: Date, templateDayOfWeek: number | null | undefined) {
-  if (templateDayOfWeek == null) return null;
-  const target = ((templateDayOfWeek % 7) + 7) % 7; // 0 = Monday
-  let cursor = startOfDay(start);
-  while (cursor.getDay() !== ((target + 1) % 7)) {
-    cursor = addDays(cursor, 1);
-  }
-  return cursor;
-}
-
-function projectCreditCoverageEnd(params: {
-  creditsRemaining: number;
-  template: { dayOfWeek: number | null; startDate: Date | string; endDate?: Date | string | null } | null;
-  enrolmentStart: Date | string;
-}) {
-  const { creditsRemaining, template } = params;
-  if (!template || creditsRemaining <= 0) return null;
-
-  const enrolmentStart = startOfDay(params.enrolmentStart instanceof Date ? params.enrolmentStart : new Date(params.enrolmentStart));
-  const today = startOfDay(new Date());
-  const windowStart = isAfter(today, enrolmentStart) ? today : enrolmentStart;
-  const windowEnd = template.endDate ? startOfDay(template.endDate instanceof Date ? template.endDate : new Date(template.endDate)) : null;
-
-  if (windowEnd && isAfter(windowStart, windowEnd)) return null;
-
-  let occurrence = nextOccurrenceOnOrAfter(windowStart, template.dayOfWeek);
-  if (!occurrence) return null;
-
-  let remaining = creditsRemaining;
-  let lastCovered: Date | null = null;
-
-  while (remaining > 0 && occurrence && (!windowEnd || !isAfter(occurrence, windowEnd))) {
-    lastCovered = occurrence;
-    remaining -= 1;
-    occurrence = addDays(occurrence, 7);
-  }
-
-  return lastCovered;
-}
-
 export async function getFamilyBillingPosition(familyId: string, options?: { client?: PrismaClientOrTx }) {
   await getOrCreateUser();
   await requireAdmin();
@@ -138,7 +99,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
 
   const enrolmentIds = family.students.flatMap((s) => s.enrolments?.map((e) => e.id) ?? []);
 
-  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments] = await Promise.all([
+  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap] = await Promise.all([
     client.invoice.findMany({
       where: { familyId, status: { in: OPEN_INVOICE_STATUSES } },
       include: {
@@ -186,6 +147,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         },
       },
     }),
+    getBillingStatusForEnrolments(enrolmentIds, { client }),
   ]);
 
   const latestCoverageMap = new Map<string, Date | null>(
@@ -205,23 +167,11 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   const students = family.students.map((student) => {
     const enrolments = (student.enrolments ?? []).filter((enrolment) => enrolment.status === "ACTIVE").map((enrolment) => {
       const plan = enrolment.plan ?? null;
-      const paidThroughDate = asDate(enrolment.paidThroughDate);
-      const creditsRemaining = enrolment.creditsRemaining ?? 0;
+      const snapshot = statusMap.get(enrolment.id);
+      const paidThroughDate = snapshot?.paidThroughDate ?? asDate(enrolment.paidThroughDate);
+      const creditsRemaining = snapshot?.remainingCredits ?? enrolment.creditsRemaining ?? 0;
       const latestCoverageEnd = latestCoverageMap.get(enrolment.id) ?? null;
-      const projectedCoverageEnd =
-        plan?.billingType === BillingType.PER_WEEK
-          ? paidThroughDate ?? latestCoverageEnd
-          : projectCreditCoverageEnd({
-              creditsRemaining,
-              template: enrolment.template
-                ? {
-                    dayOfWeek: enrolment.template.dayOfWeek,
-                    startDate: enrolment.template.startDate,
-                    endDate: enrolment.template.endDate,
-                  }
-                : null,
-              enrolmentStart: enrolment.startDate,
-            });
+      const projectedCoverageEnd = snapshot?.paidThroughDate ?? paidThroughDate ?? latestCoverageEnd;
       const thresholdCredits = blockSize(plan);
 
       const { status } = evaluateEntitlement({
