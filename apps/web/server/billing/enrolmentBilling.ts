@@ -428,17 +428,6 @@ export async function applyEntitlementsForInvoice(
       data: { paidThroughDate: invoice.coverageEnd, paidThroughDateComputed: invoice.coverageEnd },
     });
   } else if ([BillingType.BLOCK, BillingType.PER_CLASS].includes(plan.billingType)) {
-    if (invoice.creditsPurchased) {
-      await recordCreditEvent(tx, {
-        enrolmentId: invoice.enrolment.id,
-        type: EnrolmentCreditEventType.PURCHASE,
-        creditsDelta: invoice.creditsPurchased,
-        occurredOn: invoice.paidAt ?? new Date(),
-        note: "Invoice paid",
-        invoiceId: invoice.id,
-      });
-    }
-
     const classesPerBlock =
       plan.blockClassCount && plan.blockClassCount > 0
         ? plan.blockClassCount
@@ -449,6 +438,17 @@ export async function applyEntitlementsForInvoice(
       (invoice.creditsPurchased && invoice.creditsPurchased > 0
         ? invoice.creditsPurchased
         : classesPerBlock * Math.max(enrolmentItemsQuantity, 1)) ?? 0;
+
+    if (totalClasses > 0) {
+      await recordCreditEvent(tx, {
+        enrolmentId: invoice.enrolment.id,
+        type: EnrolmentCreditEventType.PURCHASE,
+        creditsDelta: totalClasses,
+        occurredOn: invoice.paidAt ?? new Date(),
+        note: "Invoice paid",
+        invoiceId: invoice.id,
+      });
+    }
     const cadence = sessionsPerWeek(plan);
     const horizon = resolveOccurrenceHorizon({
       startDate: enrolmentStart,
