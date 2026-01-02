@@ -15,6 +15,7 @@ type EnrolmentPlanInput = {
   enrolmentType: EnrolmentType;
   durationWeeks?: number | null;
   blockClassCount?: number | null;
+  sessionsPerWeek?: number | null;
 };
 
 export async function createEnrolmentPlan(input: EnrolmentPlanInput) {
@@ -29,6 +30,7 @@ export async function createEnrolmentPlan(input: EnrolmentPlanInput) {
     enrolmentType: z.nativeEnum(EnrolmentType),
     durationWeeks: z.number().int().positive().optional().nullable(),
     blockClassCount: z.number().int().positive().optional().nullable(),
+    sessionsPerWeek: z.number().int().positive().optional().nullable(),
   });
 
   const parsed = schema.parse(input);
@@ -49,6 +51,7 @@ export async function createEnrolmentPlan(input: EnrolmentPlanInput) {
       billingType: parsed.billingType,
       enrolmentType: parsed.enrolmentType,
       durationWeeks: requiresDuration ? parsed.durationWeeks ?? null : null,
+      sessionsPerWeek: parsed.sessionsPerWeek ?? null,
       blockClassCount:
         parsed.billingType === "PER_CLASS"
           ? parsed.blockClassCount ?? 1

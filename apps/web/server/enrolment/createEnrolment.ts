@@ -1,12 +1,12 @@
 // /server/enrolment/createEnrolment.ts
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { BillingType, EnrolmentStatus } from "@prisma/client";
+import { EnrolmentStatus } from "@prisma/client";
 import { z } from "zod";
+
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
+import { createEnrolmentsFromSelection } from "./createEnrolmentsFromSelection";
 
 type CreateEnrolmentInput = {
   templateId: string;
@@ -34,67 +34,21 @@ export async function createEnrolment(input: CreateEnrolmentInput, options?: { s
     await requireAdmin();
   }
 
-  const [template, plan, student] = await Promise.all([
-    prisma.classTemplate.findUnique({ where: { id: payload.templateId }, select: { levelId: true } }),
-    prisma.enrolmentPlan.findUnique({
-      where: { id: payload.planId },
-      select: {
-        id: true,
-        levelId: true,
-        billingType: true,
-        durationWeeks: true,
-        blockClassCount: true,
-      },
-    }),
-    prisma.student.findUnique({ where: { id: payload.studentId }, select: { levelId: true } }),
-  ]);
+  const result = await createEnrolmentsFromSelection(
+    {
+      studentId: payload.studentId,
+      planId: payload.planId,
+      templateIds: [payload.templateId],
+      startDate: payload.startDate.toISOString(),
+      endDate: payload.endDate?.toISOString() ?? undefined,
+      status: payload.status ?? EnrolmentStatus.ACTIVE,
+    },
+    { skipAuth: options?.skipAuth }
+  );
 
-  if (!template) throw new Error("Class template not found");
-  if (!plan) throw new Error("Enrolment plan not found");
-  if (plan.levelId !== template.levelId) throw new Error("Plan level must match class level");
-  if (student?.levelId && student.levelId !== plan.levelId) {
-    throw new Error("Plan level must match student level");
+  if (!result.enrolments[0]) {
+    throw new Error("Unable to create enrolment.");
   }
 
-  if (plan.billingType === BillingType.PER_WEEK && !plan.durationWeeks) {
-    throw new Error("Weekly plans require durationWeeks");
-  }
-  if (plan.billingType === BillingType.BLOCK && !plan.blockClassCount) {
-    throw new Error("Block plans require a class count");
-  }
-
-  const resolvedEndDate = resolveEndDate({
-    billingType: plan.billingType,
-    explicitEnd: payload.endDate,
-    startDate: payload.startDate,
-  });
-
-  const enrolment = await prisma.$transaction(async (tx) => {
-    const created = await tx.enrolment.create({
-      data: {
-        templateId: payload.templateId,
-        studentId: payload.studentId,
-        startDate: payload.startDate,
-        endDate: resolvedEndDate,
-        status: payload.status ?? "ACTIVE",
-        planId: payload.planId,
-      },
-    });
-
-    await createInitialInvoiceForEnrolment(created.id, { prismaClient: tx, skipAuth: true });
-    return created;
-  });
-
-  return enrolment;
-}
-
-function resolveEndDate(params: {
-  billingType: BillingType;
-  explicitEnd?: Date | null;
-  startDate: Date;
-}) {
-  const { billingType, explicitEnd, startDate } = params;
-  if (explicitEnd) return explicitEnd;
-  if (billingType === "PER_CLASS") return startDate;
-  return null;
+  return result.enrolments[0];
 }

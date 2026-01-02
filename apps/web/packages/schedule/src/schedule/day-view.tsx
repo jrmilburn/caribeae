@@ -22,6 +22,7 @@ type DayViewProps = {
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
+  selectedTemplateIds?: string[];
 };
 
 export default function DayView(props: DayViewProps) {
@@ -41,6 +42,7 @@ export default function DayView(props: DayViewProps) {
     draggingId,
     setDraggingId,
     getTeacherColor,
+    selectedTemplateIds,
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
@@ -182,6 +184,7 @@ export default function DayView(props: DayViewProps) {
             const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
             const top = (startMinutes - GRID_START_MIN) * minuteHeight;
             const widthPct = 100 / c.columns;
+            const isSelected = selectedTemplateIds?.includes(c.templateId ?? c.id) ?? false;
 
             return (
               <div
@@ -214,7 +217,10 @@ export default function DayView(props: DayViewProps) {
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
                   draggingId === (c.templateId ?? c.id) && "opacity-0",
-                  isCancelled ? "bg-destructive/10 border-destructive text-destructive" : cn(colors.bg, colors.border)
+                  isCancelled
+                    ? "bg-destructive/10 border-destructive text-destructive"
+                    : cn(colors.bg, colors.border),
+                  isSelected && "ring-2 ring-primary/60 border-primary"
                 )}
                 style={{
                   top: `${Math.max(0, top)}px`,
