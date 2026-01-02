@@ -1,9 +1,9 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { createEnrolment } from "./createEnrolment";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { createEnrolmentsFromSelection } from "./createEnrolmentsFromSelection";
+import type { EnrolmentStatus } from "@prisma/client";
 
 type EnrolmentWithPlanInput = {
   studentId: string;
@@ -11,70 +11,27 @@ type EnrolmentWithPlanInput = {
   startDate: Date;
   endDate?: Date | null;
   templateId?: string;
+  templateIds?: string[];
+  status?: EnrolmentStatus;
 };
 
 export async function enrolStudentWithPlan(input: EnrolmentWithPlanInput) {
   await getOrCreateUser();
   await requireAdmin();
 
-  const plan = await prisma.enrolmentPlan.findUnique({
-    where: { id: input.planId },
-    include: { level: true },
-  });
-  if (!plan) {
-    throw new Error("Enrolment plan not found");
+  const templateIds = input.templateIds ?? (input.templateId ? [input.templateId] : []);
+  if (!templateIds.length) {
+    throw new Error("At least one class template must be selected.");
   }
 
-  const student = await prisma.student.findUnique({
-    where: { id: input.studentId },
-    select: { levelId: true },
-  });
-  if (student?.levelId && student.levelId !== plan.levelId) {
-    throw new Error("Student level must match enrolment plan level");
-  }
-  if (plan.billingType === "BLOCK" && !plan.blockClassCount) {
-    throw new Error("Block plans require a class count");
-  }
-
-  if (plan.billingType === "PER_WEEK") {
-    const templates = await prisma.classTemplate.findMany({
-      where: {
-        levelId: plan.levelId,
-        active: true,
-        startDate: { lte: input.endDate ?? new Date("9999-12-31") },
-        OR: [{ endDate: null }, { endDate: { gte: input.startDate } }],
-      },
-    });
-
-    if (!templates.length) {
-      throw new Error("No classes available for this plan level");
-    }
-
-    for (const tmpl of templates) {
-      await createEnrolment(
-        {
-          templateId: tmpl.id,
-          studentId: input.studentId,
-          startDate: input.startDate,
-          endDate: input.endDate ?? null,
-          planId: input.planId,
-        },
-        { skipAuth: true }
-      );
-    }
-  } else {
-    if (!input.templateId) {
-      throw new Error("A class template must be selected for this plan");
-    }
-    await createEnrolment(
-      {
-        templateId: input.templateId,
-        studentId: input.studentId,
-        startDate: input.startDate,
-        endDate: input.endDate ?? null,
-        planId: input.planId,
-      },
-      { skipAuth: true }
-    );
-  }
+  return createEnrolmentsFromSelection(
+    {
+      studentId: input.studentId,
+      planId: input.planId,
+      templateIds,
+      startDate: input.startDate.toISOString(),
+      status: input.status,
+    },
+    { skipAuth: true }
+  );
 }

@@ -100,10 +100,10 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                       </TableCell>
                       <TableCell>
                         {plan.billingType === "PER_WEEK"
-                          ? `${plan.durationWeeks ?? "—"} week${(plan.durationWeeks ?? 0) === 1 ? "" : "s"}`
+                          ? `${plan.durationWeeks ?? "—"} week${(plan.durationWeeks ?? 0) === 1 ? "" : "s"}${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`
                           : plan.billingType === "BLOCK"
-                            ? `${plan.blockClassCount ?? plan.blockLength ?? 1} classes per block`
-                            : "1 class per invoice"}
+                            ? `${plan.blockClassCount ?? plan.blockLength ?? 1} classes per block${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`
+                            : `1 class per invoice${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`}
                       </TableCell>
                       <TableCell>
                         ${(plan.priceCents / 100).toFixed(2)}
