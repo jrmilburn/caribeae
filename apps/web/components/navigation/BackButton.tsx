@@ -12,14 +12,12 @@ import { ADMIN_LAST_ROUTE_KEY, useAdminNavHistory } from "@/hooks/useAdminNavHis
 type BackButtonProps = {
   fallbackHref?: string;
   label?: string;
-  variant?: "floating" | "inline";
   className?: string;
-} & Omit<ButtonProps, "variant">;
+} & Omit<ButtonProps, "variant" | "size">;
 
 export function BackButton({
   fallbackHref = "/admin/dashboard",
   label = "Back",
-  variant = "floating",
   className,
   ...buttonProps
 }: BackButtonProps) {
@@ -30,12 +28,10 @@ export function BackButton({
   const [isDisabled, setIsDisabled] = useState(false);
   const resetTimer = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (resetTimer.current) {
-        clearTimeout(resetTimer.current);
-      }
-    };
+  useEffect(() => () => {
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+    }
   }, []);
 
   const handleNavigateBack = React.useCallback(() => {
@@ -65,42 +61,14 @@ export function BackButton({
     }
   }, [fallbackHref, isDisabled, pathname, router]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.altKey)) return;
-      if (event.key !== "ArrowLeft") return;
-
-      const active = document.activeElement as HTMLElement | null;
-      if (active?.isContentEditable) return;
-      if (
-        active &&
-        ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      handleNavigateBack();
-    };
-
-    // Honor the OS-level shortcut (Alt/Option + Left) without interrupting text entry.
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleNavigateBack]);
-
-  const labelClasses = variant === "floating" ? "hidden md:inline" : "inline";
-
   return (
     <Button
       type="button"
-      size="sm"
+      size="icon"
       variant="ghost"
       aria-label={label}
       className={cn(
-        "h-9 gap-2 px-2 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-        variant === "floating"
-          ? "rounded-full bg-background/80 shadow-sm backdrop-blur transition-colors hover:bg-accent/70"
-          : "",
+        "h-9 w-9 rounded-xl",
         className
       )}
       disabled={isDisabled}
@@ -108,7 +76,7 @@ export function BackButton({
       {...buttonProps}
     >
       <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      <span className={labelClasses}>{label}</span>
+      <span className="sr-only">{label}</span>
     </Button>
   );
 }
