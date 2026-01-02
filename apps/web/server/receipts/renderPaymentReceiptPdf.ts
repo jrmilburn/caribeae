@@ -11,7 +11,7 @@ function formatDate(value: Date | null | undefined) {
   return format(value, "d MMM yyyy");
 }
 
-export async function renderInvoiceReceiptPdf(data: InvoiceReceiptData): Promise<Buffer> {
+export async function renderPaymentReceiptPdf(data: InvoiceReceiptData): Promise<Buffer> {
   const builder = new PdfBuilder();
 
   // Header
