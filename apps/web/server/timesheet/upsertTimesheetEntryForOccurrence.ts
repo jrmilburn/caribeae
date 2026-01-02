@@ -1,6 +1,5 @@
 "use server";
 
-import { addDays, startOfDay } from "date-fns";
 import { Prisma, TimesheetSource, TimesheetStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -9,6 +8,8 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeLocalDate } from "./normalizeLocalDate";
 import { computeBaseMinutesInternal } from "./internals/computeBaseMinutesInternal";
+
+import { expandRangeDates } from "./expandDateRange";
 
 /**
  * Audit-first plan (kept as code comments for future reviewers):
@@ -108,12 +109,3 @@ export async function upsertTimesheetEntryForOccurrence(input: UpsertInput): Pro
   });
 }
 
-export function expandRangeDates(from: Date, to: Date): Date[] {
-  const start = startOfDay(from);
-  const end = startOfDay(to);
-  const days: Date[] = [];
-  for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
-    days.push(cursor);
-  }
-  return days;
-}

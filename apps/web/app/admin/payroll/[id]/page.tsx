@@ -6,12 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { getPayRunDetail } from "@/server/payroll/getPayRunDetail";
 import { exportPayRunEntriesCsv, exportPayRunSummaryCsv } from "@/server/reports/payroll/exports";
-import { addManualPayRunLine } from "@/server/payroll/addManualPayRunLine";
-import { revalidatePath } from "next/cache";
 
 export const metadata: Metadata = {
   title: "Pay run",
@@ -50,8 +46,6 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
           </a>
         </Button>
       </div>
-
-      {isDraft ? <ManualHoursForm payRunId={payRun.id} /> : null}
 
       <Card>
         <CardHeader>
@@ -113,48 +107,5 @@ export default async function PayRunDetailPage({ params }: { params: { id: strin
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function ManualHoursForm({ payRunId }: { payRunId: string }) {
-  const handleAction = async (formData: FormData) => {
-    "use server";
-    const staffName = String(formData.get("staffName") ?? "");
-    const date = String(formData.get("date") ?? "");
-    const minutes = Number(formData.get("minutes") ?? 0);
-    const hourlyRateCents = Number(formData.get("hourlyRateCents") ?? 0);
-    await addManualPayRunLine({ payRunId, staffName, date, minutes, hourlyRateCents });
-    revalidatePath(`/admin/payroll/${payRunId}`);
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Manual hours (non-teaching staff)</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={handleAction} className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <div className="space-y-1">
-            <Label>Staff name</Label>
-            <Input name="staffName" placeholder="Office staff" required />
-          </div>
-          <div className="space-y-1">
-            <Label>Date</Label>
-            <Input name="date" type="date" required />
-          </div>
-          <div className="space-y-1">
-            <Label>Minutes</Label>
-            <Input name="minutes" type="number" min="1" required />
-          </div>
-          <div className="space-y-1">
-            <Label>Hourly rate (cents)</Label>
-            <Input name="hourlyRateCents" type="number" min="0" required />
-          </div>
-          <div className="md:col-span-4">
-            <Button type="submit">Add hours</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
   );
 }

@@ -8,19 +8,21 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  BookOpen,          // or GraduationCap
-  MessageSquare,
-  Megaphone,         // or Send
-  CreditCard,
-  FileText,
+  BookOpen,
+  Inbox,        // ✅ better for Messages (inbox)
+  Megaphone,    // ✅ comms/broadcast
+  Receipt,      // ✅ billing/invoices
+  Coins,        // ✅ counter/cash
+  Banknote,     // ✅ payroll
   Clock3,
-  HandCoins,
+  BarChart3,    // ✅ reports/analytics
   Settings,
   Menu,
   ChevronDown,
   LogIn,
   LogOut,
 } from "lucide-react";
+
 
 import { useClerk, useUser } from "@clerk/nextjs";
 
@@ -45,23 +47,27 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 type NavItem = {
   label: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard }, // ✅
-  { label: "Schedule", href: "/admin/schedule", icon: CalendarDays },     // ✅
-  { label: "Families", href: "/admin/family", icon: Users },              // ✅
-  { label: "Classes", href: "/admin/class", icon: BookOpen },             // ✅ (clearer than GraduationCap for “class list”)
-  { label: "Message", href: "/admin/messages", icon: MessageSquare },     // ✅ direct/inbox
-  { label: "Communications", href: "/admin/communications", icon: Megaphone }, // ✅ broadcast/announcements
-  { label: "Billing", href: "/admin/billing", icon: CreditCard },         // ✅
-  { label: "Counter", href: "/admin/counter", icon: HandCoins },          // ✅
-  { label: "Payroll", href: "/admin/payroll", icon: HandCoins },          // ✅
-  { label: "Teacher hours", href: "/admin/reports/teacher-hours", icon: Clock3 }, // ✅
-  { label: "Reports", href: "/admin/reports/audit", icon: FileText },     // ✅
-  { label: "Settings", href: "/admin/settings", icon: Settings },         // ✅
+  { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { label: "Schedule", href: "/admin/schedule", icon: CalendarDays },
+  { label: "Families", href: "/admin/family", icon: Users },
+  { label: "Classes", href: "/admin/class", icon: BookOpen },
+
+  { label: "Messages", href: "/admin/messages", icon: Inbox },
+  { label: "Communications", href: "/admin/communications", icon: Megaphone },
+
+  { label: "Billing", href: "/admin/billing", icon: Receipt },
+  { label: "Counter", href: "/admin/counter", icon: Coins },
+  { label: "Payroll", href: "/admin/payroll", icon: Banknote },
+
+  { label: "Teacher hours", href: "/admin/reports/teacher-hours", icon: Clock3 },
+  { label: "Reports", href: "/admin/reports/audit", icon: BarChart3 },
+  { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
+
 
 type AppNavbarProps = {
   children?: React.ReactNode;
