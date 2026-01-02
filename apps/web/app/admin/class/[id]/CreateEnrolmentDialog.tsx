@@ -22,7 +22,9 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 
-import { enrolStudentWithPlan } from "@/server/enrolment/enrolStudentWithPlan";
+import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
+import { getSelectionRequirement } from "@/server/enrolment/planRules";
+import { useToast } from "@/components/ui/use-toast";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -43,6 +45,7 @@ export function CreateEnrolmentDialog({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [saving, setSaving] = React.useState(false);
 
   const [studentId, setStudentId] = React.useState<string>("");
@@ -63,16 +66,36 @@ export function CreateEnrolmentDialog({
   }, [open]);
 
   const availablePlans = enrolmentPlans;
+  const selectedPlan = React.useMemo(
+    () => availablePlans.find((p) => p.id === planId) ?? null,
+    [availablePlans, planId]
+  );
+  const selectionRequirement = React.useMemo(
+    () =>
+      selectedPlan
+        ? getSelectionRequirement(selectedPlan)
+        : { requiredCount: 1, helper: "Select a plan to continue." },
+    [selectedPlan]
+  );
   React.useEffect(() => {
     if (!availablePlans.find((p) => p.id === planId)) {
       setPlanId(availablePlans[0]?.id ?? "");
     }
   }, [availablePlans, planId]);
-  const canSubmit = studentId && startDate && planId && !saving;
+  const requiresMultipleTemplates = selectionRequirement.requiredCount > 1;
+  const canSubmit = studentId && startDate && planId && !saving && !requiresMultipleTemplates;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      if (requiresMultipleTemplates) {
+        toast({
+          variant: "destructive",
+          description: selectionRequirement.helper,
+        });
+      }
+      return;
+    }
 
     setSaving(true);
     try {
@@ -81,20 +104,24 @@ export function CreateEnrolmentDialog({
 
       if (!start) return;
 
-      const selectedPlan = availablePlans.find((p) => p.id === planId);
-      await enrolStudentWithPlan({
-        templateId: selectedPlan?.billingType === "PER_WEEK" ? undefined : templateId,
+      await createEnrolmentsFromSelection({
         studentId,
-        startDate: start,
-        endDate: end ?? null,
         planId,
+        templateIds: [templateId],
+        startDate: start.toISOString(),
+        endDate: end?.toISOString() ?? undefined,
+        status,
       });
 
       onOpenChange(false);
       router.refresh();
     } catch (err) {
       console.error(err);
-      alert("Unable to create enrolment. Please check the plan and try again.");
+      toast({
+        variant: "destructive",
+        description:
+          err instanceof Error ? err.message : "Unable to create enrolment. Please check the plan.",
+      });
     } finally {
       setSaving(false);
     }
@@ -127,6 +154,11 @@ export function CreateEnrolmentDialog({
                 ))}
               </SelectContent>
             </Select>
+            {requiresMultipleTemplates ? (
+              <p className="text-xs text-destructive">
+                {selectionRequirement.helper} Use the student schedule to select multiple classes.
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

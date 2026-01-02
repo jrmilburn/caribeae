@@ -21,13 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
-import { enrolStudentWithPlan } from "@/server/enrolment/enrolStudentWithPlan";
-
-function parseMaybeDate(input?: Date | string | null) {
-  if (!input) return null;
-  const date = input instanceof Date ? input : new Date(input);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
+import { getSelectionRequirement } from "@/server/enrolment/planRules";
+import { useToast } from "@/components/ui/use-toast";
 
 export function AddEnrolmentDialog({
   open,
@@ -43,26 +39,37 @@ export function AddEnrolmentDialog({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
-  const [selected, setSelected] = React.useState<NormalizedScheduleClass | null>(null);
+  const { toast } = useToast();
+  const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>(
+    {}
+  );
   const [planId, setPlanId] = React.useState<string>("");
-  const [rangeStart, setRangeStart] = React.useState<string>("");
-  const [rangeEnd, setRangeEnd] = React.useState<string>("");
+  const [startDate, setStartDate] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
-      setSelected(null);
+      setSelectedTemplates({});
       setPlanId("");
-      setRangeStart("");
-      setRangeEnd("");
+      setStartDate("");
       setSaving(false);
     }
   }, [open]);
 
+  const selectedTemplateIds = React.useMemo(
+    () => Object.keys(selectedTemplates),
+    [selectedTemplates]
+  );
+  const selectedLevelId = React.useMemo(() => {
+    const first = selectedTemplateIds[0];
+    if (!first) return null;
+    const template = selectedTemplates[first];
+    return template?.levelId ?? template?.template?.levelId ?? null;
+  }, [selectedTemplateIds, selectedTemplates]);
+
   const availablePlans = React.useMemo(() => {
-    const levelId = selected?.levelId ?? selected?.template?.levelId ?? null;
-    return enrolmentPlans.filter((p) => !levelId || p.levelId === levelId);
-  }, [enrolmentPlans, selected]);
+    return enrolmentPlans.filter((p) => !selectedLevelId || p.levelId === selectedLevelId);
+  }, [enrolmentPlans, selectedLevelId]);
 
   React.useEffect(() => {
     if (!availablePlans.find((p) => p.id === planId)) {
@@ -70,53 +77,101 @@ export function AddEnrolmentDialog({
     }
   }, [availablePlans, planId]);
 
+  React.useEffect(() => {
+    if (!selectedTemplateIds.length) return;
+    const sortedDates = selectedTemplateIds
+      .map((id) => selectedTemplates[id]?.startTime)
+      .filter(Boolean)
+      .map((date) => format(date as Date, "yyyy-MM-dd"))
+      .sort();
+    if (!sortedDates.length) return;
+    setStartDate((prev) => {
+      if (!prev) return sortedDates[0];
+      return prev > sortedDates[0] ? sortedDates[0] : prev;
+    });
+  }, [selectedTemplateIds, selectedTemplates]);
+
   const selectedPlan = React.useMemo(
     () => availablePlans.find((p) => p.id === planId) ?? null,
     [availablePlans, planId]
   );
-  const isWeeklyPlan = selectedPlan?.billingType === "PER_WEEK";
+
+  const selectionRequirement = React.useMemo(
+    () =>
+      selectedPlan
+        ? getSelectionRequirement(selectedPlan)
+        : { requiredCount: 1, helper: "Select a plan to see class requirements." },
+    [selectedPlan]
+  );
+
   const canSubmit =
     !!planId &&
     !saving &&
-    (isWeeklyPlan ? Boolean(rangeStart) : Boolean(selected));
+    Boolean(startDate) &&
+    selectedTemplateIds.length === selectionRequirement.requiredCount;
 
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
-    setSelected(occurrence);
+    const planLevelId = selectedPlan?.levelId ?? null;
+    if (planLevelId && occurrence.levelId && occurrence.levelId !== planLevelId) {
+      toast({
+        variant: "destructive",
+        description: "Select classes that match the enrolment plan level.",
+      });
+      return;
+    }
+
+    setSelectedTemplates((prev) => {
+      const alreadySelected = Boolean(prev[occurrence.templateId]);
+      if (alreadySelected) {
+        const next = { ...prev };
+        delete next[occurrence.templateId];
+        return next;
+      }
+
+      const count = Object.keys(prev).length;
+      const maxSelectable = Math.max(selectionRequirement.requiredCount, 6);
+      if (count >= maxSelectable) {
+        toast({
+          variant: "destructive",
+          description: `You can select up to ${maxSelectable} classes at once. Deselect one to add another.`,
+        });
+        return prev;
+      }
+
+      const next = { ...prev, [occurrence.templateId]: occurrence };
+      const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
+      setStartDate((prevStart) => {
+        if (!prevStart) return occurrenceDate;
+        return occurrenceDate < prevStart ? occurrenceDate : prevStart;
+      });
+      return next;
+    });
   };
 
   const handleCreate = async () => {
-    if (!selectedPlan) return;
+    if (!selectedPlan || !canSubmit) {
+      toast({ variant: "destructive", description: "Select a plan, classes, and start date." });
+      return;
+    }
     setSaving(true);
 
     try {
-      if (isWeeklyPlan) {
-        if (!rangeStart) return;
-        await enrolStudentWithPlan({
-          studentId,
-          planId,
-          startDate: new Date(`${rangeStart}T00:00:00`),
-          endDate: rangeEnd ? new Date(`${rangeEnd}T00:00:00`) : null,
-        });
-      } else {
-        if (!selected) return;
-
-        const startDate = new Date(selected.startTime);
-        const templateEnd = parseMaybeDate(selected.template?.endDate);
-
-        await enrolStudentWithPlan({
-          templateId: selected.templateId,
-          studentId,
-          planId,
-          startDate,
-          endDate: templateEnd,
-        });
-      }
+      await createEnrolmentsFromSelection({
+        studentId,
+        planId,
+        templateIds: selectedTemplateIds,
+        startDate: `${startDate}T00:00:00`,
+      });
 
       onOpenChange(false);
       router.refresh();
     } catch (err) {
       console.error(err);
-      alert("Unable to enrol student. Please ensure a valid plan is selected.");
+      toast({
+        variant: "destructive",
+        description:
+          err instanceof Error ? err.message : "Unable to enrol student. Please check the plan.",
+      });
     } finally {
       setSaving(false);
     }
@@ -128,13 +183,13 @@ export function AddEnrolmentDialog({
         <DialogHeader>
           <DialogTitle>Add enrolment</DialogTitle>
           <DialogDescription>
-            Choose a plan. Weekly plans enrol the student into all matching classes; per-class and
-            block plans require selecting a specific class from the schedule.
+            Select the classes that match the plan requirements. Multi-session plans require
+            multiple class templates per week.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Plan
@@ -157,68 +212,56 @@ export function AddEnrolmentDialog({
                 </SelectContent>
               </Select>
             </div>
-            {isWeeklyPlan ? (
-              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end sm:justify-end">
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Start date
-                  </div>
-                  <input
-                    type="date"
-                    className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    value={rangeStart}
-                    onChange={(e) => setRangeStart(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    End date (optional)
-                  </div>
-                  <input
-                    type="date"
-                    className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    value={rangeEnd}
-                    onChange={(e) => setRangeEnd(e.target.value)}
-                  />
-                </div>
+            <div className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Start date
               </div>
-            ) : null}
+              <input
+                type="date"
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                placeholder="YYYY-MM-DD"
+              />
+              <p className="text-xs text-muted-foreground">
+                Defaults to the earliest selected class if left blank.
+              </p>
+            </div>
           </div>
 
-          {!isWeeklyPlan ? (
-            <div className="h-[520px] overflow-hidden rounded border">
-              <ScheduleView
-                levels={levels}
-                onClassClick={onClassClick}
-                allowTemplateMoves={false}
-                defaultViewMode="week"
-              />
-            </div>
-          ) : null}
+          <div className="h-[520px] overflow-hidden rounded border">
+            <ScheduleView
+              levels={levels}
+              onClassClick={onClassClick}
+              allowTemplateMoves={false}
+              defaultViewMode="week"
+              selectedTemplateIds={selectedTemplateIds}
+            />
+          </div>
 
           <div className="flex items-center justify-between rounded-md border bg-muted/40 px-4 py-3 text-sm">
-            {selected ? (
-              <div className="space-y-0.5">
-                <div className="font-medium">
-                  {selected.template?.name ?? selected.level?.name ?? "Class template"}
-                </div>
-                <div className="text-muted-foreground">
-                  {format(selected.startTime, "EEE, MMM d")} ·{" "}
-                  {format(selected.startTime, "h:mm a")} – {format(selected.endTime, "h:mm a")}
-                </div>
-                <div className="text-muted-foreground">
-                  Plan:{" "}
-                  {availablePlans.find((p) => p.id === planId)?.name ??
-                    (availablePlans.length ? "Select a plan" : "No matching plans")}
-                </div>
-              </div>
-            ) : (
+            <div className="space-y-1">
+              <div className="font-medium">{selectionRequirement.helper}</div>
               <div className="text-muted-foreground">
-                {isWeeklyPlan
-                  ? "Select dates for the weekly plan."
-                  : "Select a class to enrol the student."}
+                {selectedTemplateIds.length}/{selectionRequirement.requiredCount} selected •{" "}
+                {startDate ? `Start date ${startDate}` : "Start date will follow the first class"}
               </div>
-            )}
+              {selectedTemplateIds.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedTemplateIds.map((id) => {
+                    const entry = selectedTemplates[id];
+                    return (
+                      <span key={id} className="rounded border bg-background px-2 py-1 text-xs">
+                        {entry?.template?.name ?? entry?.level?.name ?? "Class"} ·{" "}
+                        {entry ? format(entry.startTime, "EEE h:mm a") : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-muted-foreground">Select class templates on the schedule.</div>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>

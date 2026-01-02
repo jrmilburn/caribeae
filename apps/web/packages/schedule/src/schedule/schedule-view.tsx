@@ -38,6 +38,7 @@ export type ScheduleViewProps = {
   // ✅ NEW
   filters?: ScheduleFilters;
   headerActions?: React.ReactNode;
+  selectedTemplateIds?: string[];
 };
 
 
@@ -53,7 +54,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       showHeader = true,
       allowTemplateMoves = true,
       filters,
-      headerActions
+      headerActions,
+      selectedTemplateIds
     },
     ref
   ) {
@@ -243,6 +245,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             selectedDay={selectedDay}
             setSelectedDay={setSelectedDay}
             levels={levels}
+            selectedTemplateIds={selectedTemplateIds}
           />
         </div>
       </div>
