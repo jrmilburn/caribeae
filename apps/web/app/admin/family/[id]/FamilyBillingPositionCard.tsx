@@ -32,9 +32,7 @@ function statusVariant(status: FamilyBillingPosition["students"][number]["enrolm
 export function FamilyBillingPositionCard({ billing }: Props) {
   const paidThroughLabel = billing.paidThroughLatest
     ? formatDate(billing.paidThroughLatest)
-    : billing.creditsTotal > 0
-      ? `${billing.creditsTotal} credit${billing.creditsTotal === 1 ? "" : "s"}`
-      : "Not prepaid";
+    : "Not prepaid";
 
   return (
     <Card className="mx-4">
@@ -123,9 +121,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
                           ) : null}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {enrolment.billingType === "PER_WEEK"
-                            ? `Paid to ${formatDate(enrolment.paidThroughDate)}`
-                            : `Credits remaining ${enrolment.creditsRemaining ?? 0}`}
+                          Paid to {formatDate(enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)}
                         </div>
                       </div>
 

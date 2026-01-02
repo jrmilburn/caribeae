@@ -357,6 +357,7 @@ model EnrolmentPlan {
   billingType     BillingType   @default(PER_CLASS)
   durationWeeks   Int?
   blockClassCount Int?
+  sessionsPerWeek Int?
 
   levelId String
   level   Level  @relation(fields: [levelId], references: [id])

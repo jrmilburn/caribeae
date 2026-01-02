@@ -23,6 +23,7 @@ export type ScheduleGridProps = {
   selectedDay: number;
   setSelectedDay: React.Dispatch<React.SetStateAction<number>>;
   levels: Level[];
+  selectedTemplateIds?: string[];
 };
 
 const DAYS_OF_WEEK: DayOfWeek[] = [
@@ -49,7 +50,8 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
   setViewMode,
   selectedDay,
   setSelectedDay,
-  levels
+  levels,
+  selectedTemplateIds,
   } = props;
 
   const levelLookup = useMemo(() => new Map(levels.map((l) => [l.id, l])), [levels]);
@@ -87,6 +89,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           draggingId={draggingId}
           setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
+          selectedTemplateIds={selectedTemplateIds}
         />
       ) : (
         <DayView
@@ -100,6 +103,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           draggingId={draggingId}
           setDraggingId={setDraggingId}
           getTeacherColor={getTeacherColor}
+          selectedTemplateIds={selectedTemplateIds}
         />
       )}
     </div>

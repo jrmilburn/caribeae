@@ -32,6 +32,7 @@ type PlanFormState = {
   enrolmentType: EnrolmentType;
   durationWeeks: string;
   blockClassCount: string;
+  sessionsPerWeek: string;
 };
 
 const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK", "BLOCK"];
@@ -60,6 +61,7 @@ export function EnrolmentPlanForm({
     enrolmentType: "BLOCK",
     durationWeeks: "4",
     blockClassCount: "1",
+    sessionsPerWeek: "",
   }));
 
   React.useEffect(() => {
@@ -73,6 +75,7 @@ export function EnrolmentPlanForm({
         enrolmentType: plan.enrolmentType,
         durationWeeks: String(plan.durationWeeks ?? ""),
         blockClassCount: String(plan.blockClassCount ?? plan.blockLength ?? 1),
+        sessionsPerWeek: String(plan.sessionsPerWeek ?? ""),
       });
     } else {
       setForm({
@@ -83,6 +86,7 @@ export function EnrolmentPlanForm({
         enrolmentType: "BLOCK",
         durationWeeks: "4",
         blockClassCount: "1",
+        sessionsPerWeek: "",
       });
     }
     setSubmitting(false);
@@ -93,6 +97,8 @@ export function EnrolmentPlanForm({
   const parsedPrice = Number(form.priceCents);
   const parsedDuration = Number(form.durationWeeks);
   const parsedBlockCount = Number(form.blockClassCount);
+  const parsedSessionsPerWeek = Number(form.sessionsPerWeek);
+  const hasSessionsInput = form.sessionsPerWeek.trim().length > 0;
 
   const canSubmit =
     form.name.trim().length > 0 &&
@@ -100,7 +106,8 @@ export function EnrolmentPlanForm({
     parsedPrice > 0 &&
     Number.isFinite(parsedPrice) &&
     (!requiresDuration || (Number.isFinite(parsedDuration) && parsedDuration > 0)) &&
-    (!requiresBlockCount || (Number.isFinite(parsedBlockCount) && parsedBlockCount > 0));
+    (!requiresBlockCount || (Number.isFinite(parsedBlockCount) && parsedBlockCount > 0)) &&
+    (!hasSessionsInput || (Number.isFinite(parsedSessionsPerWeek) && parsedSessionsPerWeek > 0));
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -113,6 +120,7 @@ export function EnrolmentPlanForm({
       billingType: form.billingType,
       enrolmentType: form.enrolmentType,
       durationWeeks: requiresDuration ? parsedDuration : null,
+      sessionsPerWeek: hasSessionsInput && parsedSessionsPerWeek > 0 ? parsedSessionsPerWeek : null,
       blockClassCount:
         form.billingType === "BLOCK"
           ? parsedBlockCount
@@ -252,6 +260,19 @@ export function EnrolmentPlanForm({
               </p>
             </div>
           ) : null}
+
+          <div className="space-y-2">
+            <Label>Sessions per week (optional)</Label>
+            <Input
+              inputMode="numeric"
+              value={form.sessionsPerWeek}
+              onChange={(e) => setForm((p) => ({ ...p, sessionsPerWeek: e.target.value }))}
+              placeholder="Leave blank for single-session plans"
+            />
+            <p className="text-xs text-muted-foreground">
+              Use this to enforce multi-session plans (e.g. 2/week for 4 weeks or 5/week intensive).
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
