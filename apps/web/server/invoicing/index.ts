@@ -7,6 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import {
+  getEnrolmentBillingStatus,
+  getWeeklyPaidThrough,
+  refreshBillingForOpenEnrolments,
+} from "@/server/billing/enrolmentBilling";
+import {
   applyEntitlementsForPaidInvoice,
   createInvoiceWithLineItems,
   recalculateInvoiceTotals,
@@ -205,13 +210,16 @@ export async function issueNextInvoiceForEnrolment(
     });
     if (openInvoice) return { invoice: openInvoice, created: false };
 
+    const billingSnapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx });
+
     const today = new Date();
     if (enrolment.plan.billingType === BillingType.PER_WEEK) {
       const durationWeeks = enrolment.plan.durationWeeks;
       if (!durationWeeks) throw new Error("Weekly plans require durationWeeks to be set.");
 
-      const coverageStart = enrolment.paidThroughDate
-        ? maxDate([today, enrolment.paidThroughDate])
+      const paidThrough = billingSnapshot.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
+      const coverageStart = paidThrough
+        ? maxDate([today, paidThrough])
         : maxDate([today, enrolment.startDate]);
       if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
         return { created: false };
@@ -242,8 +250,7 @@ export async function issueNextInvoiceForEnrolment(
       return { invoice, created: true };
     }
 
-    const needsCredits =
-      enrolment.creditsRemaining == null || enrolment.creditsRemaining <= 0;
+    const needsCredits = (billingSnapshot.remainingCredits ?? 0) <= 0;
     if (!needsCredits) return { created: false };
 
     if (enrolment.plan.billingType === BillingType.BLOCK && !enrolment.plan.blockClassCount) {
@@ -279,6 +286,7 @@ export async function issueNextInvoiceForEnrolment(
 
 export async function runInvoicingSweep(params: { maxToProcess?: number }) {
   await ensureAdminAccess();
+  await refreshBillingForOpenEnrolments({ client: prisma });
 
   const today = new Date();
   const candidates = await prisma.enrolment.findMany({
@@ -290,11 +298,21 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
       OR: [
         {
           plan: { billingType: BillingType.PER_WEEK },
-          OR: [{ paidThroughDate: null }, { paidThroughDate: { lt: today } }],
+          OR: [
+            { paidThroughDate: null },
+            { paidThroughDate: { lt: today } },
+            { paidThroughDateComputed: null },
+            { paidThroughDateComputed: { lt: today } },
+          ],
         },
         {
           plan: { billingType: { in: [BillingType.BLOCK, BillingType.PER_CLASS] } },
-          OR: [{ creditsRemaining: null }, { creditsRemaining: { lte: 0 } }],
+          OR: [
+            { creditsRemaining: null },
+            { creditsRemaining: { lte: 0 } },
+            { creditsBalanceCached: null },
+            { creditsBalanceCached: { lte: 0 } },
+          ],
         },
       ],
     },
