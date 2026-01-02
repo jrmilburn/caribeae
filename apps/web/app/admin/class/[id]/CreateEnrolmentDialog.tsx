@@ -24,7 +24,7 @@ import {
 
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -89,10 +89,7 @@ export function CreateEnrolmentDialog({
     e.preventDefault();
     if (!canSubmit) {
       if (requiresMultipleTemplates) {
-        toast({
-          variant: "destructive",
-          description: selectionRequirement.helper,
-        });
+        toast.error(selectionRequirement.helper);
       }
       return;
     }
@@ -117,11 +114,9 @@ export function CreateEnrolmentDialog({
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast({
-        variant: "destructive",
-        description:
-          err instanceof Error ? err.message : "Unable to create enrolment. Please check the plan.",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Unable to create enrolment. Please check the plan."
+      );
     } finally {
       setSaving(false);
     }

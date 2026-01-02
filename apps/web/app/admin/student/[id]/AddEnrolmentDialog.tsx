@@ -23,7 +23,7 @@ import {
 import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 export function AddEnrolmentDialog({
   open,
@@ -39,7 +39,6 @@ export function AddEnrolmentDialog({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
-  const { toast } = useToast();
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>(
     {}
   );
@@ -113,10 +112,7 @@ export function AddEnrolmentDialog({
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
     const planLevelId = selectedPlan?.levelId ?? null;
     if (planLevelId && occurrence.levelId && occurrence.levelId !== planLevelId) {
-      toast({
-        variant: "destructive",
-        description: "Select classes that match the enrolment plan level.",
-      });
+      toast.error("Select classes that match the enrolment plan level.");
       return;
     }
 
@@ -131,10 +127,7 @@ export function AddEnrolmentDialog({
       const count = Object.keys(prev).length;
       const maxSelectable = Math.max(selectionRequirement.requiredCount, 6);
       if (count >= maxSelectable) {
-        toast({
-          variant: "destructive",
-          description: `You can select up to ${maxSelectable} classes at once. Deselect one to add another.`,
-        });
+        toast.error(`You can select up to ${maxSelectable} classes at once. Deselect one to add another.`);
         return prev;
       }
 
@@ -150,7 +143,7 @@ export function AddEnrolmentDialog({
 
   const handleCreate = async () => {
     if (!selectedPlan || !canSubmit) {
-      toast({ variant: "destructive", description: "Select a plan, classes, and start date." });
+      toast.error("Select a plan, classes, and start date.");
       return;
     }
     setSaving(true);
@@ -167,11 +160,7 @@ export function AddEnrolmentDialog({
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast({
-        variant: "destructive",
-        description:
-          err instanceof Error ? err.message : "Unable to enrol student. Please check the plan.",
-      });
+      toast.error(err instanceof Error ? err.message : "Unable to enrol student. Please check the plan.");
     } finally {
       setSaving(false);
     }
