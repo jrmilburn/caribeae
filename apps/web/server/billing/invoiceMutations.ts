@@ -2,11 +2,12 @@
 
 import { addDays } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
+import { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { applyEntitlementsForInvoice } from "./enrolmentBilling";
 import { nextInvoiceStatus } from "./utils";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
@@ -106,33 +107,6 @@ async function withTransaction<T>(
     return (candidate as PrismaClient).$transaction((tx) => fn(tx));
   }
   return fn(candidate as Prisma.TransactionClient);
-}
-
-async function applyEntitlementsForInvoiceInternal(
-  tx: Prisma.TransactionClient,
-  invoice: InvoiceWithEntitlement
-) {
-  if (!invoice.enrolment?.plan) return;
-  const hasEnrolmentItem = invoice.lineItems.some((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
-  if (!hasEnrolmentItem) return;
-
-  const plan = invoice.enrolment.plan;
-  if (plan.billingType === BillingType.PER_WEEK && invoice.coverageEnd) {
-    await tx.enrolment.update({
-      where: { id: invoice.enrolment.id },
-      data: { paidThroughDate: invoice.coverageEnd },
-    });
-  } else if (
-    (plan.billingType === BillingType.BLOCK || plan.billingType === BillingType.PER_CLASS) &&
-    invoice.creditsPurchased
-  ) {
-    await tx.enrolment.update({
-      where: { id: invoice.enrolment.id },
-      data: {
-        creditsRemaining: (invoice.enrolment.creditsRemaining ?? 0) + invoice.creditsPurchased,
-      },
-    });
-  }
 }
 
 export async function recalculateInvoiceTotals(
@@ -381,7 +355,7 @@ async function persistAllocations(
     });
 
     if (status === InvoiceStatus.PAID && invoice.status !== InvoiceStatus.PAID) {
-      await applyEntitlementsForInvoiceInternal(tx, updated);
+      await applyEntitlementsForInvoice(updated.id, { client: tx });
     }
   }
 
@@ -499,14 +473,10 @@ export async function applyEntitlementsForPaidInvoice(
   return withTransaction(client, async (tx) => {
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },
-      include: {
-        enrolment: { include: { plan: true } },
-        lineItems: { select: { id: true, kind: true } },
-      },
     });
     if (!invoice) throw new Error("Invoice not found.");
     if (invoice.status === InvoiceStatus.PAID) {
-      await applyEntitlementsForInvoiceInternal(tx, invoice);
+      await applyEntitlementsForInvoice(invoiceId, { client: tx });
     }
     return invoice;
   });

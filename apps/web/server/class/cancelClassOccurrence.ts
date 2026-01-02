@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
+import { registerCancellationCredit } from "@/server/billing/enrolmentBilling";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type CancelClassOccurrenceInput = {
@@ -58,7 +59,7 @@ export async function cancelClassOccurrence({ templateId, dateKey, reason }: Can
         startDate: { lte: date },
         OR: [{ endDate: null }, { endDate: { gte: date } }],
       },
-      include: { plan: true },
+      include: { plan: true, template: true },
     });
 
     const existingAdjustments = await tx.enrolmentAdjustment.findMany({
@@ -96,27 +97,11 @@ export async function cancelClassOccurrence({ templateId, dateKey, reason }: Can
     }
 
     for (const adj of newAdjustments) {
-      await tx.enrolmentAdjustment.create({ data: adj });
-      const enrolment = enrolments.find((e) => e.id === adj.enrolmentId);
-      if (!enrolment) continue;
-
-      if (adj.creditsDelta) {
-        await tx.enrolment.update({
-          where: { id: enrolment.id },
-          data: {
-            creditsRemaining: (enrolment.creditsRemaining ?? 0) + adj.creditsDelta,
-          },
-        });
-      } else if (adj.paidThroughDeltaDays) {
-        const base = startOfDay(enrolment.paidThroughDate ?? date);
-        const next = addDays(base, adj.paidThroughDeltaDays);
-        await tx.enrolment.update({
-          where: { id: enrolment.id },
-          data: {
-            paidThroughDate: next,
-          },
-        });
-      }
+      const created = await tx.enrolmentAdjustment.create({
+        data: adj,
+        include: { enrolment: { include: { plan: true, template: true } } },
+      });
+      await registerCancellationCredit(created, { client: tx });
     }
 
     const creditedAdjustments = await tx.enrolmentAdjustment.findMany({
