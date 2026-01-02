@@ -11,11 +11,8 @@ import {
   getWeeklyPaidThrough,
   refreshBillingForOpenEnrolments,
 } from "@/server/billing/enrolmentBilling";
-import {
-  applyEntitlementsForPaidInvoice,
-  createInvoiceWithLineItems,
-  recalculateInvoiceTotals,
-} from "@/server/billing/invoiceMutations";
+import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
+import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -176,7 +173,7 @@ export async function markInvoicePaid(invoiceId: string) {
       },
     });
 
-    await applyEntitlementsForPaidInvoice(invoiceId, { client: tx, skipAuth: true });
+    await applyPaidInvoiceToEnrolment(invoiceId, { client: tx });
 
     return updated;
   });
@@ -259,7 +256,7 @@ export async function issueNextInvoiceForEnrolment(
 
     const creditsPurchased =
       enrolment.plan.billingType === BillingType.BLOCK
-        ? enrolment.plan.blockClassCount!
+        ? enrolment.plan.blockClassCount ?? enrolment.plan.blockLength ?? 1
         : enrolment.plan.blockClassCount ?? 1;
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,

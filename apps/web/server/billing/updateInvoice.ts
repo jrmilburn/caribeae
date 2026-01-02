@@ -7,7 +7,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { applyEntitlementsForPaidInvoice, recalculateInvoiceTotals, replaceInvoiceLineItems } from "./invoiceMutations";
+import { recalculateInvoiceTotals, replaceInvoiceLineItems } from "./invoiceMutations";
+import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 
 const lineItemSchema = z.object({
   kind: z.nativeEnum(InvoiceLineItemKind),
@@ -105,7 +106,7 @@ export async function updateInvoice(invoiceId: string, input: UpdateInvoiceInput
     });
 
     if (status === InvoiceStatus.PAID && existing.status !== InvoiceStatus.PAID) {
-      await applyEntitlementsForPaidInvoice(invoiceId, { client: tx, skipAuth: true });
+      await applyPaidInvoiceToEnrolment(invoiceId, { client: tx });
     }
 
     return recalculateInvoiceTotals(invoiceId, { client: tx, skipAuth: true });
