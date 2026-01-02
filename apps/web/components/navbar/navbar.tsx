@@ -28,6 +28,8 @@ import { useClerk, useUser } from "@clerk/nextjs";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/navigation/BackButton";
+import { shouldShowBack } from "@/components/navigation/shouldShowBack";
 import {
   Sheet,
   SheetContent,
@@ -81,7 +83,12 @@ export function AppNavbar({ children, brandName = "Caribeae Admin" }: AppNavbarP
     <div className="flex max-h-screen h-full w-full bg-background">
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-        <div className="flex h-14 items-center gap-2 px-4">
+        <div className="flex h-14 items-center gap-3 px-4">
+          {shouldShowBack(pathname) ? (
+            <BackButton aria-label="Back" />
+          ) : (
+            <div className="h-9 w-9" aria-hidden />
+          )}
           <div className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-muted">
             <span className="text-sm font-semibold">CS</span>
           </div>
