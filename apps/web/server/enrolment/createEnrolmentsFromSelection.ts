@@ -154,6 +154,8 @@ export async function createEnrolmentsFromSelection(
           planId: plan.id,
           paidThroughDate: accounting.paidThroughDate,
           creditsRemaining: accounting.creditsRemaining,
+          creditsBalanceCached: accounting.creditsRemaining ?? null,
+          paidThroughDateComputed: accounting.paidThroughDate ?? null,
         },
       });
       await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });

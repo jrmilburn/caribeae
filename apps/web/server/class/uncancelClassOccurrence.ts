@@ -1,12 +1,12 @@
 "use server";
 
-import { addDays, startOfDay } from "date-fns";
 import { EnrolmentAdjustmentType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
+import { removeCancellationCredit } from "@/server/billing/enrolmentBilling";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type UncancelInput = {
@@ -31,28 +31,11 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
 
     const adjustments = await tx.enrolmentAdjustment.findMany({
       where: { templateId, date, type: EnrolmentAdjustmentType.CANCELLATION_CREDIT },
-      include: { enrolment: true },
+      include: { enrolment: { include: { plan: true, template: true } } },
     });
 
     for (const adj of adjustments) {
-      if (adj.creditsDelta) {
-        await tx.enrolment.update({
-          where: { id: adj.enrolmentId },
-          data: {
-            creditsRemaining: Math.max(0, (adj.enrolment.creditsRemaining ?? 0) - adj.creditsDelta),
-          },
-        });
-      } else if (adj.paidThroughDeltaDays) {
-        const current = startOfDay(adj.enrolment.paidThroughDate ?? date);
-        const next = addDays(current, -adj.paidThroughDeltaDays);
-        const minDate = adj.enrolment.startDate ? startOfDay(adj.enrolment.startDate) : null;
-        const safeDate = minDate && next < minDate ? minDate : next;
-
-        await tx.enrolment.update({
-          where: { id: adj.enrolmentId },
-          data: { paidThroughDate: safeDate },
-        });
-      }
+      await removeCancellationCredit(adj, { client: tx });
     }
 
     await tx.enrolmentAdjustment.deleteMany({

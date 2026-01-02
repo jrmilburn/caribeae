@@ -236,6 +236,8 @@ model Attendance {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  creditEvents EnrolmentCreditEvent[]
+
   @@unique([templateId, date, studentId])
   @@index([date])
   @@index([studentId, date])
@@ -265,6 +267,8 @@ model EnrolmentAdjustment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  creditEvents EnrolmentCreditEvent[]
+
   @@unique([enrolmentId, templateId, date, type])
   @@index([templateId, date])
 }
@@ -280,6 +284,13 @@ enum EnrolmentStatus {
   ACTIVE
   PAUSED
   CANCELLED
+}
+
+enum EnrolmentCreditEventType {
+  PURCHASE
+  CONSUME
+  CANCELLATION_CREDIT
+  MANUAL_ADJUST
 }
 
 enum InvoiceStatus {
@@ -319,10 +330,14 @@ model Enrolment {
   planId String?
   plan   EnrolmentPlan? @relation(fields: [planId], references: [id])
 
-  paidThroughDate  DateTime?
-  creditsRemaining Int?
+  paidThroughDate         DateTime?
+  paidThroughDateComputed DateTime?
+  nextDueDateComputed     DateTime?
+  creditsRemaining        Int?
+  creditsBalanceCached    Int?
 
   adjustments EnrolmentAdjustment[]
+  creditEvents EnrolmentCreditEvent[]
 
   invoices Invoice[]
 
@@ -627,6 +642,34 @@ model InvoiceLineItem {
   @@index([productId])
   @@index([enrolmentId])
   @@index([studentId])
+}
+
+model EnrolmentCreditEvent {
+  id String @id @default(cuid())
+
+  enrolmentId String
+  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  type         EnrolmentCreditEventType
+  creditsDelta Int
+  occurredOn   DateTime // normalized to local midnight
+  note         String?
+
+  invoiceId   String?
+  invoice     Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  attendanceId String?
+  attendance   Attendance? @relation(fields: [attendanceId], references: [id], onDelete: SetNull)
+  adjustmentId String?
+  adjustment   EnrolmentAdjustment? @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enrolmentId, occurredOn])
+  @@index([occurredOn])
+  @@index([invoiceId])
+  @@index([attendanceId])
+  @@index([adjustmentId])
 }
 
 //MESSAGE AND EMAIL RELATED STUFF
