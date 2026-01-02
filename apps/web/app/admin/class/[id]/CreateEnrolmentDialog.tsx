@@ -45,6 +45,7 @@ export function CreateEnrolmentDialog({
   enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [saving, setSaving] = React.useState(false);
 
   const [studentId, setStudentId] = React.useState<string>("");
