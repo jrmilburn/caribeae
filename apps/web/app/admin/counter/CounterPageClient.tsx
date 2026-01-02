@@ -13,7 +13,7 @@ import {
   Sparkles,
   Wallet,
 } from "lucide-react";
-import type { BillingType, Product } from "@prisma/client";
+import type { Product } from "@prisma/client";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,9 +28,8 @@ import { cn } from "@/lib/utils";
 import { searchFamilies } from "@/server/family/searchFamilies";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { createPayment } from "@/server/billing/createPayment";
-import { createPayAheadInvoice } from "@/server/billing/createPayAheadInvoice";
-import { purchaseCredits } from "@/server/billing/purchaseCredits";
 import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
+import { CounterPayAheadCard } from "./CounterPayAheadCard";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
 type AllocationMap = Record<string, string>;
@@ -54,19 +53,6 @@ function statusVariant(status: string) {
   }
 }
 
-function billingLabel(type: BillingType | null | undefined) {
-  switch (type) {
-    case "PER_WEEK":
-      return "Weekly";
-    case "BLOCK":
-      return "Block";
-    case "PER_CLASS":
-      return "Per class";
-    default:
-      return "Unbilled";
-  }
-}
-
 type CounterPageClientProps = {
   products: Product[];
   counterFamily: { id: string; name: string } | null;
@@ -87,9 +73,6 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
   const [allocationMode, setAllocationMode] = React.useState<"AUTO" | "MANUAL">("AUTO");
   const [allocations, setAllocations] = React.useState<AllocationMap>({});
   const [submittingPayment, setSubmittingPayment] = React.useState(false);
-
-  const [payAheadCounts, setPayAheadCounts] = React.useState<Record<string, number>>({});
-  const [payAheadLoading, setPayAheadLoading] = React.useState<Record<string, boolean>>({});
 
   const [cart, setCart] = React.useState<Record<string, number>>({});
   const [checkoutMode, setCheckoutMode] = React.useState<"PAY_NOW" | "INVOICE">("PAY_NOW");
@@ -142,6 +125,16 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     },
     [startLoadingSummary]
   );
+
+  const refreshSummary = React.useCallback(async (familyId: string) => {
+    try {
+      const refreshed = await getFamilyBillingSummary(familyId);
+      setSummary(refreshed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to refresh billing position.";
+      toast.error(message);
+    }
+  }, []);
 
   const allocationRows = React.useMemo(() => summary?.openInvoices ?? [], [summary?.openInvoices]);
 
@@ -320,33 +313,6 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       toast.error(message);
     } finally {
       setSubmittingPayment(false);
-    }
-  };
-
-  const handlePayAhead = async (enrolmentId: string, billingType: BillingType | null | undefined) => {
-    if (!summary) return;
-    const count = payAheadCounts[enrolmentId] ?? 1;
-    if (!count || count <= 0) {
-      toast.error("Enter how many future blocks to bill.");
-      return;
-    }
-
-    setPayAheadLoading((prev) => ({ ...prev, [enrolmentId]: true }));
-    try {
-      if (billingType === "PER_WEEK") {
-        await createPayAheadInvoice({ enrolmentId, periods: count });
-        toast.success("Pay-ahead invoice created.");
-      } else {
-        await purchaseCredits({ enrolmentId, blocks: count });
-        toast.success("Credits invoiced for prepayment.");
-      }
-      const refreshed = await getFamilyBillingSummary(summary.family.id);
-      setSummary(refreshed);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to create pay-ahead invoice.";
-      toast.error(message);
-    } finally {
-      setPayAheadLoading((prev) => ({ ...prev, [enrolmentId]: false }));
     }
   };
 
@@ -780,78 +746,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
             </Card>
           </div>
 
-          <Card>
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-base">Pay ahead</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Bill upcoming coverage or credits without waiting for the next sweep.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {summary?.enrolments.length ? (
-                summary.enrolments.map((enrolment) => {
-                  const count = payAheadCounts[enrolment.id] ?? 1;
-                  const loading = payAheadLoading[enrolment.id];
-                  const estimate =
-                    enrolment.planPriceCents && count > 0
-                      ? enrolment.planPriceCents * count
-                      : enrolment.planPriceCents;
-                  return (
-                    <div
-                      key={enrolment.id}
-                      className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{enrolment.studentName}</span>
-                          <Badge variant="secondary">{billingLabel(enrolment.billingType)}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {enrolment.planName} · Paid through {formatDate(enrolment.paidThroughDate)} · Credits{" "}
-                          {enrolment.creditsRemaining ?? 0}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs text-muted-foreground">Qty</Label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            value={count}
-                            onChange={(e) =>
-                              setPayAheadCounts((prev) => ({
-                                ...prev,
-                                [enrolment.id]: Number(e.target.value),
-                              }))
-                            }
-                            className="w-20"
-                          />
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Est. {estimate ? formatCurrencyFromCents(estimate) : "—"}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => handlePayAhead(enrolment.id, enrolment.billingType)}
-                          disabled={loading}
-                        >
-                          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                          {enrolment.billingType === "PER_WEEK" ? "Bill weeks ahead" : "Add credits invoice"}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">No enrolments available for this family.</p>
-              )}
-            </CardContent>
-          </Card>
+          <CounterPayAheadCard summary={summary} onRefresh={refreshSummary} />
 
           <Card>
             <CardHeader>

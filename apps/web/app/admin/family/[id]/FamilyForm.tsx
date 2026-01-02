@@ -6,7 +6,9 @@ import type { Prisma } from "@prisma/client";
 import type { Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
+import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { UnpaidFamiliesIndicator } from "../UnpaidFamiliesIndicator";
+import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -52,9 +54,17 @@ type FamilyFormProps = {
   levels: Level[];
   unpaidSummary: UnpaidFamiliesSummary;
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
+  billingPosition: FamilyBillingPosition;
 };
 
-export default function FamilyForm({ family, enrolContext, levels, unpaidSummary, billing }: FamilyFormProps) {
+export default function FamilyForm({
+  family,
+  enrolContext,
+  levels,
+  unpaidSummary,
+  billing,
+  billingPosition,
+}: FamilyFormProps) {
   if (!family) return null;
 
   return (
@@ -66,6 +76,10 @@ export default function FamilyForm({ family, enrolContext, levels, unpaidSummary
           </div>
           <UnpaidFamiliesIndicator summary={unpaidSummary} />
         </div>
+      </div>
+
+      <div className="mb-4">
+        <FamilyBillingPositionCard billing={billingPosition} />
       </div>
 
       <div className="grid md:grid-cols-5">
