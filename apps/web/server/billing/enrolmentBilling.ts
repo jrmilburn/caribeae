@@ -449,7 +449,10 @@ export async function applyEntitlementsForInvoice(
         : plan.blockLength && plan.blockLength > 0
           ? plan.blockLength
           : 1;
-    const totalClasses = classesPerBlock * Math.max(enrolmentItemsQuantity, 1);
+    const totalClasses =
+      (invoice.creditsPurchased && invoice.creditsPurchased > 0
+        ? invoice.creditsPurchased
+        : classesPerBlock * Math.max(enrolmentItemsQuantity, 1)) ?? 0;
     const boundedPaidThrough = paidThroughFromClassCount({
       enrolment: invoice.enrolment,
       totalClasses,
