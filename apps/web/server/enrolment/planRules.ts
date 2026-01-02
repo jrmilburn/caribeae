@@ -46,12 +46,7 @@ export function resolvePlannedEndDate(
   }
 
   const hasDuration = Boolean(plan.durationWeeks && plan.durationWeeks > 0);
-  const baseEnd =
-    plan.billingType === BillingType.PER_CLASS && !hasDuration
-      ? normalizedStart
-      : hasDuration
-        ? addWeeks(normalizedStart, plan.durationWeeks ?? 0)
-        : null;
+  const baseEnd = hasDuration ? addWeeks(normalizedStart, plan.durationWeeks ?? 0) : null;
 
   if (!baseEnd || !templateEndDate) return baseEnd;
   const templateEnd = startOfDay(templateEndDate);
