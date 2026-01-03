@@ -37,10 +37,7 @@ export async function purchaseCredits(input: PurchaseCreditsInput) {
     throw new Error("Use the weekly pay-ahead flow for this enrolment.");
   }
 
-  const blockSize =
-    enrolment.plan.billingType === BillingType.BLOCK
-      ? enrolment.plan.blockClassCount ?? enrolment.plan.blockLength ?? 0
-      : enrolment.plan.blockClassCount ?? 1;
+  const blockSize = enrolment.plan.blockClassCount ?? 1;
 
   if (!blockSize || blockSize <= 0) {
     throw new Error("Plan is missing block or class count details.");

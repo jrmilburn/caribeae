@@ -41,16 +41,18 @@ function getClient(client?: PrismaClientOrTx) {
 }
 
 function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
-  if (invoice.creditsPurchased && invoice.creditsPurchased > 0) return invoice.creditsPurchased;
   const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
   const quantity = enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
-  if (plan.billingType === BillingType.BLOCK) {
-    return (plan.blockClassCount ?? plan.blockLength ?? 0) * quantity;
+  if (plan.billingType === BillingType.PER_WEEK) return 0;
+  const blockClassCount = plan.blockClassCount ?? 1;
+  if (blockClassCount <= 0) {
+    throw new Error("PER_CLASS plans require blockClassCount to grant credits.");
   }
-  if (plan.billingType === BillingType.PER_CLASS) {
-    return (plan.blockClassCount ?? 1) * quantity;
+  const computed = blockClassCount * quantity;
+  if (invoice.creditsPurchased && invoice.creditsPurchased > 0) {
+    return invoice.creditsPurchased < computed ? computed : invoice.creditsPurchased;
   }
-  return 0;
+  return computed;
 }
 
 export function resolveBlockCoverageWindow(params: {

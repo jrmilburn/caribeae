@@ -34,12 +34,12 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
   });
   const parsed = schema.parse(input);
   const requiresDuration = parsed.billingType === "PER_WEEK";
-  const requiresBlockCount = parsed.billingType === "BLOCK";
+  const requiresBlockCount = parsed.billingType === "PER_CLASS";
   if (requiresDuration && !parsed.durationWeeks) {
     throw new Error("Weekly plans must include durationWeeks");
   }
   if (requiresBlockCount && !parsed.blockClassCount) {
-    throw new Error("Block plans must include the number of classes");
+    throw new Error("Per-class plans must include the number of classes");
   }
 
   const plan = await prisma.enrolmentPlan.update({
@@ -55,15 +55,8 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
       blockClassCount:
         parsed.billingType === "PER_CLASS"
           ? parsed.blockClassCount ?? 1
-          : requiresBlockCount
-            ? parsed.blockClassCount
-            : null,
-      blockLength:
-        parsed.billingType === "BLOCK"
-          ? parsed.blockClassCount ?? 1
-          : parsed.billingType === "PER_CLASS"
-            ? parsed.blockClassCount ?? 1
-            : 1,
+          : null,
+      blockLength: parsed.blockClassCount ?? 1,
     },
   });
 

@@ -13,6 +13,7 @@ import {
 } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
+import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoicing/coverage";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -24,13 +25,6 @@ export const OPEN_INVOICE_STATUSES = [
 ] as const;
 const DEFAULT_DUE_IN_DAYS = 7;
 const SWEEP_THROTTLE_MS = 15 * 60 * 1000;
-
-const enrolmentWithPlanInclude = {
-  include: {
-    plan: true,
-    student: { select: { familyId: true } },
-  },
-} satisfies Prisma.EnrolmentInclude;
 
 function asDate(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -54,37 +48,6 @@ function inTransaction<T>(client: PrismaClientOrTx | undefined, fn: (tx: Prisma.
     return (candidate as PrismaClient).$transaction((tx) => fn(tx));
   }
   return fn(candidate as Prisma.TransactionClient);
-}
-
-function resolveCoverageForPlan(params: {
-  enrolment: Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
-  plan: Prisma.EnrolmentPlanUncheckedCreateInput | Prisma.EnrolmentPlanGetPayload<{ include: { level: true } }>;
-  today?: Date;
-}) {
-  const { enrolment, plan } = params;
-  const today = params.today ?? new Date();
-
-  console.log("ENROLMENT, PLAN", enrolment, plan);
-
-  if (plan.billingType === BillingType.PER_WEEK) {
-    if (!plan.durationWeeks || plan.durationWeeks <= 0) {
-      throw new Error("Weekly plans require a duration in weeks.");
-    }
-    const duration = plan.durationWeeks;
-    const coverageStart = enrolment.paidThroughDate
-      ? maxDate([today, enrolment.paidThroughDate])
-      : enrolment.startDate;
-    const rawEnd = addWeeks(coverageStart, duration);
-    const coverageEnd =
-      enrolment.endDate && isBefore(enrolment.endDate, rawEnd) ? enrolment.endDate : rawEnd;
-    return { coverageStart, coverageEnd, creditsPurchased: null };
-  }
-
-  if (plan.billingType === BillingType.PER_CLASS && (!plan.blockClassCount || plan.blockClassCount <= 0)) {
-    throw new Error("Block plans require the number of classes per block.");
-  }
-  const creditsPurchased = plan.billingType === BillingType.PER_CLASS ? plan.blockClassCount! : 1;
-  return { coverageStart: null, coverageEnd: null, creditsPurchased };
 }
 
 export async function createInitialInvoiceForEnrolment(
@@ -254,16 +217,11 @@ export async function issueNextInvoiceForEnrolment(
     const needsCredits = (billingSnapshot.remainingCredits ?? 0) <= 0;
     if (!needsCredits) return { created: false };
 
-    if (enrolment.plan.billingType === BillingType.BLOCK && !enrolment.plan.blockClassCount) {
-      throw new Error("Block plans require blockClassCount to be set.");
+    if (enrolment.plan.billingType === BillingType.PER_CLASS && enrolment.plan.blockClassCount != null && enrolment.plan.blockClassCount <= 0) {
+      throw new Error("PER_CLASS plans require blockClassCount to be greater than zero when provided.");
     }
 
-    console.log("ENROLMENT.PLAN", enrolment.plan);
-
-    const creditsPurchased =
-      enrolment.plan.billingType === BillingType.BLOCK
-        ? enrolment.plan.blockClassCount ?? enrolment.plan.blockLength ?? 1
-        : enrolment.plan.blockClassCount ?? 1;
+    const creditsPurchased = enrolment.plan.blockClassCount ?? 1;
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
       enrolmentId: enrolment.id,
@@ -309,7 +267,7 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
           ],
         },
         {
-          plan: { billingType: { in: [BillingType.BLOCK, BillingType.PER_CLASS] } },
+          plan: { billingType: BillingType.PER_CLASS },
           OR: [
             { creditsRemaining: null },
             { creditsRemaining: { lte: 0 } },

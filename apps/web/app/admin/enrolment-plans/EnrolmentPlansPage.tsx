@@ -92,18 +92,12 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                       <TableCell className="font-medium">{plan.name}</TableCell>
                       <TableCell>{plan.level.name}</TableCell>
                       <TableCell className="capitalize">
-                        {plan.billingType === "PER_WEEK"
-                          ? "Per week"
-                          : plan.billingType === "BLOCK"
-                            ? "Block"
-                            : "Per class"}
+                        {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
                       </TableCell>
                       <TableCell>
                         {plan.billingType === "PER_WEEK"
                           ? `${plan.durationWeeks ?? "—"} week${(plan.durationWeeks ?? 0) === 1 ? "" : "s"}${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`
-                          : plan.billingType === "BLOCK"
-                            ? `${plan.blockClassCount ?? plan.blockLength ?? 1} classes per block${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`
-                            : `1 class per invoice${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`}
+                          : `${plan.blockClassCount ?? 1} classes per purchase${plan.sessionsPerWeek && plan.sessionsPerWeek > 1 ? ` · ${plan.sessionsPerWeek}/week` : ""}`}
                       </TableCell>
                       <TableCell>
                         ${(plan.priceCents / 100).toFixed(2)}

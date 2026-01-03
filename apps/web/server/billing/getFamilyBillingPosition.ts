@@ -46,7 +46,7 @@ function evaluateEntitlement(params: {
     return { status: "AHEAD" as EntitlementStatus };
   }
 
-  if (params.billingType === BillingType.BLOCK || params.billingType === BillingType.PER_CLASS) {
+  if (params.billingType === BillingType.PER_CLASS) {
     const credits = params.creditsRemaining ?? 0;
     if (credits <= 0) return { status: "OVERDUE" as EntitlementStatus };
     if (credits <= Math.max(params.thresholdCredits, 1)) return { status: "DUE_SOON" as EntitlementStatus };
@@ -58,13 +58,8 @@ function evaluateEntitlement(params: {
 
 function blockSize(plan: Prisma.EnrolmentPlan | null | undefined) {
   if (!plan) return 0;
-  if (plan.billingType === BillingType.BLOCK) {
-    return plan.blockClassCount ?? plan.blockLength ?? 0;
-  }
-  if (plan.billingType === BillingType.PER_CLASS) {
-    return plan.blockClassCount ?? 1;
-  }
-  return 0;
+  const size = plan.blockClassCount ?? 1;
+  return size > 0 ? size : 0;
 }
 
 export async function getFamilyBillingPosition(familyId: string, options?: { client?: PrismaClientOrTx }) {
@@ -190,7 +185,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         billingType: plan?.billingType ?? null,
         planPriceCents: plan?.priceCents ?? 0,
         durationWeeks: plan?.durationWeeks ?? null,
-        blockClassCount: plan?.blockClassCount ?? plan?.blockLength ?? null,
+        blockClassCount: plan?.blockClassCount ?? null,
         creditsRemaining,
         paidThroughDate,
         projectedCoverageEnd,

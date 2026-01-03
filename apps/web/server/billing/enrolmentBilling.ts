@@ -158,7 +158,7 @@ async function ensureConsumptionEvents(
   throughDate: Date
 ) {
   if (!enrolment.plan || !enrolment.template) return;
-  if (![BillingType.BLOCK, BillingType.PER_CLASS].includes(enrolment.plan.billingType)) return;
+  if (enrolment.plan.billingType !== BillingType.PER_CLASS) return;
 
   const windowEnd = enrolment.endDate && isAfter(normalizeDate(enrolment.endDate), normalizeDate(throughDate))
     ? normalizeDate(throughDate)
@@ -466,7 +466,7 @@ export async function registerCreditConsumptionForDate(
       },
       include: { plan: true, template: true },
     });
-    if (!enrolment?.plan || ![BillingType.BLOCK, BillingType.PER_CLASS].includes(enrolment.plan.billingType)) {
+  if (!enrolment?.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) {
       return;
     }
 
