@@ -1,5 +1,7 @@
-import { addWeeks, isBefore, max as maxDate } from "date-fns";
+import { addWeeks, isAfter, isBefore, max as maxDate } from "date-fns";
 import { BillingType, type Prisma } from "@prisma/client";
+
+import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 
 export const enrolmentWithPlanInclude = {
   include: {
@@ -7,6 +9,38 @@ export const enrolmentWithPlanInclude = {
     student: { select: { familyId: true } },
   },
 } satisfies Prisma.EnrolmentInclude;
+
+export function resolveWeeklyCoverageWindow(params: {
+  enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
+  plan: { durationWeeks: number | null };
+  today?: Date;
+}) {
+  const durationWeeks = params.plan.durationWeeks;
+  if (!durationWeeks || durationWeeks <= 0) {
+    throw new Error("Weekly plans require durationWeeks to be greater than zero.");
+  }
+
+  const startDate = normalizeDate(params.enrolment.startDate, "enrolment.startDate");
+  const paidThrough = normalizeOptionalDate(params.enrolment.paidThroughDate);
+  const today = normalizeDate(params.today ?? new Date(), "today");
+  const enrolmentEnd = normalizeOptionalDate(params.enrolment.endDate);
+
+  const coverageStart = paidThrough ? maxDate([today, paidThrough]) : maxDate([today, startDate]);
+
+  if (enrolmentEnd && isAfter(coverageStart, enrolmentEnd)) {
+    throw new Error("Enrolment end date has passed.");
+  }
+
+  let coverageEnd = addWeeks(coverageStart, durationWeeks);
+  if (enrolmentEnd && isAfter(coverageEnd, enrolmentEnd)) {
+    coverageEnd = enrolmentEnd;
+  }
+
+  return {
+    coverageStart: normalizeDate(coverageStart),
+    coverageEnd: normalizeDate(coverageEnd),
+  };
+}
 
 export function resolveCoverageForPlan(params: {
   enrolment: Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
@@ -17,16 +51,15 @@ export function resolveCoverageForPlan(params: {
   const today = params.today ?? new Date();
 
   if (plan.billingType === BillingType.PER_WEEK) {
-    if (!plan.durationWeeks || plan.durationWeeks <= 0) {
-      throw new Error("Weekly plans require a duration in weeks.");
-    }
-    const duration = plan.durationWeeks;
-    const coverageStart = enrolment.paidThroughDate
-      ? maxDate([today, enrolment.paidThroughDate])
-      : enrolment.startDate;
-    const rawEnd = addWeeks(coverageStart, duration);
-    const coverageEnd =
-      enrolment.endDate && isBefore(enrolment.endDate, rawEnd) ? enrolment.endDate : rawEnd;
+    const { coverageStart, coverageEnd } = resolveWeeklyCoverageWindow({
+      enrolment: {
+        startDate: enrolment.startDate,
+        endDate: enrolment.endDate,
+        paidThroughDate: enrolment.paidThroughDate,
+      },
+      plan: { durationWeeks: plan.durationWeeks ?? null },
+      today,
+    });
     return { coverageStart, coverageEnd, creditsPurchased: null };
   }
 

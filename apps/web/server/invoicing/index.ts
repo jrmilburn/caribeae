@@ -1,5 +1,5 @@
 
-import { addDays, addWeeks, isAfter, isBefore, max as maxDate } from "date-fns";
+import { addDays } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
@@ -13,7 +13,11 @@ import {
 } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
-import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoicing/coverage";
+import {
+  enrolmentWithPlanInclude,
+  resolveCoverageForPlan,
+  resolveWeeklyCoverageWindow,
+} from "@/server/invoicing/coverage";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -178,19 +182,16 @@ export async function issueNextInvoiceForEnrolment(
 
     const today = new Date();
     if (enrolment.plan.billingType === BillingType.PER_WEEK) {
-      const durationWeeks = enrolment.plan.durationWeeks;
-      if (!durationWeeks) throw new Error("Weekly plans require durationWeeks to be set.");
-
       const paidThrough = billingSnapshot.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-      const coverageStart = paidThrough
-        ? maxDate([today, paidThrough])
-        : maxDate([today, enrolment.startDate]);
-      if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
-        return { created: false };
-      }
-      const rawEnd = addWeeks(coverageStart, durationWeeks);
-      const coverageEnd =
-        enrolment.endDate && isBefore(enrolment.endDate, rawEnd) ? enrolment.endDate : rawEnd;
+      const { coverageStart, coverageEnd } = resolveWeeklyCoverageWindow({
+        enrolment: {
+          startDate: enrolment.startDate,
+          endDate: enrolment.endDate,
+          paidThroughDate: paidThrough,
+        },
+        plan: { durationWeeks: enrolment.plan.durationWeeks ?? null },
+        today,
+      });
 
       const invoice = await createInvoiceWithLineItems({
         familyId: enrolment.student.familyId,

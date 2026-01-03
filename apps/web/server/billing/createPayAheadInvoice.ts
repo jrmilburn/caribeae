@@ -1,6 +1,6 @@
 "use server";
 
-import { addDays, addWeeks, isAfter, max as maxDate } from "date-fns";
+import { addDays, isAfter } from "date-fns";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -9,6 +9,8 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
 import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBilling";
+import { resolveWeeklyCoverageWindow } from "@/server/invoicing/coverage";
+import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -45,31 +47,31 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
 
   const durationWeeks = enrolment.plan.durationWeeks;
 
-  const latestCoverage = await prisma.invoice.aggregate({
-    where: { enrolmentId: enrolment.id, coverageEnd: { not: null } },
-    _max: { coverageEnd: true },
-  });
-
-  const today = new Date();
+  const today = normalizeDate(new Date(), "today");
   const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-  const coverageStart = maxDate(
-    [enrolment.startDate, paidThrough ?? enrolment.startDate, latestCoverage._max.coverageEnd ?? enrolment.startDate, today].filter(Boolean) as Date[]
-  );
+  const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
 
-  if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
-    throw new Error("Enrolment end date has passed.");
-  }
-
-  let currentStart = coverageStart;
-  let coverageEnd = coverageStart;
+  let cursor = normalizeDate(paidThrough ?? enrolment.startDate, "paidThroughDate");
+  let coverageStart = cursor;
+  let coverageEnd = cursor;
   let createdPeriods = 0;
 
   for (let i = 0; i < periods; i++) {
-    if (enrolment.endDate && isAfter(currentStart, enrolment.endDate)) break;
-
-    const rawEnd = addWeeks(currentStart, durationWeeks);
-    coverageEnd = enrolment.endDate && isAfter(rawEnd, enrolment.endDate) ? enrolment.endDate : rawEnd;
-    currentStart = coverageEnd;
+    if (enrolmentEnd && isAfter(cursor, enrolmentEnd)) break;
+    const window = resolveWeeklyCoverageWindow({
+      enrolment: {
+        startDate: enrolment.startDate,
+        endDate: enrolment.endDate,
+        paidThroughDate: cursor,
+      },
+      plan: { durationWeeks },
+      today,
+    });
+    if (createdPeriods === 0) {
+      coverageStart = window.coverageStart;
+    }
+    coverageEnd = window.coverageEnd;
+    cursor = window.coverageEnd;
     createdPeriods += 1;
   }
 

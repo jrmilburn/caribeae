@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { BillingType } from "@prisma/client";
 
 import { hasAppliedEntitlements, resolveBlockCoverageWindow } from "./applyPaidInvoiceToEnrolment";
-import { resolveCoverageForPlan } from "./coverage";
+import { resolveCoverageForPlan, resolveWeeklyCoverageWindow } from "./coverage";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -114,4 +114,31 @@ test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends covera
     today: firstWindow.coverageEnd,
   });
   assert.strictEqual(payAheadWindow.coverageEnd.toISOString().slice(0, 10), "2026-05-25");
+});
+
+test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", () => {
+  const enrolment = {
+    startDate: d("2026-06-01"),
+    endDate: null,
+    paidThroughDate: null as Date | null,
+  };
+  const plan = { durationWeeks: 1 };
+
+  const firstWindow = resolveWeeklyCoverageWindow({
+    enrolment,
+    plan,
+    today: d("2026-06-01"),
+  });
+
+  assert.strictEqual(firstWindow.coverageStart.toISOString().slice(0, 10), "2026-06-01");
+  assert.strictEqual(firstWindow.coverageEnd.toISOString().slice(0, 10), "2026-06-08");
+
+  const secondWindow = resolveWeeklyCoverageWindow({
+    enrolment: { ...enrolment, paidThroughDate: firstWindow.coverageEnd },
+    plan,
+    today: firstWindow.coverageEnd,
+  });
+
+  assert.strictEqual(secondWindow.coverageStart.toISOString().slice(0, 10), "2026-06-08");
+  assert.strictEqual(secondWindow.coverageEnd.toISOString().slice(0, 10), "2026-06-15");
 });
