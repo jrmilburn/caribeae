@@ -1,6 +1,11 @@
 import assert from "node:assert";
+import { BillingType, InvoiceLineItemKind } from "@prisma/client";
 
-import { hasAppliedEntitlements, resolveBlockCoverageWindow } from "./applyPaidInvoiceToEnrolment";
+import {
+  hasAppliedEntitlements,
+  resolveBlockCoverageWindow,
+  resolveCreditsPurchased,
+} from "./applyPaidInvoiceToEnrolment";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -53,4 +58,21 @@ test("Scenario C: idempotency guard prevents double application", () => {
       entitlementsAppliedAt: new Date(),
     })
   );
+});
+
+test("Scenario D: per-class purchases use blockLength for credits", () => {
+  const credits = resolveCreditsPurchased(
+    {
+      id: "inv",
+      creditsPurchased: null,
+      lineItems: [{ kind: InvoiceLineItemKind.ENROLMENT, quantity: 1 }],
+    } as any,
+    {
+      billingType: BillingType.PER_CLASS,
+      blockLength: 8,
+      blockClassCount: null,
+    } as any
+  );
+
+  assert.strictEqual(credits, 8);
 });

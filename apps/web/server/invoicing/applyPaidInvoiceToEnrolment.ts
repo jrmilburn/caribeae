@@ -40,7 +40,7 @@ function getClient(client?: PrismaClientOrTx) {
   return client ?? prisma;
 }
 
-function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
+export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
   if (invoice.creditsPurchased && invoice.creditsPurchased > 0) return invoice.creditsPurchased;
   const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
   const quantity = enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
@@ -48,7 +48,7 @@ function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.Enr
     return (plan.blockClassCount ?? plan.blockLength ?? 0) * quantity;
   }
   if (plan.billingType === BillingType.PER_CLASS) {
-    return (plan.blockClassCount ?? 1) * quantity;
+    return (plan.blockLength ?? plan.blockClassCount ?? 1) * quantity;
   }
   return 0;
 }

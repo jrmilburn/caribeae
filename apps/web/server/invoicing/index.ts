@@ -81,7 +81,10 @@ function resolveCoverageForPlan(params: {
   if (plan.billingType === BillingType.BLOCK && (!plan.blockClassCount || plan.blockClassCount <= 0)) {
     throw new Error("Block plans require the number of classes per block.");
   }
-  const creditsPurchased = plan.billingType === BillingType.BLOCK ? plan.blockClassCount! : 1;
+  const creditsPurchased =
+    plan.billingType === BillingType.BLOCK
+      ? plan.blockClassCount!
+      : plan.blockLength ?? plan.blockClassCount ?? 1;
   return { coverageStart: null, coverageEnd: null, creditsPurchased };
 }
 
@@ -257,7 +260,7 @@ export async function issueNextInvoiceForEnrolment(
     const creditsPurchased =
       enrolment.plan.billingType === BillingType.BLOCK
         ? enrolment.plan.blockClassCount ?? enrolment.plan.blockLength ?? 1
-        : enrolment.plan.blockClassCount ?? 1;
+        : enrolment.plan.blockLength ?? enrolment.plan.blockClassCount ?? 1;
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
       enrolmentId: enrolment.id,
