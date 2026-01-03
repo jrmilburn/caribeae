@@ -245,6 +245,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               students={data.students}
               enrolmentPlans={data.enrolmentPlans}
               dateKey={selectedDateKey}
+              levels={data.levels}
             />
           </TabsContent>
 

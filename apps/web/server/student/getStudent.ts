@@ -21,6 +21,7 @@ export async function getStudent(id: string) {
               teacher: true,
             },
           },
+          plan: true,
         },
       },
     },
