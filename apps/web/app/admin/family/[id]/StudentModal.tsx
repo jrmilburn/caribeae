@@ -2,12 +2,11 @@
 
 import * as React from "react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -151,13 +150,11 @@ export function StudentModal({
   const currentLevelId = String((form).levelId ?? "");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "New student" : "Edit student"}
-          </DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full space-y-6 overflow-y-auto p-6 sm:max-w-xl sm:px-8">
+        <SheetHeader>
+          <SheetTitle>{mode === "create" ? "New student" : "Edit student"}</SheetTitle>
+        </SheetHeader>
 
         <div className="space-y-6">
           <div className="space-y-3">
@@ -170,16 +167,12 @@ export function StudentModal({
                   onChange={(e) => setField("name", e.target.value)}
                   onBlur={() => setTouched((t) => ({ ...t, name: true }))}
                   placeholder="e.g. Olivia Smith"
-                  className={cn(
-                    nameError && "border-destructive focus-visible:ring-destructive"
-                  )}
+                  className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
                 />
                 {nameError ? (
                   <p className="text-xs text-destructive">{nameError}</p>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    This is what appears in the student list.
-                  </p>
+                  <p className="text-xs text-muted-foreground">This is what appears in the student list.</p>
                 )}
               </div>
             </FieldRow>
@@ -193,11 +186,7 @@ export function StudentModal({
                     setTouched((t) => ({ ...t, levelId: true }));
                   }}
                 >
-                  <SelectTrigger
-                    className={cn(
-                      levelError && "border-destructive focus-visible:ring-destructive"
-                    )}
-                  >
+                  <SelectTrigger className={cn(levelError && "border-destructive focus-visible:ring-destructive")}>
                     <SelectValue placeholder="Select level" />
                   </SelectTrigger>
                   <SelectContent>
@@ -209,18 +198,12 @@ export function StudentModal({
                   </SelectContent>
                 </Select>
 
-                {levelError && (
-                  <p className="text-xs text-destructive">{levelError}</p>
-                )}
+                {levelError && <p className="text-xs text-destructive">{levelError}</p>}
               </div>
             </FieldRow>
 
             <FieldRow label="Date of birth (optional)">
-              <Input
-                type="date"
-                value={(form.dateOfBirth) ?? ""}
-                onChange={(e) => setField("dateOfBirth", e.target.value)}
-              />
+              <Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setField("dateOfBirth", e.target.value)} />
             </FieldRow>
           </div>
 
@@ -228,7 +211,7 @@ export function StudentModal({
             <SectionTitle>Medical notes (optional)</SectionTitle>
             <FieldRow label="Notes">
               <Input
-                value={(form.medicalNotes) ?? ""}
+                value={form.medicalNotes ?? ""}
                 onChange={(e) => setField("medicalNotes", e.target.value)}
                 placeholder="Allergies, conditions, important info…"
               />
@@ -236,29 +219,19 @@ export function StudentModal({
           </div>
         </div>
 
-        <DialogFooter className="mt-2">
+        <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close} disabled={submitting}>
             Cancel
           </Button>
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={
-              submitting ||
-              !String(form.name ?? "").trim() ||
-              !String((form).levelId ?? "").trim()
-            }
+            disabled={submitting || !String(form.name ?? "").trim() || !String(form.levelId ?? "").trim()}
           >
-            {submitting
-              ? mode === "create"
-                ? "Creating…"
-                : "Saving…"
-              : mode === "create"
-              ? "Create student"
-              : "Save changes"}
+            {submitting ? (mode === "create" ? "Creating…" : "Saving…") : mode === "create" ? "Create student" : "Save changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
