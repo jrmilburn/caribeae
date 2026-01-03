@@ -44,6 +44,7 @@ export function ChangeEnrolmentDialog({
     () => getSelectionRequirement(enrolment.plan),
     [enrolment.plan]
   );
+  const planIsWeekly = enrolment.plan.billingType === "PER_WEEK";
 
   React.useEffect(() => {
     if (open) {
@@ -89,10 +90,12 @@ export function ChangeEnrolmentDialog({
     [selectedTemplates]
   );
 
-  const canSubmit =
-    selectedTemplateIds.length === selectionRequirement.requiredCount &&
-    Boolean(startDate) &&
-    !saving;
+  const selectionSatisfied =
+    selectionRequirement.requiredCount === 0
+      ? selectedTemplateIds.length <= 1
+      : selectedTemplateIds.length === selectionRequirement.requiredCount;
+
+  const canSubmit = selectionSatisfied && Boolean(startDate) && !saving;
 
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
     if (occurrence.levelId && occurrence.levelId !== enrolment.plan.levelId) {
@@ -106,6 +109,10 @@ export function ChangeEnrolmentDialog({
         const next = { ...prev };
         delete next[occurrence.templateId];
         return next;
+      }
+
+      if (planIsWeekly && Object.keys(prev).length >= 1) {
+        return { [occurrence.templateId]: occurrence };
       }
 
       if (Object.keys(prev).length >= selectionRequirement.requiredCount) {
@@ -189,8 +196,10 @@ export function ChangeEnrolmentDialog({
             <div className="space-y-1">
               <div className="font-medium">Selected classes</div>
               <div className="text-muted-foreground">
-                {selectedTemplateIds.length}/{selectionRequirement.requiredCount} selected •{" "}
-                {startDate ? `Start date ${startDate}` : "Select a start date"}
+                {selectionRequirement.requiredCount === 0
+                  ? `${selectedTemplateIds.length} selected (optional)`
+                  : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
+                • {startDate ? `Start date ${startDate}` : "Select a start date"}
               </div>
               {selectedTemplateIds.length ? (
                 <div className="flex flex-wrap gap-2">

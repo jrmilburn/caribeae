@@ -20,9 +20,6 @@ export async function enrolStudentWithPlan(input: EnrolmentWithPlanInput) {
   await requireAdmin();
 
   const templateIds = input.templateIds ?? (input.templateId ? [input.templateId] : []);
-  if (!templateIds.length) {
-    throw new Error("At least one class template must be selected.");
-  }
 
   return createEnrolmentsFromSelection(
     {

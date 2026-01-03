@@ -23,6 +23,13 @@ export function normalizePlan(plan: EnrolmentPlan): NormalizedPlan {
 }
 
 export function getSelectionRequirement(plan: EnrolmentPlan): SelectionRequirement {
+  if (plan.billingType === BillingType.PER_WEEK) {
+    return {
+      requiredCount: 0,
+      helper: "Weekly plans cover any class at this level. Selecting a class is optional.",
+    };
+  }
+
   const normalized = normalizePlan(plan);
   const requiredCount = Math.max(1, normalized.sessionsPerWeek);
   return {
