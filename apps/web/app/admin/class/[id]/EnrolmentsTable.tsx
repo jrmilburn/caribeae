@@ -2,9 +2,12 @@
 "use client";
 
 import * as React from "react";
-import type { Enrolment, Student } from "@prisma/client";
+import type { Enrolment, Student, Level, EnrolmentPlan } from "@prisma/client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { MoreHorizontal } from "lucide-react";
 
 import {
   Table,
@@ -14,6 +17,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog";
+import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -23,35 +37,135 @@ function fmtDate(d: Date | null | undefined) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-type EnrolmentWithStudent = Enrolment & { student: Student };
+type EnrolmentWithStudent = Enrolment & { student: Student; plan: EnrolmentPlan | null };
 
-export function EnrolmentsTable({ enrolments }: { enrolments: EnrolmentWithStudent[] }) {
+export function EnrolmentsTable({
+  enrolments,
+  levels,
+}: {
+  enrolments: EnrolmentWithStudent[];
+  levels: Level[];
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
+  const [undoingId, setUndoingId] = React.useState<string | null>(null);
+
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
   }
 
+  const planSiblingsById = React.useMemo(() => {
+    return enrolments.reduce<Record<string, EnrolmentWithStudent[]>>((acc, enrolment) => {
+      if (enrolment.planId) {
+        acc[enrolment.planId] = acc[enrolment.planId] ?? [];
+        acc[enrolment.planId].push(enrolment);
+      }
+      return acc;
+    }, {});
+  }, [enrolments]);
+
+  const handleUndo = async (id: string) => {
+    const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
+    if (!confirmed) return;
+    setUndoingId(id);
+    try {
+      await undoEnrolment(id);
+      toast.success("Enrolment undone.");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to undo enrolment.");
+    } finally {
+      setUndoingId(null);
+    }
+  };
+
   return (
-    <div className="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Student</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Start</TableHead>
-            <TableHead>End</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {enrolments.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="font-medium"><Link href={`/admin/student/${e.student.id}`} className="w-full underline">{e.student.name ?? "Unnamed student"}</Link></TableCell>
-              <TableCell>{e.status}</TableCell>
-              <TableCell>{fmtDate(e.startDate)}</TableCell>
-              <TableCell>{fmtDate(e.endDate ?? null)}</TableCell>
+    <>
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Student</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Start</TableHead>
+              <TableHead>End</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {enrolments.map((e) => {
+              const siblingTemplates =
+                e.planId && planSiblingsById[e.planId]
+                  ? planSiblingsById[e.planId].map((s) => s.templateId)
+                  : [e.templateId];
+
+              return (
+                <TableRow key={e.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/admin/student/${e.student.id}`} className="w-full underline">
+                      {e.student.name ?? "Unnamed student"}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{e.status}</TableCell>
+                  <TableCell>{fmtDate(e.startDate)}</TableCell>
+                  <TableCell>{fmtDate(e.endDate ?? null)}</TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={!e.plan}
+                          onClick={() => {
+                            if (!e.plan) {
+                              toast.error("Enrolment plan missing; cannot change selection.");
+                              return;
+                            }
+                            setEditing(e);
+                          }}
+                        >
+                          Change
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          onClick={() => handleUndo(e.id)}
+                          disabled={undoingId === e.id}
+                        >
+                          {undoingId === e.id ? "Undoing..." : "Undo enrolment"}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {editing && editing.plan ? (
+        <ChangeEnrolmentDialog
+          open={Boolean(editing)}
+          onOpenChange={(open) => !open && setEditing(null)}
+          enrolment={editing as Enrolment & { plan: EnrolmentPlan }}
+          levels={levels}
+          initialTemplateIds={
+            editing.planId && planSiblingsById[editing.planId]
+              ? planSiblingsById[editing.planId].map((s) => s.templateId)
+              : [editing.templateId]
+          }
+          onChanged={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -11,6 +11,7 @@ export type ClientStudentWithRelations = Prisma.StudentGetPayload<{
             teacher: true;
           };
         };
+        plan: true;
       };
     };
   };
