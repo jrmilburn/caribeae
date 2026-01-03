@@ -359,7 +359,6 @@ enum EnrolmentType {
 enum BillingType {
   PER_WEEK
   PER_CLASS
-  BLOCK
 }
 
 model EnrolmentPlan {

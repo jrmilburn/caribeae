@@ -29,13 +29,8 @@ export type PayAheadAndPayInput = z.infer<typeof payAheadSchema>;
 
 function blockSize(plan: Prisma.EnrolmentPlan | null) {
   if (!plan) return 0;
-  if (plan.billingType === BillingType.BLOCK) {
-    return plan.blockClassCount ?? plan.blockLength ?? 0;
-  }
-  if (plan.billingType === BillingType.PER_CLASS) {
-    return plan.blockClassCount ?? 1;
-  }
-  return 0;
+  const size = plan.blockClassCount ?? 1;
+  return size > 0 ? size : 0;
 }
 
 export async function payAheadAndPay(input: PayAheadAndPayInput) {

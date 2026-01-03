@@ -1,9 +1,16 @@
 import assert from "node:assert";
 
+import { BillingType } from "@prisma/client";
+
 import { hasAppliedEntitlements, resolveBlockCoverageWindow } from "./applyPaidInvoiceToEnrolment";
+import { resolveCoverageForPlan } from "./coverage";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
+}
+
+function dAest(input: string) {
+  return new Date(`${input}T12:00:00+10:00`);
 }
 
 function test(name: string, fn: () => void) {
@@ -53,4 +60,58 @@ test("Scenario C: idempotency guard prevents double application", () => {
       entitlementsAppliedAt: new Date(),
     })
   );
+});
+
+test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends coverage", () => {
+  const start = dAest("2026-02-02");
+  const plan = {
+    billingType: BillingType.PER_CLASS as const,
+    enrolmentType: "BLOCK" as const,
+    blockClassCount: 8,
+    blockLength: 8,
+    durationWeeks: null,
+    name: "8 classes over 8 weeks",
+    priceCents: 1000,
+    levelId: "lvl",
+  };
+  const enrolment = {
+    id: "enrol",
+    startDate: start,
+    endDate: null,
+    paidThroughDate: null,
+    student: { familyId: "fam" },
+    plan,
+  };
+
+  const coverage = resolveCoverageForPlan({
+    enrolment,
+    plan,
+    today: start,
+  });
+
+  assert.strictEqual(coverage.coverageStart, null);
+  assert.strictEqual(coverage.coverageEnd, null);
+  assert.strictEqual(coverage.creditsPurchased, 8);
+
+  const firstWindow = resolveBlockCoverageWindow({
+    enrolment: {
+      startDate: enrolment.startDate,
+      endDate: enrolment.endDate,
+      paidThroughDate: enrolment.paidThroughDate,
+    },
+    plan: { durationWeeks: plan.durationWeeks, blockLength: plan.blockLength },
+    today: start,
+  });
+  assert.strictEqual(firstWindow.coverageEnd.toISOString().slice(0, 10), "2026-03-30");
+
+  const payAheadWindow = resolveBlockCoverageWindow({
+    enrolment: {
+      startDate: enrolment.startDate,
+      endDate: enrolment.endDate,
+      paidThroughDate: firstWindow.coverageEnd,
+    },
+    plan: { durationWeeks: plan.durationWeeks, blockLength: plan.blockLength },
+    today: firstWindow.coverageEnd,
+  });
+  assert.strictEqual(payAheadWindow.coverageEnd.toISOString().slice(0, 10), "2026-05-25");
 });

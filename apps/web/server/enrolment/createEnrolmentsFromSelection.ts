@@ -79,8 +79,8 @@ export async function createEnrolmentsFromSelection(
   if (plan.billingType === BillingType.PER_WEEK && !plan.durationWeeks) {
     throw new Error("Weekly plans require durationWeeks.");
   }
-  if (plan.billingType === BillingType.BLOCK && !plan.blockClassCount) {
-    throw new Error("Block plans require a class count.");
+  if (plan.billingType === BillingType.PER_CLASS && plan.blockClassCount != null && plan.blockClassCount <= 0) {
+    throw new Error("PER_CLASS plans require a positive class count when blockClassCount is set.");
   }
 
   if (templates.length !== templateIds.length) {

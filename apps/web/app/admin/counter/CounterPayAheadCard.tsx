@@ -36,9 +36,8 @@ function formatDate(value?: Date | string | null) {
 }
 
 function blockSize(enrolment: Enrolment) {
-  if (enrolment.billingType === "BLOCK") return enrolment.blockClassCount ?? 0;
-  if (enrolment.billingType === "PER_CLASS") return enrolment.blockClassCount ?? 1;
-  return 0;
+  const size = enrolment.blockClassCount ?? 1;
+  return size > 0 ? size : 0;
 }
 
 function projectPaidAhead(enrolment: Enrolment, quantity: number) {
@@ -66,7 +65,7 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number) {
     return { nextPaidThrough: periods > 0 ? nextPaidThrough : paidThrough };
   }
 
-  if (enrolment.billingType === "BLOCK" || enrolment.billingType === "PER_CLASS") {
+  if (enrolment.billingType === "PER_CLASS") {
     const creditsAdded = blockSize(enrolment) * quantity;
     return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + creditsAdded };
   }

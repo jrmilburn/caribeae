@@ -35,7 +35,7 @@ type PlanFormState = {
   sessionsPerWeek: string;
 };
 
-const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK", "BLOCK"];
+const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK"];
 const ENROLMENT_OPTIONS: EnrolmentType[] = ["BLOCK", "CLASS"];
 
 export function EnrolmentPlanForm({
@@ -74,7 +74,7 @@ export function EnrolmentPlanForm({
         billingType: plan.billingType,
         enrolmentType: plan.enrolmentType,
         durationWeeks: String(plan.durationWeeks ?? ""),
-        blockClassCount: String(plan.blockClassCount ?? plan.blockLength ?? 1),
+        blockClassCount: String(plan.blockClassCount ?? 1),
         sessionsPerWeek: String(plan.sessionsPerWeek ?? ""),
       });
     } else {
@@ -93,7 +93,7 @@ export function EnrolmentPlanForm({
   }, [open, plan, levels]);
 
   const requiresDuration = form.billingType === "PER_WEEK";
-  const requiresBlockCount = form.billingType === "BLOCK";
+  const requiresBlockCount = form.billingType === "PER_CLASS";
   const parsedPrice = Number(form.priceCents);
   const parsedDuration = Number(form.durationWeeks);
   const parsedBlockCount = Number(form.blockClassCount);
@@ -121,12 +121,7 @@ export function EnrolmentPlanForm({
       enrolmentType: form.enrolmentType,
       durationWeeks: requiresDuration ? parsedDuration : null,
       sessionsPerWeek: hasSessionsInput && parsedSessionsPerWeek > 0 ? parsedSessionsPerWeek : null,
-      blockClassCount:
-        form.billingType === "BLOCK"
-          ? parsedBlockCount
-          : form.billingType === "PER_CLASS"
-            ? parsedBlockCount || 1
-            : null,
+      blockClassCount: form.billingType === "PER_CLASS" ? parsedBlockCount || 1 : null,
     };
 
     try {
@@ -247,16 +242,16 @@ export function EnrolmentPlanForm({
             </div>
           ) : null}
 
-          {form.billingType !== "PER_WEEK" ? (
+          {form.billingType === "PER_CLASS" ? (
             <div className="space-y-2">
-              <Label>{form.billingType === "BLOCK" ? "Classes per block" : "Classes per invoice"}</Label>
+              <Label>Classes per purchase</Label>
               <Input
                 inputMode="numeric"
                 value={form.blockClassCount}
                 onChange={(e) => setForm((p) => ({ ...p, blockClassCount: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Blocks require at least one class; per-class plans default to one if left empty.
+                Set how many class credits are sold together for each invoice. Defaults to one.
               </p>
             </div>
           ) : null}
