@@ -61,7 +61,7 @@ export function FamilyHeaderSummary({
         sticky && "sticky top-0 z-30"
       )}
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="mx-auto flex w-full flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 flex-col gap-3">
           <div className="space-y-1">
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Family</div>
