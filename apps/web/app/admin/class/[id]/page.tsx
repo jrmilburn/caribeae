@@ -20,8 +20,8 @@ export default async function ClassPage({ params, searchParams }: PageProps) {
     <div className="h-full overflow-y-auto">
       <ClassPageClient
         data={pageData}
-        requestedDateKey={searchParams?.date ?? null}
-        initialTab={searchParams?.tab ?? null}
+        requestedDateKey={search?.date ?? null}
+        initialTab={search?.tab ?? null}
       />
     </div>
   );
