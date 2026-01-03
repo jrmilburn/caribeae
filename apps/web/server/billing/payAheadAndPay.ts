@@ -1,15 +1,16 @@
 "use server";
 
-import { addDays, addWeeks, isAfter, max as maxDate } from "date-fns";
+import { addDays, isAfter } from "date-fns";
 import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { createInvoiceWithLineItems } from "./invoiceMutations";
+import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceMutations";
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
-import { adjustInvoicePayment } from "./utils";
+import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
+import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -57,22 +58,15 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       throw new Error("Selected enrolments must belong to the same family.");
     }
 
-    const latestCoverage = await tx.invoice.groupBy({
-      by: ["enrolmentId"],
-      where: { enrolmentId: { in: enrolments.map((e) => e.id) }, coverageEnd: { not: null } },
-      _max: { coverageEnd: true },
-    });
-    const latestCoverageMap = new Map<string, Date | null>(
-      latestCoverage.map((c) => [c.enrolmentId, c._max.coverageEnd ? new Date(c._max.coverageEnd) : null])
-    );
-
     const statusMap = await getBillingStatusForEnrolments(
       enrolments.map((e) => e.id),
       { client: tx }
     );
 
-    const today = new Date();
+    const today = normalizeDate(new Date(), "today");
     const createdInvoices: { invoice: Prisma.Invoice; enrolmentId: string }[] = [];
+    const issuedAt = new Date();
+    const dueAt = addDays(issuedAt, 7);
 
     for (const item of payload.items) {
       const enrolment = enrolments.find((e) => e.id === item.enrolmentId);
@@ -89,35 +83,20 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           throw new Error("Weekly plans require a duration in weeks.");
         }
 
-        const latestEnd = latestCoverageMap.get(enrolment.id) ?? enrolment.startDate;
+        const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
         const paidThrough = statusMap.get(enrolment.id)?.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-        const coverageStart = maxDate(
-          [enrolment.startDate, paidThrough ?? enrolment.startDate, latestEnd, today].filter(Boolean) as Date[]
-        );
+        const payAhead = resolveWeeklyPayAheadSequence({
+          startDate: enrolment.startDate,
+          endDate: enrolmentEnd,
+          paidThroughDate: paidThrough,
+          durationWeeks: plan.durationWeeks,
+          quantity: item.quantity,
+          today,
+        });
 
-        if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
-          throw new Error("Enrolment end date has passed.");
-        }
-
-        let currentStart = coverageStart;
-        let coverageEnd = coverageStart;
-        let createdPeriods = 0;
-
-        for (let i = 0; i < item.quantity; i++) {
-          if (enrolment.endDate && isAfter(currentStart, enrolment.endDate)) break;
-
-          const rawEnd = addWeeks(currentStart, plan.durationWeeks);
-          coverageEnd = enrolment.endDate && isAfter(rawEnd, enrolment.endDate) ? enrolment.endDate : rawEnd;
-          currentStart = coverageEnd;
-          createdPeriods += 1;
-        }
-
-        if (createdPeriods === 0) {
+        if (payAhead.periods === 0 || !payAhead.coverageStart || !payAhead.coverageEnd) {
           throw new Error("No remaining periods to invoice for this enrolment.");
         }
-
-        const issuedAt = today;
-        const dueAt = addDays(issuedAt, 7);
 
         const invoice = await createInvoiceWithLineItems({
           familyId: payload.familyId,
@@ -126,13 +105,13 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
             {
               kind: InvoiceLineItemKind.ENROLMENT,
               description: plan.name,
-              quantity: createdPeriods,
+              quantity: payAhead.periods,
               unitPriceCents: plan.priceCents,
             },
           ],
           status: InvoiceStatus.SENT,
-          coverageStart,
-          coverageEnd,
+          coverageStart: payAhead.coverageStart,
+          coverageEnd: payAhead.coverageEnd,
           creditsPurchased: null,
           issuedAt,
           dueAt,
@@ -147,8 +126,6 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           throw new Error("Plan is missing block or class count details.");
         }
 
-        const issuedAt = today;
-        const dueAt = addDays(issuedAt, 7);
         const invoice = await createInvoiceWithLineItems({
           familyId: payload.familyId,
           enrolmentId: enrolment.id,
@@ -177,31 +154,23 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       throw new Error("Pay-ahead total must be positive.");
     }
 
-    const payment = await tx.payment.create({
-      data: {
-        familyId: payload.familyId,
-        amountCents: totalCents,
-        paidAt: payload.paidAt ?? today,
-        method: payload.method?.trim() || undefined,
-        note: payload.note?.trim() || undefined,
-        idempotencyKey: payload.idempotencyKey ?? null,
-      },
-    });
-
-    await tx.paymentAllocation.createMany({
-      data: createdInvoices.map(({ invoice }) => ({
-        paymentId: payment.id,
+    const paymentResult = await createPaymentAndAllocate({
+      familyId: payload.familyId,
+      amountCents: totalCents,
+      allocations: createdInvoices.map(({ invoice }) => ({
         invoiceId: invoice.id,
         amountCents: invoice.amountCents,
       })),
+      paidAt: normalizeDate(payload.paidAt ?? new Date(), "paidAt"),
+      method: payload.method?.trim() || undefined,
+      note: payload.note?.trim() || undefined,
+      idempotencyKey: payload.idempotencyKey ?? undefined,
+      client: tx,
+      skipAuth: true,
     });
 
-    for (const entry of createdInvoices) {
-      await adjustInvoicePayment(tx, entry.invoice.id, entry.invoice.amountCents, payment.paidAt);
-    }
-
     return {
-      paymentId: payment.id,
+      paymentId: paymentResult.payment.id,
       invoiceIds: createdInvoices.map((c) => c.invoice.id),
       totalCents,
     };

@@ -10,6 +10,7 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
+import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 
 type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
 
@@ -24,17 +25,6 @@ type ApplyOptions = {
   client?: PrismaClientOrTx;
   invoice?: InvoiceWithRelations | null;
 };
-
-function normalizeDate(value: Date | string) {
-  const d = value instanceof Date ? value : new Date(value);
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-function asDate(value?: Date | string | null) {
-  if (!value) return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 function getClient(client?: PrismaClientOrTx) {
   return client ?? prisma;

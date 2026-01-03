@@ -1,6 +1,6 @@
 "use server";
 
-import { addDays, addWeeks, isAfter, max as maxDate } from "date-fns";
+import { addDays, isAfter } from "date-fns";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -9,6 +9,8 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
 import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBilling";
+import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
+import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -43,37 +45,20 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
 
   const billing = await getEnrolmentBillingStatus(enrolment.id, { client: prisma });
 
-  const durationWeeks = enrolment.plan.durationWeeks;
+  const today = normalizeDate(new Date(), "today");
+  const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
+  const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
 
-  const latestCoverage = await prisma.invoice.aggregate({
-    where: { enrolmentId: enrolment.id, coverageEnd: { not: null } },
-    _max: { coverageEnd: true },
+  const payAhead = resolveWeeklyPayAheadSequence({
+    startDate: enrolment.startDate,
+    endDate: enrolmentEnd,
+    paidThroughDate: paidThrough,
+    durationWeeks: enrolment.plan.durationWeeks,
+    quantity: periods,
+    today,
   });
 
-  const today = new Date();
-  const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-  const coverageStart = maxDate(
-    [enrolment.startDate, paidThrough ?? enrolment.startDate, latestCoverage._max.coverageEnd ?? enrolment.startDate, today].filter(Boolean) as Date[]
-  );
-
-  if (enrolment.endDate && isAfter(coverageStart, enrolment.endDate)) {
-    throw new Error("Enrolment end date has passed.");
-  }
-
-  let currentStart = coverageStart;
-  let coverageEnd = coverageStart;
-  let createdPeriods = 0;
-
-  for (let i = 0; i < periods; i++) {
-    if (enrolment.endDate && isAfter(currentStart, enrolment.endDate)) break;
-
-    const rawEnd = addWeeks(currentStart, durationWeeks);
-    coverageEnd = enrolment.endDate && isAfter(rawEnd, enrolment.endDate) ? enrolment.endDate : rawEnd;
-    currentStart = coverageEnd;
-    createdPeriods += 1;
-  }
-
-  if (createdPeriods === 0) {
+  if (payAhead.periods === 0 || !payAhead.coverageStart || !payAhead.coverageEnd) {
     throw new Error("No remaining periods to invoice for this enrolment.");
   }
 
@@ -87,17 +72,17 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
       {
         kind: InvoiceLineItemKind.ENROLMENT,
         description: enrolment.plan.name,
-        quantity: createdPeriods,
+        quantity: payAhead.periods,
         unitPriceCents: enrolment.plan.priceCents,
       },
     ],
     status: InvoiceStatus.SENT,
-    coverageStart,
-    coverageEnd,
+    coverageStart: payAhead.coverageStart,
+    coverageEnd: payAhead.coverageEnd,
     creditsPurchased: null,
     issuedAt,
     dueAt,
   });
 
-  return { invoice, periods: createdPeriods };
+  return { invoice, periods: payAhead.periods };
 }

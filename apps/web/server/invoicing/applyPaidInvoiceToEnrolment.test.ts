@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { BillingType } from "@prisma/client";
 
 import { hasAppliedEntitlements, resolveBlockCoverageWindow } from "./applyPaidInvoiceToEnrolment";
-import { resolveCoverageForPlan } from "./coverage";
+import { resolveCoverageForPlan, resolveWeeklyCoverageWindow, resolveWeeklyPayAheadSequence } from "./coverage";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -114,4 +114,57 @@ test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends covera
     today: firstWindow.coverageEnd,
   });
   assert.strictEqual(payAheadWindow.coverageEnd.toISOString().slice(0, 10), "2026-05-25");
+});
+
+test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", () => {
+  const enrolment = {
+    startDate: d("2026-06-01"),
+    endDate: null,
+    paidThroughDate: null as Date | null,
+  };
+  const plan = { durationWeeks: 1 };
+
+  const sequence = resolveWeeklyPayAheadSequence({
+    startDate: enrolment.startDate,
+    endDate: enrolment.endDate,
+    paidThroughDate: enrolment.paidThroughDate,
+    durationWeeks: plan.durationWeeks,
+    quantity: 2,
+    today: d("2026-06-01"),
+  });
+
+  assert.strictEqual(sequence.periods, 2);
+  assert.strictEqual(sequence.coverageStart?.toISOString().slice(0, 10), "2026-06-01");
+  assert.strictEqual(sequence.coverageEnd?.toISOString().slice(0, 10), "2026-06-15");
+});
+
+test("Scenario F: long weekly duration respects quantity and clamps to end date", () => {
+  const start = d("2026-07-05");
+  const plan = { durationWeeks: 26 };
+
+  const first = resolveWeeklyPayAheadSequence({
+    startDate: start,
+    endDate: null,
+    paidThroughDate: null,
+    durationWeeks: plan.durationWeeks,
+    quantity: 1,
+    today: start,
+  });
+
+  assert.strictEqual(first.periods, 1);
+  assert.strictEqual(first.coverageStart?.toISOString().slice(0, 10), "2026-07-05");
+  assert.strictEqual(first.coverageEnd?.toISOString().slice(0, 10), "2027-01-03");
+
+  const second = resolveWeeklyPayAheadSequence({
+    startDate: start,
+    endDate: first.coverageEnd,
+    paidThroughDate: first.coverageEnd,
+    durationWeeks: plan.durationWeeks,
+    quantity: 1,
+    today: first.coverageEnd ?? start,
+  });
+
+  assert.strictEqual(second.periods, 0);
+  assert.strictEqual(second.coverageStart, null);
+  assert.strictEqual(second.coverageEnd, null);
 });
