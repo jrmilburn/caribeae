@@ -400,8 +400,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4">
-          <Card className="border-dashed">
+        <div className="mx-auto flex flex-col gap-4">
+          <Card className="border-none shadow-none">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Search className="h-4 w-4 text-muted-foreground" />
@@ -554,14 +554,10 @@ function CounterTabs({
   onOpenAction: (mode: ActionMode) => void;
 }) {
   return (
-    <Card>
+    <Card className="border-l-0 border-r-0 border-b-0 shadow-none">
       <CardHeader className="space-y-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-base">Front of counter</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Tabs keep key billing data in view. Open sheets to take action.
-            </p>
           </div>
           <Badge variant="secondary" className="gap-2">
             <Wallet className="h-4 w-4" />
@@ -735,12 +731,12 @@ function StudentsTab({ summary }: { summary: FamilyBillingSummary | null }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="border-t">
       {summary.students.length === 0 ? (
         <p className="text-sm text-muted-foreground">No students for this family.</p>
       ) : (
         summary.students.map((student) => (
-          <Card key={student.id}>
+          <Card key={student.id} className="border-l-0 border-r-0 border-t-0 shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-base">{student.name}</CardTitle>
               <Badge variant="outline">{student.enrolments.length} enrolments</Badge>
@@ -796,7 +792,7 @@ function HistoryTab({
   }
 
   return (
-    <Card>
+    <Card className="border-r-0 border-l-0 shadow-none border-b-0">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Recent payments</CardTitle>
         <Button size="sm" variant="outline" onClick={() => onUndoPayment("PAYMENT")}>
