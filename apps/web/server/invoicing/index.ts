@@ -64,6 +64,8 @@ function resolveCoverageForPlan(params: {
   const { enrolment, plan } = params;
   const today = params.today ?? new Date();
 
+  console.log("ENROLMENT, PLAN", enrolment, plan);
+
   if (plan.billingType === BillingType.PER_WEEK) {
     if (!plan.durationWeeks || plan.durationWeeks <= 0) {
       throw new Error("Weekly plans require a duration in weeks.");
@@ -78,10 +80,10 @@ function resolveCoverageForPlan(params: {
     return { coverageStart, coverageEnd, creditsPurchased: null };
   }
 
-  if (plan.billingType === BillingType.BLOCK && (!plan.blockClassCount || plan.blockClassCount <= 0)) {
+  if (plan.billingType === BillingType.PER_CLASS && (!plan.blockClassCount || plan.blockClassCount <= 0)) {
     throw new Error("Block plans require the number of classes per block.");
   }
-  const creditsPurchased = plan.billingType === BillingType.BLOCK ? plan.blockClassCount! : 1;
+  const creditsPurchased = plan.billingType === BillingType.PER_CLASS ? plan.blockClassCount! : 1;
   return { coverageStart: null, coverageEnd: null, creditsPurchased };
 }
 
@@ -111,6 +113,8 @@ export async function createInitialInvoiceForEnrolment(
       plan: enrolment.plan,
       today: enrolment.startDate,
     });
+
+    console.log("COVERAGE", coverageStart, coverageEnd, creditsPurchased);
 
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
@@ -253,6 +257,8 @@ export async function issueNextInvoiceForEnrolment(
     if (enrolment.plan.billingType === BillingType.BLOCK && !enrolment.plan.blockClassCount) {
       throw new Error("Block plans require blockClassCount to be set.");
     }
+
+    console.log("ENROLMENT.PLAN", enrolment.plan);
 
     const creditsPurchased =
       enrolment.plan.billingType === BillingType.BLOCK
