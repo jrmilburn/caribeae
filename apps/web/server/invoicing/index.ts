@@ -77,6 +77,8 @@ export async function createInitialInvoiceForEnrolment(
       today: enrolment.startDate,
     });
 
+    console.log("COVERAGE", coverageStart, coverageEnd, creditsPurchased);
+
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
       enrolmentId: enrolment.id,
