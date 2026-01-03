@@ -35,7 +35,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
     : "Not prepaid";
 
   return (
-    <Card className="mx-4">
+    <Card className="border-l-0 border-b-0 border-r-0 shadow-none">
       <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <CardTitle className="text-base">Billing position</CardTitle>

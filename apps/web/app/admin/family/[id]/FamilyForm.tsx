@@ -182,7 +182,7 @@ export default function FamilyForm({
       <UnpaidFamiliesIndicator summary={unpaidSummary} />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-6xl space-y-4 p-4">
+        <div className="mx-auto space-y-4 p-4">
           <FamilyTabs
             activeTab={activeTab}
             visitedTabs={visitedTabs}

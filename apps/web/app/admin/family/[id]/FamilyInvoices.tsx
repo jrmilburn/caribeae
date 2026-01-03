@@ -209,7 +209,7 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
   };
 
   return (
-    <Card className="border-l-0! border-t-0!">
+    <Card className="border-l-0! border-r-0! shadow-none">
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <CardTitle className="text-base">Billing</CardTitle>
