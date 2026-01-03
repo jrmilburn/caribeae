@@ -151,7 +151,7 @@ export function StudentModal({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full space-y-6 overflow-y-auto sm:max-w-xl">
+      <SheetContent side="right" className="w-full space-y-6 overflow-y-auto p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
           <SheetTitle>{mode === "create" ? "New student" : "Edit student"}</SheetTitle>
         </SheetHeader>

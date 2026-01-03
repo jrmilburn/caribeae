@@ -927,7 +927,7 @@ function CounterActionSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full space-y-4 overflow-y-auto p-4 sm:max-w-xl">
+      <SheetContent side="right" className="w-full space-y-4 overflow-y-auto p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>

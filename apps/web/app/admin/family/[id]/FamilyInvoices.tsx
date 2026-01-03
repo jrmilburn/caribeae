@@ -693,7 +693,7 @@ function RecordPaymentSheet({
         </Button>
       </SheetTrigger>
 
-      <SheetContent side="right" className="w-full sm:max-w-xl p-4">
+      <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
           <SheetTitle>Payment</SheetTitle>
         </SheetHeader>
