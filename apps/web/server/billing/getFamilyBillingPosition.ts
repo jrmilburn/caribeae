@@ -1,7 +1,7 @@
 "use server";
 
 import { differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
-import { BillingType, type Prisma } from "@prisma/client";
+import { BillingType, PaymentStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -115,7 +115,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         })
       : Promise.resolve([]),
     client.payment.aggregate({
-      where: { familyId },
+      where: { familyId, status: { not: PaymentStatus.VOID } },
       _sum: { amountCents: true },
     }),
     client.paymentAllocation.aggregate({
@@ -123,7 +123,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       _sum: { amountCents: true },
     }),
     client.payment.findMany({
-      where: { familyId },
+      where: { familyId, status: { not: PaymentStatus.VOID } },
       orderBy: { paidAt: "desc" },
       take: 5,
       include: {

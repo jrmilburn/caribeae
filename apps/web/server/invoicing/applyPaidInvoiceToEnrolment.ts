@@ -30,7 +30,7 @@ function getClient(client?: PrismaClientOrTx) {
   return client ?? prisma;
 }
 
-function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
+export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
   const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
   const quantity = enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
   if (plan.billingType === BillingType.PER_WEEK) return 0;

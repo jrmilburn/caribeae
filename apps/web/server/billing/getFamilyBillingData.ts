@@ -1,5 +1,7 @@
 "use server";
 
+import { PaymentStatus } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
@@ -26,7 +28,7 @@ export async function getFamilyBillingData(familyId: string) {
       },
     }),
     prisma.payment.findMany({
-      where: { familyId },
+      where: { familyId, status: { not: PaymentStatus.VOID } },
       orderBy: { paidAt: "desc" },
       take: 10,
       include: {

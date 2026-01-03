@@ -1,6 +1,6 @@
 "use server";
 
-import { InvoiceStatus } from "@prisma/client";
+import { InvoiceStatus, PaymentStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -81,6 +81,9 @@ export async function getPaymentReceiptData(rawPaymentId: string): Promise<Payme
   const { paymentId } = paramsSchema.parse({ paymentId: rawPaymentId });
   const payment = await fetchPayment(paymentId);
   if (!payment) return null;
+  if (payment.status === PaymentStatus.VOID) {
+    throw new Error("This payment has been voided and cannot be receipted.");
+  }
 
   const allocations = payment.allocations.map((allocation) => {
     const totalFromItems =

@@ -1,7 +1,7 @@
 "use server";
 
 import { subDays } from "date-fns";
-import { InvoiceStatus, Prisma } from "@prisma/client";
+import { InvoiceStatus, PaymentStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -56,6 +56,7 @@ function buildPaymentWhere(filters: BillingDashboardFilters): Prisma.PaymentWher
         }
       : undefined,
     paidAt: Object.keys(paidRange).length > 0 ? paidRange : undefined,
+    status: { not: PaymentStatus.VOID },
   };
 }
 
@@ -121,7 +122,7 @@ export async function getBillingDashboardData(filters: BillingDashboardFilters =
       }),
       prisma.payment.aggregate({
         _sum: { amountCents: true },
-        where: { paidAt: { gte: subDays(new Date(), 30) } },
+        where: { paidAt: { gte: subDays(new Date(), 30) }, status: { not: PaymentStatus.VOID } },
       }),
     ]);
 

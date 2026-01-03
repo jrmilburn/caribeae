@@ -2,7 +2,7 @@
 
 import { addDays } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
+import { InvoiceLineItemKind, InvoiceStatus, PaymentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -439,6 +439,9 @@ export async function allocatePaymentOldestOpenInvoices(paymentId: string) {
       include: { allocations: true },
     });
     if (!payment) throw new Error("Payment not found.");
+    if (payment.status === PaymentStatus.VOID) {
+      throw new Error("Cannot allocate a void payment.");
+    }
 
     const alreadyAllocated = payment.allocations.reduce((sum, alloc) => sum + alloc.amountCents, 0);
     const remaining = payment.amountCents - alreadyAllocated;

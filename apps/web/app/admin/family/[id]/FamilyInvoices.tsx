@@ -32,6 +32,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
@@ -40,6 +46,8 @@ import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { recordFamilyPayment } from "@/server/billing/recordFamilyPayment";
+import { undoPayment } from "@/server/billing/undoPayment";
+import { Loader2, MoreHorizontal } from "lucide-react";
 
 type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 
@@ -174,6 +182,29 @@ export default function FamilyInvoices({ family, billing }: Props) {
       return biss - aiss;
     });
   }, [family.invoices]);
+
+  const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
+  const [isUndoing, startUndo] = React.useTransition();
+
+  const handleUndoPayment = (paymentId: string) => {
+    const confirmed = window.confirm(
+      "Undo this payment? Allocations and enrolment entitlements granted by it will be rolled back."
+    );
+    if (!confirmed) return;
+    setUndoingPaymentId(paymentId);
+    startUndo(async () => {
+      try {
+        await undoPayment(paymentId);
+        toast.success("Payment undone and allocations removed.");
+        router.refresh();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to undo payment.";
+        toast.error(message);
+      } finally {
+        setUndoingPaymentId(null);
+      }
+    });
+  };
 
   return (
     <Card className="border-l-0! border-t-0!">
@@ -402,6 +433,34 @@ export default function FamilyInvoices({ family, billing }: Props) {
                                         variant="ghost"
                                         className="h-7 px-2 text-xs"
                                       />
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            aria-label="Payment actions"
+                                            disabled={isUndoing && undoingPaymentId === a.paymentId}
+                                          >
+                                            {isUndoing && undoingPaymentId === a.paymentId ? (
+                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                              <MoreHorizontal className="h-4 w-4" />
+                                            )}
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem
+                                            className="text-destructive focus:text-destructive"
+                                            onSelect={(e) => {
+                                              e.preventDefault();
+                                              handleUndoPayment(a.paymentId);
+                                            }}
+                                          >
+                                            Undo payment
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     </div>
 
                                     {a.note ? (
@@ -452,6 +511,34 @@ export default function FamilyInvoices({ family, billing }: Props) {
                         size="sm"
                         className="h-8 px-2 text-xs"
                       />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label="Payment actions"
+                            disabled={isUndoing && undoingPaymentId === payment.id}
+                          >
+                            {isUndoing && undoingPaymentId === payment.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              handleUndoPayment(payment.id);
+                            }}
+                          >
+                            Undo payment
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                   {payment.note ? (
