@@ -145,7 +145,7 @@ export default function FamilyForm({
         nextDue={billingPosition.nextDueInvoice}
         lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
         actions={
-          <div className="flex flex-col gap-2 justify-end h-full">
+          <>
             <Button
               size="sm"
               onClick={() => {
@@ -175,7 +175,7 @@ export default function FamilyForm({
             >
               Edit family
             </Button>
-          </div>
+          </>
         }
       />
 
@@ -249,7 +249,7 @@ function FamilyTabs({
   onPaymentSheetChange,
 }: FamilyTabsProps) {
   return (
-    <Card className="border-none shadow-none w-full">
+    <Card>
       <CardHeader className="space-y-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
@@ -315,23 +315,11 @@ function OverviewTab({
   billingPosition: FamilyBillingPosition;
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
 }) {
-  const openInvoices = billing.openInvoices.length;
-  const latestPaidThrough = billingPosition.paidThroughLatest;
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        <MiniStat label="Outstanding" value={formatCurrencyFromCents(billingPosition.outstandingCents)} />
-        <MiniStat
-          label="Open invoices"
-          value={`${openInvoices}`}
-          hint={billingPosition.nextDueInvoice?.dueAt ? "Next due set" : "No due date"}
-        />
-        <MiniStat label="Paid through" value={latestPaidThrough ? latestPaidThrough.toDateString() : "Not prepaid"} />
-      </div>
-
       <FamilyBillingPositionCard billing={billingPosition} />
 
-      <Card className="w-full border-b-0 border-l-0 border-r-0 shadow-none">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">Contact</CardTitle>
         </CardHeader>

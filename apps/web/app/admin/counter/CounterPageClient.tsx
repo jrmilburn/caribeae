@@ -630,13 +630,7 @@ function BillingTab({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <SummaryCard
-          label="Open balance"
-          value={formatCurrencyFromCents(outstanding)}
-          sublabel={`${totalOpenInvoices} open invoice${totalOpenInvoices === 1 ? "" : "s"}`}
-          icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
-        />
+      <div className="grid gap-3 md:grid-cols-3">
         <SummaryCard
           label="Credits remaining"
           value={summary.creditsTotal.toString()}
@@ -650,12 +644,12 @@ function BillingTab({
           icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
         />
         <SummaryCard
-          label="Next payment due"
-          value={nextDue?.dueAt ? formatDate(nextDue.dueAt) : "No due date"}
+          label="Open invoices"
+          value={`${totalOpenInvoices}`}
           sublabel={
-            nextDue ? `${nextDue.status?.toLowerCase()} · ${formatCurrencyFromCents(nextDue.balanceCents)}` : "All caught up"
+            nextDue ? `Next due ${formatDate(nextDue.dueAt)} · ${formatCurrencyFromCents(nextDue.balanceCents)}` : "No upcoming due date"
           }
-          icon={<AlertCircle className="h-4 w-4 text-muted-foreground" />}
+          icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
         />
       </div>
 
