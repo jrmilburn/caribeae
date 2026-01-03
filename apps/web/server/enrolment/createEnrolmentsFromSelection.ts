@@ -17,6 +17,7 @@ import {
   resolvePlannedEndDate,
 } from "./planRules";
 import { validateSelection } from "./validateSelection";
+import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 
 /**
  * Findings + Proposed Fix
@@ -115,7 +116,7 @@ export async function createEnrolmentsFromSelection(
     where: {
       studentId: payload.studentId,
       templateId: { in: templateIds },
-      status: { not: EnrolmentStatus.CANCELLED },
+      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
     },
     select: {
       id: true,
@@ -126,18 +127,13 @@ export async function createEnrolmentsFromSelection(
     },
   });
 
-  const overlapping = existing.filter((row) => {
-    const window = windows.find((w) => w.templateId === row.templateId);
-    if (!window) return false;
-    return overlaps(window.startDate, window.endDate, startOfDay(row.startDate), row.endDate ? startOfDay(row.endDate) : null);
+  validateNoDuplicateEnrolments({
+    candidateWindows: windows.map((window) => ({
+      ...window,
+      templateName: templates.find((t) => t.id === window.templateId)?.name ?? "class",
+    })),
+    existingEnrolments: existing,
   });
-
-  if (overlapping.length) {
-    const templateNames = overlapping
-      .map((o) => templates.find((t) => t.id === o.templateId)?.name ?? "class")
-      .join(", ");
-    throw new Error(`Student is already enrolled in ${templateNames} for the selected dates.`);
-  }
 
   const status = payload.status ?? EnrolmentStatus.ACTIVE;
   const created = await prisma.$transaction(async (tx) => {
@@ -169,10 +165,4 @@ export async function createEnrolmentsFromSelection(
   revalidatePath("/admin/enrolment");
 
   return { enrolments: created, requirement: getSelectionRequirement(plan) };
-}
-
-function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null) {
-  const aEndSafe = aEnd ?? new Date(8640000000000000);
-  const bEndSafe = bEnd ?? new Date(8640000000000000);
-  return aStart <= bEndSafe && bStart <= aEndSafe;
 }
