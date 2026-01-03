@@ -1,7 +1,7 @@
 "use server";
 
 import { endOfDay, endOfMonth, startOfDay, startOfMonth } from "date-fns";
-import { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
+import { InvoiceLineItemKind, InvoiceStatus, PaymentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -78,6 +78,7 @@ export type AuditPaymentAllocation = {
   paymentMethod: string | null;
   paymentPaidAt: Date;
   paymentAmountCents: number;
+  paymentStatus: PaymentStatus;
   invoiceId: string;
   invoiceIssuedAt: Date | null;
   invoiceStatus: InvoiceStatus;
@@ -93,6 +94,7 @@ export type AuditPayment = {
   paidAt: Date;
   method: string | null;
   amountCents: number;
+  status: PaymentStatus;
   allocatedCents: number;
   unallocatedCents: number;
   allocations: AuditPaymentAllocation[];
@@ -162,6 +164,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
       gte: normalized.from,
       lte: normalized.to,
     },
+    status: normalized.includeVoided ? undefined : { not: PaymentStatus.VOID },
   } as const;
 
   const [lineItems, totalsByKind, totalsByProduct, enrolmentItems, payments, paymentTotals] =
@@ -357,6 +360,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
         paymentMethod: payment.method,
         paymentPaidAt: payment.paidAt,
         paymentAmountCents: payment.amountCents,
+        paymentStatus: payment.status,
         invoiceId: alloc.invoiceId,
         invoiceIssuedAt: alloc.invoice?.issuedAt ?? null,
         invoiceStatus: alloc.invoice?.status ?? InvoiceStatus.DRAFT,
@@ -375,6 +379,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
       paidAt: payment.paidAt,
       method: payment.method,
       amountCents: payment.amountCents,
+      status: payment.status,
       allocatedCents: allocated,
       unallocatedCents: unallocated,
       allocations,

@@ -309,6 +309,11 @@ enum InvoiceLineItemKind {
   ADJUSTMENT
 }
 
+enum PaymentStatus {
+  COMPLETED
+  VOID
+}
+
 enum EnrolmentAdjustmentType {
   CANCELLATION_CREDIT
 }
@@ -583,6 +588,9 @@ model Payment {
   method         String?
   note           String?
   idempotencyKey String?
+  status         PaymentStatus @default(COMPLETED)
+  reversedAt     DateTime?
+  reversalReason String?
 
   allocations PaymentAllocation[]
 
@@ -592,6 +600,7 @@ model Payment {
   @@unique([familyId, idempotencyKey])
   @@index([familyId, paidAt])
   @@index([paidAt])
+  @@index([status])
 }
 
 model PaymentAllocation {

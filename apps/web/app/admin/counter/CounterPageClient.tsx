@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   Sparkles,
   Wallet,
+  MoreHorizontal,
 } from "lucide-react";
 import type { Product } from "@prisma/client";
 import { toast } from "sonner";
@@ -19,6 +20,12 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,6 +36,7 @@ import { searchFamilies } from "@/server/family/searchFamilies";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { createPayment } from "@/server/billing/createPayment";
 import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
+import { undoPayment } from "@/server/billing/undoPayment";
 import { CounterPayAheadCard } from "./CounterPayAheadCard";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
@@ -73,6 +81,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
   const [allocationMode, setAllocationMode] = React.useState<"AUTO" | "MANUAL">("AUTO");
   const [allocations, setAllocations] = React.useState<AllocationMap>({});
   const [submittingPayment, setSubmittingPayment] = React.useState(false);
+  const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
+  const [isUndoing, startUndo] = React.useTransition();
 
   const [cart, setCart] = React.useState<Record<string, number>>({});
   const [checkoutMode, setCheckoutMode] = React.useState<"PAY_NOW" | "INVOICE">("PAY_NOW");
@@ -185,6 +195,28 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
 
   const handleManualAllocationChange = (invoiceId: string, value: string) => {
     setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
+  };
+
+  const handleUndoPayment = (paymentId: string) => {
+    if (!selectedFamily) return;
+    const confirmed = window.confirm(
+      "Undo this payment? Allocations and enrolment entitlements granted by it will be rolled back."
+    );
+    if (!confirmed) return;
+
+    setUndoingPaymentId(paymentId);
+    startUndo(async () => {
+      try {
+        await undoPayment(paymentId);
+        toast.success("Payment undone and allocations removed.");
+        await refreshSummary(selectedFamily.id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to undo payment.";
+        toast.error(message);
+      } finally {
+        setUndoingPaymentId(null);
+      }
+    });
   };
 
   const handleCheckout = async () => {
@@ -760,6 +792,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                       <TableHead>Date</TableHead>
                       <TableHead>Method</TableHead>
                       <TableHead>Note</TableHead>
+                      <TableHead className="w-14 text-right">Actions</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -772,6 +805,37 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                           <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate">
                             {payment.note ?? "—"}
                           </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={isUndoing && undoingPaymentId === payment.id}
+                                  aria-label="Payment actions"
+                                >
+                                  {isUndoing && undoingPaymentId === payment.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    handleUndoPayment(payment.id);
+                                  }}
+                                >
+                                  Undo payment
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                           <TableCell className="text-right font-semibold">
                             {formatCurrencyFromCents(payment.amountCents)}
                           </TableCell>
@@ -779,7 +843,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                        <TableCell colSpan={5} className="text-sm text-muted-foreground">
                           No recent payments.
                         </TableCell>
                       </TableRow>

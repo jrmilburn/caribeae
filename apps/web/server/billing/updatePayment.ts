@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 
+import { PaymentStatus } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
@@ -55,6 +57,9 @@ export async function updatePayment(paymentId: string, input: UpdatePaymentInput
   });
 
   if (!payment) throw new Error("Payment not found.");
+  if (payment.status === PaymentStatus.VOID) {
+    throw new Error("Cannot update a voided payment. Create a new payment instead.");
+  }
 
   const previousAllocations = payment.allocations.reduce<Record<string, number>>((acc, allocation) => {
     acc[allocation.invoiceId] = (acc[allocation.invoiceId] ?? 0) + allocation.amountCents;

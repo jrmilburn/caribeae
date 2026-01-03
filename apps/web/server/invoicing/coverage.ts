@@ -67,7 +67,7 @@ export function resolveWeeklyPayAheadSequence(params: {
   }
 
   let currentStart = firstCoverageStart;
-  let coverageStart = firstCoverageStart;
+  const coverageStart = firstCoverageStart;
   let coverageEnd = firstCoverageStart;
   let periods = 0;
 
