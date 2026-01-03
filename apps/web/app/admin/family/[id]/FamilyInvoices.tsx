@@ -54,6 +54,8 @@ type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 type Props = {
   family: FamilyWithStudentsAndInvoices;
   billing: BillingData;
+  paymentSheetOpen?: boolean;
+  onPaymentSheetChange?: (open: boolean) => void;
 };
 
 function formatDate(value?: Date | null) {
@@ -95,7 +97,7 @@ type InvoiceAllocationItem = {
   amountCents: number;
 };
 
-export default function FamilyInvoices({ family, billing }: Props) {
+export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPaymentSheetChange }: Props) {
   const latestPaidThrough = family.students
     .flatMap((s) => s.enrolments ?? [])
     .map((e) => e.paidThroughDate)
@@ -219,7 +221,12 @@ export default function FamilyInvoices({ family, billing }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          <RecordPaymentSheet familyId={family.id} openInvoices={openInvoices} />
+          <RecordPaymentSheet
+            familyId={family.id}
+            openInvoices={openInvoices}
+            open={paymentSheetOpen}
+            onOpenChange={onPaymentSheetChange}
+          />
         </div>
       </CardHeader>
 
@@ -566,6 +573,8 @@ function Meta({ label, value }: { label: string; value: string }) {
 function RecordPaymentSheet({
   familyId,
   openInvoices,
+  open,
+  onOpenChange,
 }: {
   familyId: string;
   openInvoices: Array<
@@ -573,12 +582,16 @@ function RecordPaymentSheet({
       balanceCents: number;
     }
   >;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const PAYMENT_METHODS = ["Card", "Cash", "Direct debit", "Client portal"] as const;
   type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const sheetOpen = open ?? internalOpen;
+  const setSheetOpen = onOpenChange ?? setInternalOpen;
   const [selected, setSelected] = React.useState<string[]>([]);
   const [allocations, setAllocations] = React.useState<Record<string, string>>({});
   const [method, setMethod] = React.useState<PaymentMethod>("Cash");
@@ -587,7 +600,7 @@ function RecordPaymentSheet({
   const [isSubmitting, startSubmit] = React.useTransition();
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!sheetOpen) return;
     const invoiceIds = openInvoices.filter((inv) => inv.balanceCents > 0).map((inv) => inv.id);
     setSelected(invoiceIds);
     setAllocations(
@@ -601,10 +614,10 @@ function RecordPaymentSheet({
     setMethod("Cash");
     setNote("");
     setPaidDate(new Date().toISOString().slice(0, 10));
-  }, [open, openInvoices]);
+  }, [sheetOpen, openInvoices]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!sheetOpen) return;
     setAllocations((prev) => {
       const next: Record<string, string> = {};
       selected.forEach((invoiceId) => {
@@ -617,7 +630,7 @@ function RecordPaymentSheet({
       });
       return next;
     });
-  }, [selected, open, openInvoices]);
+  }, [selected, sheetOpen, openInvoices]);
 
   const selectedInvoices = openInvoices.filter((inv) => selected.includes(inv.id));
   const allocationCents = selectedInvoices.map((inv) => ({
@@ -663,7 +676,7 @@ function RecordPaymentSheet({
           })),
         });
         toast.success("Payment recorded.");
-        setOpen(false);
+        setSheetOpen(false);
         router.refresh();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to record payment.";
@@ -673,7 +686,7 @@ function RecordPaymentSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>
         <Button variant="secondary" size="sm" disabled={openInvoices.length === 0}>
           Record payment
