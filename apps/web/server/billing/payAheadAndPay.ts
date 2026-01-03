@@ -33,7 +33,7 @@ function blockSize(plan: Prisma.EnrolmentPlan | null) {
     return plan.blockClassCount ?? plan.blockLength ?? 0;
   }
   if (plan.billingType === BillingType.PER_CLASS) {
-    return plan.blockClassCount ?? 1;
+    return plan.blockLength ?? plan.blockClassCount ?? 1;
   }
   return 0;
 }

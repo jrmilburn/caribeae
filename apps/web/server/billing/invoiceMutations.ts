@@ -7,8 +7,8 @@ import { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { applyEntitlementsForInvoice } from "./enrolmentBilling";
 import { nextInvoiceStatus } from "./utils";
+import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -350,12 +350,12 @@ async function persistAllocations(
       },
       include: {
         enrolment: { include: { plan: true } },
-        lineItems: { select: { kind: true } },
+        lineItems: { select: { kind: true, quantity: true } },
       },
     });
 
     if (status === InvoiceStatus.PAID && invoice.status !== InvoiceStatus.PAID) {
-      await applyEntitlementsForInvoice(updated.id, { client: tx });
+      await applyPaidInvoiceToEnrolment(updated.id, { client: tx, invoice: updated });
     }
   }
 
@@ -471,13 +471,6 @@ export async function applyEntitlementsForPaidInvoice(
   const client = getClient(options?.client);
 
   return withTransaction(client, async (tx) => {
-    const invoice = await tx.invoice.findUnique({
-      where: { id: invoiceId },
-    });
-    if (!invoice) throw new Error("Invoice not found.");
-    if (invoice.status === InvoiceStatus.PAID) {
-      await applyEntitlementsForInvoice(invoiceId, { client: tx });
-    }
-    return invoice;
+    return applyPaidInvoiceToEnrolment(invoiceId, { client: tx });
   });
 }
