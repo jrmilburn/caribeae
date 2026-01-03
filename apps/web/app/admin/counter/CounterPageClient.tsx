@@ -12,7 +12,6 @@ import {
   ShoppingBag,
   Sparkles,
   Wallet,
-  MoreHorizontal,
 } from "lucide-react";
 import type { Product } from "@prisma/client";
 import { toast } from "sonner";
@@ -20,17 +19,15 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
+import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
 
 import { searchFamilies } from "@/server/family/searchFamilies";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
@@ -145,8 +142,6 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       toast.error(message);
     }
   }, []);
-
-  const allocationRows = React.useMemo(() => summary?.openInvoices ?? [], [summary?.openInvoices]);
 
   const counterFamilyOption = React.useMemo<FamilyOption | null>(() => {
     if (!counterFamily) return null;
@@ -351,100 +346,769 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
   const outstanding = summary?.outstandingCents ?? 0;
   const totalOpenInvoices = summary?.openInvoices.length ?? 0;
   const nextDue = summary?.nextDueInvoice;
+  const lastPayment = summary?.payments?.[0] ?? null;
+  const [activeTab, setActiveTab] = React.useState("billing");
+  const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(new Set(["billing"]));
+  const [actionMode, setActionMode] = React.useState<ActionMode | null>(null);
+
+  React.useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
+  }, [activeTab]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Front of counter</h1>
-          <p className="text-sm text-muted-foreground">
-            Quickly collect payments, allocate across invoices, or bill ahead while the family is at reception.
-          </p>
+    <div className="flex h-full flex-col overflow-hidden">
+      <FamilyHeaderSummary
+        familyName={selectedFamily?.name ?? "Select a family"}
+        contact={{
+          name: selectedFamily?.primaryContactName,
+          phone: selectedFamily?.primaryPhone,
+        }}
+        outstandingCents={outstanding}
+        nextDue={nextDue}
+        lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setActionMode("CHECKOUT")}
+              disabled={!selectedFamily && !counterFamilyOption}
+            >
+              <ShoppingBag className="mr-2 h-4 w-4" />
+              Checkout
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setActionMode("PAY_AHEAD")}
+              disabled={!summary}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Pay ahead
+            </Button>
+            <Button size="sm" onClick={() => setActionMode("PAYMENT")} disabled={!summary}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Take payment
+            </Button>
+          </>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4">
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                Find a family
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="relative">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Start typing a family name…"
+                  className="pr-10"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </div>
+              </div>
+
+              {results.length > 0 && (
+                <div className="rounded-md border bg-muted/40">
+                  {results.map((family) => (
+                    <button
+                      key={family.id}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors",
+                        selectedFamily?.id === family.id ? "bg-accent/60" : "hover:bg-accent/30"
+                      )}
+                      onClick={() => loadSummary(family)}
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{family.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {family.primaryContactName ?? "No primary contact"} · {family.primaryPhone ?? "—"}
+                        </div>
+                      </div>
+                      {selectedFamily?.id === family.id ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {counterFamilyOption ? (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedFamily(counterFamilyOption);
+                      setQuery(counterFamilyOption.name);
+                      setSummary(null);
+                    }}
+                  >
+                    Use counter sale family
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <CounterTabs
+            activeTab={activeTab}
+            visitedTabs={visitedTabs}
+            onTabChange={setActiveTab}
+            summary={summary}
+            loadingSummary={loadingSummary}
+            outstanding={outstanding}
+            totalOpenInvoices={totalOpenInvoices}
+            nextDue={nextDue}
+            onOpenAction={setActionMode}
+          />
         </div>
-        <Badge variant="secondary" className="gap-2">
-          <Wallet className="h-4 w-4" />
-          {formatCurrencyFromCents(outstanding)} outstanding
-        </Badge>
       </div>
 
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            Find a family
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="relative">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Start typing a family name…"
-              className="pr-10"
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            </div>
-          </div>
+      <CounterActionSheet
+        mode={actionMode}
+        onOpenChange={(open) => {
+          if (!open) setActionMode(null);
+        }}
+        summary={summary}
+        allocationMode={allocationMode}
+        allocations={allocations}
+        onAllocationChange={handleManualAllocationChange}
+        setAllocationMode={setAllocationMode}
+        paymentAmount={paymentAmount}
+        method={method}
+        note={note}
+        paidOn={paidOn}
+        setPaymentAmount={setPaymentAmount}
+        setMethod={setMethod}
+        setNote={setNote}
+        setPaidOn={setPaidOn}
+        onSubmitPayment={handlePaymentSubmit}
+        submittingPayment={submittingPayment}
+        products={products}
+        cartItems={cartItems}
+        cartTotal={cartTotal}
+        checkoutMode={checkoutMode}
+        checkoutMethod={checkoutMethod}
+        checkoutNote={checkoutNote}
+        setCheckoutMode={setCheckoutMode}
+        setCheckoutMethod={setCheckoutMethod}
+        setCheckoutNote={setCheckoutNote}
+        onCheckout={handleCheckout}
+        checkingOut={checkingOut}
+        clearCart={clearCart}
+        addToCart={addToCart}
+        updateCartQuantity={updateCartQuantity}
+        counterFamilyOption={counterFamilyOption}
+        selectedFamily={selectedFamily}
+        onUndoPayment={handleUndoPayment}
+        isUndoing={isUndoing}
+        undoingPaymentId={undoingPaymentId}
+        payAheadContent={
+          <CounterPayAheadCard
+            summary={summary}
+            onRefresh={(familyId) => refreshSummary(familyId)}
+          />
+        }
+      />
+    </div>
+  );
+}
 
-          {results.length > 0 && (
-            <div className="rounded-md border bg-muted/40">
-              {results.map((family) => (
-                <button
-                  key={family.id}
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors",
-                    selectedFamily?.id === family.id ? "bg-accent/60" : "hover:bg-accent/30"
-                  )}
-                  onClick={() => loadSummary(family)}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{family.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {family.primaryContactName ?? "No primary contact"} · {family.primaryPhone ?? "—"}
+type ActionMode = "PAYMENT" | "PAY_AHEAD" | "CHECKOUT" | null;
+
+function CounterTabs({
+  activeTab,
+  visitedTabs,
+  onTabChange,
+  summary,
+  loadingSummary,
+  outstanding,
+  totalOpenInvoices,
+  nextDue,
+  onOpenAction,
+}: {
+  activeTab: string;
+  visitedTabs: Set<string>;
+  onTabChange: (value: string) => void;
+  summary: FamilyBillingSummary | null;
+  loadingSummary: boolean;
+  outstanding: number;
+  totalOpenInvoices: number;
+  nextDue: FamilyBillingSummary["nextDueInvoice"];
+  onOpenAction: (mode: ActionMode) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Front of counter</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Tabs keep key billing data in view. Open sheets to take action.
+            </p>
+          </div>
+          <Badge variant="secondary" className="gap-2">
+            <Wallet className="h-4 w-4" />
+            {formatCurrencyFromCents(outstanding)} outstanding
+          </Badge>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={onTabChange}>
+          <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="billing" className="space-y-4 pt-4">
+            <BillingTab
+              summary={summary}
+              loadingSummary={loadingSummary}
+              outstanding={outstanding}
+              totalOpenInvoices={totalOpenInvoices}
+              nextDue={nextDue}
+              onOpenAction={onOpenAction}
+            />
+          </TabsContent>
+
+          {visitedTabs.has("students") ? (
+            <TabsContent value="students" className="pt-4">
+              <StudentsTab summary={summary} />
+            </TabsContent>
+          ) : null}
+
+          {visitedTabs.has("history") ? (
+            <TabsContent value="history" className="pt-4">
+              <HistoryTab summary={summary} onUndoPayment={onOpenAction} />
+            </TabsContent>
+          ) : null}
+        </Tabs>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function BillingTab({
+  summary,
+  loadingSummary,
+  outstanding,
+  totalOpenInvoices,
+  nextDue,
+  onOpenAction,
+}: {
+  summary: FamilyBillingSummary | null;
+  loadingSummary: boolean;
+  outstanding: number;
+  totalOpenInvoices: number;
+  nextDue: FamilyBillingSummary["nextDueInvoice"];
+  onOpenAction: (mode: ActionMode) => void;
+}) {
+  if (!summary) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-dashed px-3 py-6 text-sm text-muted-foreground">
+        <AlertCircle className="h-4 w-4" />
+        Select a family to view billing.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-4">
+        <SummaryCard
+          label="Open balance"
+          value={formatCurrencyFromCents(outstanding)}
+          sublabel={`${totalOpenInvoices} open invoice${totalOpenInvoices === 1 ? "" : "s"}`}
+          icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
+        />
+        <SummaryCard
+          label="Credits remaining"
+          value={summary.creditsTotal.toString()}
+          sublabel="Includes blocks + per-class plans"
+          icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
+        />
+        <SummaryCard
+          label="Latest paid through"
+          value={summary.paidThroughLatest ? formatDate(summary.paidThroughLatest) : "—"}
+          sublabel="Based on enrolment paid-through dates"
+          icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
+        />
+        <SummaryCard
+          label="Next payment due"
+          value={nextDue?.dueAt ? formatDate(nextDue.dueAt) : "No due date"}
+          sublabel={
+            nextDue ? `${nextDue.status?.toLowerCase()} · ${formatCurrencyFromCents(nextDue.balanceCents)}` : "All caught up"
+          }
+          icon={<AlertCircle className="h-4 w-4 text-muted-foreground" />}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => onOpenAction("PAYMENT")}>
+          <CreditCard className="mr-2 h-4 w-4" />
+          Take payment
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => onOpenAction("PAY_AHEAD")}>
+          <Sparkles className="mr-2 h-4 w-4" />
+          Pay ahead
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => onOpenAction("CHECKOUT")}>
+          <ShoppingBag className="mr-2 h-4 w-4" />
+          Checkout
+        </Button>
+      </div>
+
+      <div className="rounded-md border">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold">Open invoices</p>
+            <p className="text-xs text-muted-foreground">Oldest first to match auto-allocation.</p>
+          </div>
+          {loadingSummary ? (
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Refreshing…
+            </span>
+          ) : null}
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Invoice</TableHead>
+              <TableHead>Due</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Balance</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {summary.openInvoices.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                  No open invoices for this family.
+                </TableCell>
+              </TableRow>
+            ) : (
+              summary.openInvoices.map((invoice) => {
+                const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+                return (
+                  <TableRow key={invoice.id}>
+                    <TableCell className="space-y-1">
+                      <div className="font-medium">#{invoice.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {invoice.enrolment?.student?.name ?? "No enrolment"} · {invoice.enrolment?.plan?.name ?? "Plan not set"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{invoice.dueAt ? formatDate(invoice.dueAt) : "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      <Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrencyFromCents(balance)}</TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function StudentsTab({ summary }: { summary: FamilyBillingSummary | null }) {
+  if (!summary) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-6 text-sm text-muted-foreground">
+        <AlertCircle className="h-4 w-4" />
+        Select a family to see students.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {summary.students.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No students for this family.</p>
+      ) : (
+        summary.students.map((student) => (
+          <Card key={student.id}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-base">{student.name}</CardTitle>
+              <Badge variant="outline">{student.enrolments.length} enrolments</Badge>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {student.enrolments.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No active enrolments.</p>
+              ) : (
+                student.enrolments.map((enrolment) => (
+                  <div
+                    key={enrolment.id}
+                    className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{enrolment.planName}</span>
+                        <Badge variant="secondary" className="text-[11px] uppercase">
+                          {enrolment.billingType ?? "Unbilled"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Paid to {formatDate(enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[11px]">
+                      {enrolment.entitlementStatus}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
+function HistoryTab({
+  summary,
+  onUndoPayment,
+}: {
+  summary: FamilyBillingSummary | null;
+  onUndoPayment: (mode: ActionMode) => void;
+}) {
+  if (!summary?.payments?.length) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-6 text-sm text-muted-foreground">
+        <AlertCircle className="h-4 w-4" />
+        No recent payments recorded.
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">Recent payments</CardTitle>
+        <Button size="sm" variant="outline" onClick={() => onUndoPayment("PAYMENT")}>
+          Manage payments
+        </Button>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {summary.payments.map((payment) => (
+                <TableRow key={payment.id}>
+                  <TableCell className="text-sm">{formatDate(payment.paidAt)}</TableCell>
+                  <TableCell className="text-sm">{payment.method ?? "—"}</TableCell>
+                  <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
+                    {payment.note ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">{formatCurrencyFromCents(payment.amountCents)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type CounterActionSheetProps = {
+  mode: ActionMode;
+  onOpenChange: (open: boolean) => void;
+  summary: FamilyBillingSummary | null;
+  allocationMode: "AUTO" | "MANUAL";
+  allocations: AllocationMap;
+  onAllocationChange: (invoiceId: string, value: string) => void;
+  setAllocationMode: (mode: "AUTO" | "MANUAL") => void;
+  paymentAmount: string;
+  method: string;
+  note: string;
+  paidOn: string;
+  setPaymentAmount: (value: string) => void;
+  setMethod: (value: string) => void;
+  setNote: (value: string) => void;
+  setPaidOn: (value: string) => void;
+  onSubmitPayment: (e: React.FormEvent<HTMLFormElement>) => void;
+  submittingPayment: boolean;
+  products: Product[];
+  cartItems: Array<{ product: Product; quantity: number }>;
+  cartTotal: number;
+  checkoutMode: "PAY_NOW" | "INVOICE";
+  checkoutMethod: string;
+  checkoutNote: string;
+  setCheckoutMode: (mode: "PAY_NOW" | "INVOICE") => void;
+  setCheckoutMethod: (value: string) => void;
+  setCheckoutNote: (value: string) => void;
+  onCheckout: () => Promise<void>;
+  checkingOut: boolean;
+  clearCart: () => void;
+  addToCart: (productId: string) => void;
+  updateCartQuantity: (productId: string, quantity: number) => void;
+  counterFamilyOption: FamilyOption | null;
+  selectedFamily: FamilyOption | null;
+  onUndoPayment: (paymentId: string) => void;
+  isUndoing: boolean;
+  undoingPaymentId: string | null;
+  payAheadContent: React.ReactNode;
+};
+
+function CounterActionSheet({
+  mode,
+  onOpenChange,
+  summary,
+  allocationMode,
+  allocations,
+  onAllocationChange,
+  setAllocationMode,
+  paymentAmount,
+  method,
+  note,
+  paidOn,
+  setPaymentAmount,
+  setMethod,
+  setNote,
+  setPaidOn,
+  onSubmitPayment,
+  submittingPayment,
+  products,
+  cartItems,
+  cartTotal,
+  checkoutMode,
+  checkoutMethod,
+  checkoutNote,
+  setCheckoutMode,
+  setCheckoutMethod,
+  setCheckoutNote,
+  onCheckout,
+  checkingOut,
+  clearCart,
+  addToCart,
+  updateCartQuantity,
+  counterFamilyOption,
+  selectedFamily,
+  onUndoPayment,
+  isUndoing,
+  undoingPaymentId,
+  payAheadContent,
+}: CounterActionSheetProps) {
+  const invoiceAllocationRows = summary?.openInvoices ?? [];
+  const lastPayments = summary?.payments ?? [];
+  const isOpen = Boolean(mode);
+
+  const title =
+    mode === "PAYMENT" ? "Take payment" : mode === "PAY_AHEAD" ? "Pay ahead" : mode === "CHECKOUT" ? "Checkout" : "";
+
+  return (
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full space-y-4 overflow-y-auto p-6 sm:max-w-xl sm:px-8">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+        </SheetHeader>
+
+        {mode === "PAYMENT" ? (
+          <>
+            {!summary ? (
+              <p className="text-sm text-muted-foreground">Select a family to record a payment.</p>
+            ) : (
+              <form onSubmit={onSubmitPayment} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Amount</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Method</Label>
+                    <Input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="Cash, card, etc." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Paid on</Label>
+                    <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Note (optional)</Label>
+                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
+                </div>
+
+                <div className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold">Allocation mode</p>
+                      <p className="text-xs text-muted-foreground">
+                        Auto allocates oldest invoices first; switch to manual to choose amounts.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={allocationMode === "AUTO" ? "default" : "outline"}
+                        onClick={() => setAllocationMode("AUTO")}
+                        size="sm"
+                      >
+                        Auto
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={allocationMode === "MANUAL" ? "default" : "outline"}
+                        onClick={() => setAllocationMode("MANUAL")}
+                        size="sm"
+                      >
+                        Manual
+                      </Button>
                     </div>
                   </div>
-                  {selectedFamily?.id === family.id ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  {allocationMode === "AUTO" ? (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      We will allocate from the oldest invoice forward. Any remaining amount stays unallocated.
+                    </p>
                   ) : null}
-                </button>
-              ))}
-            </div>
-          )}
+                </div>
 
-          {counterFamilyOption ? (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSelectedFamily(counterFamilyOption);
-                  setQuery(counterFamilyOption.name);
-                  setSummary(null);
-                }}
-              >
-                Use counter sale family
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+                <div className="rounded-md border">
+                  <div className="flex items-center justify-between border-b px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold">Open invoices</p>
+                      <p className="text-xs text-muted-foreground">Allocate only if needed</p>
+                    </div>
+                    <Badge variant="secondary">{invoiceAllocationRows.length} open</Badge>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Invoice</TableHead>
+                        <TableHead>Due</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                        {allocationMode === "MANUAL" ? <TableHead className="text-right">Allocate</TableHead> : null}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoiceAllocationRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={allocationMode === "MANUAL" ? 4 : 3} className="text-sm text-muted-foreground">
+                            No open invoices for this family.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        invoiceAllocationRows.map((invoice) => {
+                          const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+                          const allocationValue = allocations[invoice.id] ?? centsToDollarString(balance);
+                          return (
+                            <TableRow key={invoice.id}>
+                              <TableCell className="space-y-1">
+                                <div className="font-medium">#{invoice.id}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {invoice.enrolment?.student?.name ?? "No enrolment"} · {invoice.enrolment?.plan?.name ?? "Plan not set"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm">{invoice.dueAt ? formatDate(invoice.dueAt) : "—"}</TableCell>
+                              <TableCell className="text-right font-semibold">{formatCurrencyFromCents(balance)}</TableCell>
+                              {allocationMode === "MANUAL" ? (
+                                <TableCell className="text-right">
+                                  <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.01"
+                                    min="0"
+                                    value={allocationValue}
+                                    onChange={(e) => onAllocationChange(invoice.id, e.target.value)}
+                                    className="w-28 text-right"
+                                  />
+                                </TableCell>
+                              ) : null}
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Sell products</CardTitle>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Add products to a basket, invoice, and optionally collect payment immediately.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-2">
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button type="submit" disabled={submittingPayment}>
+                    {submittingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    {submittingPayment ? "Saving..." : "Record payment"}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {lastPayments.length ? (
+              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent</p>
+                {lastPayments.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between gap-2 text-sm">
+                    <div className="space-y-1">
+                      <div className="font-semibold">{formatCurrencyFromCents(payment.amountCents)}</div>
+                      <div className="text-xs text-muted-foreground">{formatDate(payment.paidAt)}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onUndoPayment(payment.id)}
+                      disabled={isUndoing && undoingPaymentId === payment.id}
+                    >
+                      {isUndoing && undoingPaymentId === payment.id ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Undo
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {mode === "PAY_AHEAD" ? <div className="space-y-4">{payAheadContent}</div> : null}
+
+        {mode === "CHECKOUT" ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Basket</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedFamily ? `For ${selectedFamily.name}` : counterFamilyOption ? `Using ${counterFamilyOption.name}` : "Select a family"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
               {products.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No products available.</p>
               ) : (
@@ -459,9 +1123,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                         <div className="text-sm font-semibold">{formatCurrencyFromCents(product.priceCents)}</div>
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground">
-                          {product.active ? "Active" : "Inactive"}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{product.active ? "Active" : "Inactive"}</div>
                         <Button size="sm" variant="outline" onClick={() => addToCart(product.id)}>
                           Add
                         </Button>
@@ -471,6 +1133,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                 </div>
               )}
             </div>
+
+            <Separator />
 
             <div className="rounded-md border p-3 space-y-3">
               <div className="flex items-start justify-between gap-2">
@@ -495,7 +1159,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                     <div key={item.product.id} className="rounded border p-2 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="font-semibold truncate">{item.product.name}</div>
+                          <div className="truncate font-semibold">{item.product.name}</div>
                           <div className="text-xs text-muted-foreground">
                             {formatCurrencyFromCents(item.product.priceCents)} each
                           </div>
@@ -549,11 +1213,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                 </div>
                 {checkoutMode === "PAY_NOW" ? (
                   <div className="mt-2 grid gap-2 md:grid-cols-2">
-                    <Input
-                      placeholder="Method"
-                      value={checkoutMethod}
-                      onChange={(e) => setCheckoutMethod(e.target.value)}
-                    />
+                    <Input placeholder="Method" value={checkoutMethod} onChange={(e) => setCheckoutMethod(e.target.value)} />
                     <Input
                       placeholder="Note (optional)"
                       value={checkoutNote}
@@ -572,7 +1232,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button type="button" onClick={handleCheckout} disabled={checkingOut || cartItems.length === 0}>
+                <Button type="button" onClick={onCheckout} disabled={checkingOut || cartItems.length === 0}>
                   {checkingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {checkoutMode === "PAY_NOW" ? "Checkout & pay" : "Create invoice"}
                 </Button>
@@ -584,285 +1244,9 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {selectedFamily ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 lg:grid-cols-4">
-            <SummaryCard
-              label="Open balance"
-              value={formatCurrencyFromCents(outstanding)}
-              sublabel={`${totalOpenInvoices} open invoice${totalOpenInvoices === 1 ? "" : "s"}`}
-              icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
-            />
-            <SummaryCard
-              label="Credits remaining"
-              value={summary ? summary.creditsTotal.toString() : "0"}
-              sublabel="Includes blocks + per-class plans"
-              icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
-            />
-            <SummaryCard
-              label="Latest paid through"
-              value={summary?.paidThroughLatest ? formatDate(summary.paidThroughLatest) : "—"}
-              sublabel="Based on enrolment paid-through dates"
-              icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
-            />
-            <SummaryCard
-              label="Next payment due"
-              value={nextDue?.dueAt ? formatDate(nextDue.dueAt) : "No due date"}
-              sublabel={
-                nextDue
-                  ? `${nextDue.status.toLowerCase()} · ${formatCurrencyFromCents(nextDue.balanceCents)}`
-                  : "All caught up"
-              }
-              icon={<AlertCircle className="h-4 w-4 text-muted-foreground" />}
-            />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Card className="xl:col-span-2">
-              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-base">Open invoices</CardTitle>
-                  <p className="text-sm text-muted-foreground">Oldest first to match auto-allocation.</p>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {loadingSummary ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Refreshing…
-                    </span>
-                  ) : null}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Invoice</TableHead>
-                        <TableHead>Due</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                        {allocationMode === "MANUAL" ? <TableHead className="text-right">Allocate</TableHead> : null}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allocationRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={allocationMode === "MANUAL" ? 5 : 4} className="text-sm text-muted-foreground">
-                            No open invoices for this family.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        allocationRows.map((invoice) => {
-                          const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
-                          const allocationValue = allocations[invoice.id] ?? centsToDollarString(balance);
-                          return (
-                            <TableRow key={invoice.id}>
-                              <TableCell className="space-y-1">
-                                <div className="font-medium">#{invoice.id}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {invoice.enrolment?.student?.name ?? "No enrolment"} ·{" "}
-                                  {invoice.enrolment?.plan?.name ?? "Plan not set"}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-sm">{invoice.dueAt ? formatDate(invoice.dueAt) : "—"}</TableCell>
-                              <TableCell className="text-sm">
-                                <Badge variant={statusVariant(invoice.status)}>{invoice.status}</Badge>
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {formatCurrencyFromCents(balance)}
-                              </TableCell>
-                              {allocationMode === "MANUAL" ? (
-                                <TableCell className="text-right">
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    step="0.01"
-                                    min="0"
-                                    value={allocationValue}
-                                    onChange={(e) => handleManualAllocationChange(invoice.id, e.target.value)}
-                                    className="w-28 text-right"
-                                  />
-                                </TableCell>
-                              ) : null}
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Take payment</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handlePaymentSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Amount</Label>
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      step="0.01"
-                      min="0"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Method</Label>
-                      <Input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="Cash, card, etc." />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Paid on</Label>
-                      <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Note (optional)</Label>
-                    <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
-                  </div>
-
-                  <div className="rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold">Allocation mode</p>
-                        <p className="text-xs text-muted-foreground">
-                          Auto allocates oldest invoices first; switch to manual to choose amounts.
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant={allocationMode === "AUTO" ? "default" : "outline"}
-                          onClick={() => setAllocationMode("AUTO")}
-                          size="sm"
-                        >
-                          Auto
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={allocationMode === "MANUAL" ? "default" : "outline"}
-                          onClick={() => setAllocationMode("MANUAL")}
-                          size="sm"
-                        >
-                          Manual
-                        </Button>
-                      </div>
-                    </div>
-                    {allocationMode === "AUTO" ? (
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        We will allocate from the oldest invoice forward. Any remaining amount stays unallocated.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <Button type="submit" disabled={submittingPayment}>
-                      {submittingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      {submittingPayment ? "Saving..." : "Record payment"}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-
-          <CounterPayAheadCard summary={summary} onRefresh={refreshSummary} />
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent payments</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Note</TableHead>
-                      <TableHead className="w-14 text-right">Actions</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {summary?.payments?.length ? (
-                      summary.payments.map((payment) => (
-                        <TableRow key={payment.id}>
-                          <TableCell className="text-sm">{formatDate(payment.paidAt)}</TableCell>
-                          <TableCell className="text-sm">{payment.method ?? "—"}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate">
-                            {payment.note ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  disabled={isUndoing && undoingPaymentId === payment.id}
-                                  aria-label="Payment actions"
-                                >
-                                  {isUndoing && undoingPaymentId === payment.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onSelect={(e) => {
-                                    e.preventDefault();
-                                    handleUndoPayment(payment.id);
-                                  }}
-                                >
-                                  Undo payment
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {formatCurrencyFromCents(payment.amountCents)}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-sm text-muted-foreground">
-                          No recent payments.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <Card className="border-dashed">
-          <CardContent className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
-            <AlertCircle className="h-4 w-4" />
-            Select a family to view balances and take a payment.
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }
 

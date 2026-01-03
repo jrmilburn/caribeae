@@ -6,14 +6,20 @@ import type { Family } from "@prisma/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { updateFamily } from "@/server/family/updateFamily";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 
 type Props = {
   family: Family;
+  layout?: "section" | "plain";
+  onSaved?: () => void;
+  className?: string;
 };
 
-export default function FamilyDetails({ family }: Props) {
-  // const router = useRouter();
+export default function FamilyDetails({ family, layout = "section", onSaved, className }: Props) {
+  const router = useRouter();
 
   const [form, setForm] = React.useState({
     name: family.name,
@@ -50,19 +56,31 @@ export default function FamilyDetails({ family }: Props) {
         medicalContactPhone: form.medicalContactPhone.trim() || undefined,
       };
 
-      await updateFamily(payload, family.id)
+      await updateFamily(payload, family.id);
+      toast.success("Family updated.");
+      router.refresh();
+      onSaved?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to update family.";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
   };
 
+  const Wrapper: React.ElementType = layout === "section" ? "section" : "div";
+  const wrapperClass = cn(
+    layout === "section"
+      ? "md:col-span-3 border-t border-b bg-background p-5"
+      : "space-y-6 rounded-lg border bg-muted/30 p-4",
+    className
+  );
+
   return (
-    <section className="md:col-span-3 border-t border-b bg-background p-5">
-      <div className="mb-4 p-4">
+    <Wrapper className={wrapperClass}>
+      <div className="mb-4">
         <h2 className="text-base font-semibold">Family information</h2>
-        <p className="text-sm text-muted-foreground">
-          Update contacts and emergency info.
-        </p>
+        <p className="text-sm text-muted-foreground">Update contacts and emergency info.</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
@@ -79,18 +97,10 @@ export default function FamilyDetails({ family }: Props) {
             />
           </Field>
           <Field label="Primary phone">
-            <Input
-              value={form.primaryPhone}
-              onChange={onChange("primaryPhone")}
-              placeholder="04xx xxx xxx"
-            />
+            <Input value={form.primaryPhone} onChange={onChange("primaryPhone")} placeholder="04xx xxx xxx" />
           </Field>
           <Field label="Primary email" className="sm:col-span-2">
-            <Input
-              value={form.primaryEmail}
-              onChange={onChange("primaryEmail")}
-              placeholder="name@email.com"
-            />
+            <Input value={form.primaryEmail} onChange={onChange("primaryEmail")} placeholder="name@email.com" />
           </Field>
         </div>
 
@@ -98,22 +108,13 @@ export default function FamilyDetails({ family }: Props) {
           <h3 className="text-sm font-semibold">Secondary contact</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <Input
-                value={form.secondaryContactName}
-                onChange={onChange("secondaryContactName")}
-              />
+              <Input value={form.secondaryContactName} onChange={onChange("secondaryContactName")} />
             </Field>
             <Field label="Phone">
-              <Input
-                value={form.secondaryPhone}
-                onChange={onChange("secondaryPhone")}
-              />
+              <Input value={form.secondaryPhone} onChange={onChange("secondaryPhone")} />
             </Field>
             <Field label="Email" className="sm:col-span-2">
-              <Input
-                value={form.secondaryEmail}
-                onChange={onChange("secondaryEmail")}
-              />
+              <Input value={form.secondaryEmail} onChange={onChange("secondaryEmail")} />
             </Field>
           </div>
         </div>
@@ -122,16 +123,10 @@ export default function FamilyDetails({ family }: Props) {
           <h3 className="text-sm font-semibold">Medical contact</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <Input
-                value={form.medicalContactName}
-                onChange={onChange("medicalContactName")}
-              />
+              <Input value={form.medicalContactName} onChange={onChange("medicalContactName")} />
             </Field>
             <Field label="Phone">
-              <Input
-                value={form.medicalContactPhone}
-                onChange={onChange("medicalContactPhone")}
-              />
+              <Input value={form.medicalContactPhone} onChange={onChange("medicalContactPhone")} />
             </Field>
           </div>
         </div>
@@ -142,7 +137,7 @@ export default function FamilyDetails({ family }: Props) {
           </Button>
         </div>
       </form>
-    </section>
+    </Wrapper>
   );
 }
 

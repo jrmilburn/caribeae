@@ -13,6 +13,7 @@ import { MoreVertical, Trash2 } from "lucide-react";
 import { createStudent } from "@/server/student/createStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import { deleteStudent } from "@/server/student/deleteStudent";
+import { cn } from "@/lib/utils";
 
 import { useRouter } from "next/navigation";
 
@@ -31,20 +32,43 @@ type Props = {
   familyId: string;
   enrolContext?: EnrolContext | null;
   levels: Level[];
+  layout?: "section" | "plain";
+  className?: string;
+  onAddStudent?: () => void;
+  onEditStudent?: (student: Student) => void;
+  renderModal?: boolean;
 };
 
-export default function StudentDetails({ students, familyId, enrolContext, levels }: Props) {
+export default function StudentDetails({
+  students,
+  familyId,
+  enrolContext,
+  levels,
+  layout = "section",
+  className,
+  onAddStudent,
+  onEditStudent,
+  renderModal = true,
+}: Props) {
   const router = useRouter();
 
   const [open, setOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
 
   const handleAdd = () => {
+    if (onAddStudent) {
+      onAddStudent();
+      return;
+    }
     setEditingStudent(null);
     setOpen(true);
   };
 
   const handleEdit = (student: Student) => {
+    if (onEditStudent) {
+      onEditStudent(student);
+      return;
+    }
     setEditingStudent(student);
     setOpen(true);
   };
@@ -74,18 +98,21 @@ export default function StudentDetails({ students, familyId, enrolContext, level
 
   return (
     <>
-      <section className="md:col-span-2 border-l border-t border-b bg-background p-5">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <section
+        className={cn(
+          layout === "section"
+            ? "md:col-span-2 border-l border-t border-b bg-background p-5"
+            : "space-y-3 rounded-lg border bg-background p-4",
+          className
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Students</h2>
-            <p className="text-sm text-muted-foreground">
-              {students.length} student{students.length === 1 ? "" : "s"}
-            </p>
+            <p className="text-sm text-muted-foreground">{students.length} student{students.length === 1 ? "" : "s"}</p>
 
             {enrolContext ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Select a student to enrol in the class.
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Select a student to enrol in the class.</p>
             ) : null}
           </div>
 
@@ -97,7 +124,7 @@ export default function StudentDetails({ students, familyId, enrolContext, level
         {students.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 pt-2">
             {students.map((student) => (
               <StudentCard
                 key={student.id}
@@ -111,17 +138,19 @@ export default function StudentDetails({ students, familyId, enrolContext, level
         )}
       </section>
 
-      <StudentModal
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setEditingStudent(null);
-        }}
-        familyId={familyId}
-        student={editingStudent}
-        onSave={onSave}
-        levels={levels}
-      />
+      {renderModal ? (
+        <StudentModal
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) setEditingStudent(null);
+          }}
+          familyId={familyId}
+          student={editingStudent}
+          onSave={onSave}
+          levels={levels}
+        />
+      ) : null}
     </>
   );
 }
