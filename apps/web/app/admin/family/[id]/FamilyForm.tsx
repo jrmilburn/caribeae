@@ -145,7 +145,7 @@ export default function FamilyForm({
         nextDue={billingPosition.nextDueInvoice}
         lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
         actions={
-          <>
+          <div className="flex flex-col gap-2 justify-end h-full">
             <Button
               size="sm"
               onClick={() => {
@@ -175,14 +175,14 @@ export default function FamilyForm({
             >
               Edit family
             </Button>
-          </>
+          </div>
         }
       />
 
       <UnpaidFamiliesIndicator summary={unpaidSummary} />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-6xl space-y-4 p-4">
+        <div className="mx-auto space-y-4 p-4">
           <FamilyTabs
             activeTab={activeTab}
             visitedTabs={visitedTabs}
@@ -249,7 +249,7 @@ function FamilyTabs({
   onPaymentSheetChange,
 }: FamilyTabsProps) {
   return (
-    <Card>
+    <Card className="border-none shadow-none w-full">
       <CardHeader className="space-y-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
@@ -331,7 +331,7 @@ function OverviewTab({
 
       <FamilyBillingPositionCard billing={billingPosition} />
 
-      <Card>
+      <Card className="w-full border-b-0 border-l-0 border-r-0 shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Contact</CardTitle>
         </CardHeader>
