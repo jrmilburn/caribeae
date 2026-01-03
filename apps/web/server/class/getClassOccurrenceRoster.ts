@@ -1,6 +1,7 @@
 "use server";
 
-import { EnrolmentStatus } from "@prisma/client";
+import { BillingType, EnrolmentStatus } from "@prisma/client";
+import { isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -8,32 +9,102 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { ClassOccurrenceRoster } from "@/app/admin/class/[id]/types";
 
-export async function getClassOccurrenceRoster(templateId: string, dateKey: string): Promise<ClassOccurrenceRoster> {
-  await getOrCreateUser();
-  await requireAdmin();
+type ContextOptions = { skipAuth?: boolean; includeAttendance?: boolean };
+
+export async function getClassOccurrenceRoster(
+  templateId: string,
+  dateKey: string,
+  options?: ContextOptions
+): Promise<ClassOccurrenceRoster> {
+  const { date, template } = await resolveContext(templateId, dateKey, options);
+
+  const [enrolments, attendance] = await Promise.all([
+    getEligibleEnrolmentsForOccurrence(template.id, template.levelId, date),
+    options?.includeAttendance === false
+      ? []
+      : prisma.attendance.findMany({
+          where: { templateId, date },
+          include: { student: true },
+          orderBy: [{ student: { name: "asc" } }],
+        }),
+  ]);
+
+  return { enrolments, attendance };
+}
+
+export async function getEligibleStudentsForOccurrence(
+  templateId: string,
+  dateKey: string,
+  options?: ContextOptions
+) {
+  const { date, template } = await resolveContext(templateId, dateKey, options);
+  const enrolments = await getEligibleEnrolmentsForOccurrence(template.id, template.levelId, date);
+  return new Set(enrolments.map((e) => e.studentId));
+}
+
+async function resolveContext(templateId: string, dateKey: string, options?: ContextOptions) {
+  if (!options?.skipAuth) {
+    await getOrCreateUser();
+    await requireAdmin();
+  }
 
   const date = parseDateKey(dateKey);
   if (!date) {
     throw new Error("Invalid date");
   }
 
-  const [enrolments, attendance] = await Promise.all([
-    prisma.enrolment.findMany({
-      where: {
-        templateId,
-        status: { not: EnrolmentStatus.CANCELLED },
-        startDate: { lte: date },
-        OR: [{ endDate: null }, { endDate: { gte: date } }],
-      },
-      include: { student: true, plan: true },
-      orderBy: [{ student: { name: "asc" } }],
-    }),
-    prisma.attendance.findMany({
-      where: { templateId, date },
-      include: { student: true },
-      orderBy: [{ student: { name: "asc" } }],
-    }),
-  ]);
+  const template = await prisma.classTemplate.findUnique({
+    where: { id: templateId },
+    select: { id: true, levelId: true },
+  });
 
-  return { enrolments, attendance };
+  if (!template) {
+    throw new Error("Class template not found");
+  }
+
+  return { date, template };
+}
+
+async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: string, date: Date) {
+  const candidates = await prisma.enrolment.findMany({
+    where: {
+      status: { not: EnrolmentStatus.CANCELLED },
+      startDate: { lte: date },
+      OR: [{ endDate: null }, { endDate: { gte: date } }],
+      OR: [
+        { templateId },
+        {
+          plan: { billingType: BillingType.PER_WEEK },
+          student: { levelId },
+        },
+      ],
+    },
+    include: { student: true, plan: true, template: true },
+    orderBy: [{ student: { name: "asc" } }],
+  });
+
+  const roster = new Map<string, (typeof candidates)[number]>();
+
+  for (const enrolment of candidates) {
+    const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
+    if (isWeekly && enrolment.student.levelId !== levelId) continue;
+    if (!isWeekly && enrolment.templateId !== templateId) continue;
+
+    if (isWeekly) {
+      const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate ?? null;
+      if (paidThrough && isAfter(date, paidThrough)) continue;
+    }
+
+    const existing = roster.get(enrolment.studentId);
+    const isDirect = enrolment.templateId === templateId;
+    const existingDirect = existing?.templateId === templateId;
+
+    if (!existing || (isDirect && !existingDirect)) {
+      roster.set(enrolment.studentId, enrolment);
+    }
+  }
+
+  return Array.from(roster.values()).sort((a, b) =>
+    (a.student.name ?? "").localeCompare(b.student.name ?? "")
+  );
 }

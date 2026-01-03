@@ -1,6 +1,6 @@
 "use server";
 
-import { AttendanceStatus, EnrolmentStatus, TimesheetSource, TimesheetStatus } from "@prisma/client";
+import { AttendanceStatus, TimesheetSource, TimesheetStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -9,6 +9,7 @@ import { parseDateKey } from "@/lib/dateKey";
 import type { AttendanceChangeDTO, AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
 import { registerCreditConsumptionForDate } from "@/server/billing/enrolmentBilling";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
+import { getEligibleStudentsForOccurrence } from "@/server/class/getClassOccurrenceRoster";
 
 type SaveAttendancePayload = {
   templateId: string;
@@ -44,17 +45,10 @@ export async function saveAttendance({
     }
   });
 
-  const activeEnrolments = await prisma.enrolment.findMany({
-    where: {
-      templateId,
-      status: { not: EnrolmentStatus.CANCELLED },
-      startDate: { lte: date },
-      OR: [{ endDate: null }, { endDate: { gte: date } }],
-    },
-    select: { studentId: true },
+  const allowedStudents = await getEligibleStudentsForOccurrence(templateId, dateKey, {
+    includeAttendance: false,
+    skipAuth: true,
   });
-
-  const allowedStudents = new Set(activeEnrolments.map((e) => e.studentId));
   uniqueChanges.forEach((entry) => {
     if (!allowedStudents.has(entry.studentId)) {
       throw new Error("Student is not enrolled on this date.");

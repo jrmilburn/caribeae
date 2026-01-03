@@ -55,6 +55,12 @@ export function AddEnrolmentDialog({
     }
   }, [open]);
 
+  React.useEffect(() => {
+    if (open && !startDate) {
+      setStartDate(format(new Date(), "yyyy-MM-dd"));
+    }
+  }, [open, startDate]);
+
   const selectedTemplateIds = React.useMemo(
     () => Object.keys(selectedTemplates),
     [selectedTemplates]
@@ -94,6 +100,7 @@ export function AddEnrolmentDialog({
     () => availablePlans.find((p) => p.id === planId) ?? null,
     [availablePlans, planId]
   );
+  const planIsWeekly = selectedPlan?.billingType === "PER_WEEK";
 
   const selectionRequirement = React.useMemo(
     () =>
@@ -103,11 +110,12 @@ export function AddEnrolmentDialog({
     [selectedPlan]
   );
 
-  const canSubmit =
-    !!planId &&
-    !saving &&
-    Boolean(startDate) &&
-    selectedTemplateIds.length === selectionRequirement.requiredCount;
+  const selectionSatisfied =
+    selectionRequirement.requiredCount === 0
+      ? selectedTemplateIds.length <= 1
+      : selectedTemplateIds.length === selectionRequirement.requiredCount;
+
+  const canSubmit = !!planId && !saving && Boolean(startDate) && selectionSatisfied;
 
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
     const planLevelId = selectedPlan?.levelId ?? null;
@@ -122,6 +130,15 @@ export function AddEnrolmentDialog({
         const next = { ...prev };
         delete next[occurrence.templateId];
         return next;
+      }
+
+      if (planIsWeekly && Object.keys(prev).length >= 1) {
+        const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
+        setStartDate((prevStart) => {
+          if (!prevStart) return occurrenceDate;
+          return occurrenceDate < prevStart ? occurrenceDate : prevStart;
+        });
+        return { [occurrence.templateId]: occurrence };
       }
 
       const count = Object.keys(prev).length;
@@ -172,8 +189,8 @@ export function AddEnrolmentDialog({
         <DialogHeader>
           <DialogTitle>Add enrolment</DialogTitle>
           <DialogDescription>
-            Select the classes that match the plan requirements. Multi-session plans require
-            multiple class templates per week.
+            Select classes when needed for the plan. Weekly plans allow attendance in any class at the
+            student's level.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,7 +245,10 @@ export function AddEnrolmentDialog({
             <div className="space-y-1">
               <div className="font-medium">{selectionRequirement.helper}</div>
               <div className="text-muted-foreground">
-                {selectedTemplateIds.length}/{selectionRequirement.requiredCount} selected •{" "}
+                {selectionRequirement.requiredCount === 0
+                  ? `${selectedTemplateIds.length} selected (optional)`
+                  : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
+                •{" "}
                 {startDate ? `Start date ${startDate}` : "Start date will follow the first class"}
               </div>
               {selectedTemplateIds.length ? (

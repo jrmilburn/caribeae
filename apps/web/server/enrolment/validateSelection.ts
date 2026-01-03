@@ -1,4 +1,4 @@
-import { EnrolmentPlan } from "@prisma/client";
+import { BillingType, EnrolmentPlan } from "@prisma/client";
 
 import { getSelectionRequirement } from "./planRules";
 
@@ -16,6 +16,24 @@ export function validateSelection(params: {
   const uniqueIds = Array.from(new Set(params.templateIds));
   if (uniqueIds.length !== params.templateIds.length) {
     return { ok: false, message: "Choose each class only once." };
+  }
+
+  if (params.plan.billingType === BillingType.PER_WEEK) {
+    if (uniqueIds.length > 1) {
+      return { ok: false, message: "Weekly plans only need one anchor class (or none)." };
+    }
+
+    const mismatchedLevel = params.templates.find((t) => t.levelId !== params.plan.levelId);
+    if (mismatchedLevel) {
+      return { ok: false, message: "Class level must match the enrolment plan level." };
+    }
+
+    const invalidTemplates = params.templates.filter((t) => t.active === false);
+    if (invalidTemplates.length) {
+      return { ok: false, message: "Select active classes that match the plan level." };
+    }
+
+    return { ok: true };
   }
 
   const requirement = getSelectionRequirement(params.plan);

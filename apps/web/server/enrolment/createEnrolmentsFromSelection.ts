@@ -35,7 +35,7 @@ import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 const payloadSchema = z.object({
   studentId: z.string().min(1),
   planId: z.string().min(1),
-  templateIds: z.array(z.string().min(1)).min(1),
+  templateIds: z.array(z.string().min(1)).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional().nullable(),
   status: z.nativeEnum(EnrolmentStatus).optional(),
@@ -53,26 +53,18 @@ export async function createEnrolmentsFromSelection(
   const payload = payloadSchema.parse(input);
   const startDate = normalizeStartDate(payload.startDate ?? new Date());
   const explicitEndDate = payload.endDate ? normalizeStartDate(payload.endDate) : undefined;
-  const templateIds = Array.from(new Set(payload.templateIds));
+  const templateIdsInput = Array.from(new Set(payload.templateIds ?? []));
 
-  const [plan, student, templates] = await Promise.all([
+  const [plan, student] = await Promise.all([
     prisma.enrolmentPlan.findUnique({ where: { id: payload.planId } }),
     prisma.student.findUnique({ where: { id: payload.studentId }, select: { id: true, levelId: true } }),
-    prisma.classTemplate.findMany({
-      where: { id: { in: templateIds } },
-      select: {
-        id: true,
-        levelId: true,
-        active: true,
-        startDate: true,
-        endDate: true,
-        name: true,
-      },
-    }),
   ]);
 
   if (!plan) throw new Error("Enrolment plan not found.");
   if (!student) throw new Error("Student not found.");
+  if (plan.billingType === BillingType.PER_WEEK && !student.levelId) {
+    throw new Error("Set the student's level before creating a weekly enrolment.");
+  }
   if (plan.levelId !== student.levelId && student.levelId) {
     throw new Error("Plan level must match the student level.");
   }
@@ -82,6 +74,57 @@ export async function createEnrolmentsFromSelection(
   }
   if (plan.billingType === BillingType.PER_CLASS && plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans require a positive class count when blockClassCount is set.");
+  }
+
+  let templateIds = templateIdsInput;
+  if (plan.billingType === BillingType.PER_WEEK) {
+    if (templateIds.length > 1) {
+      throw new Error("Weekly plans only need one anchor class.");
+    }
+  } else if (!templateIds.length) {
+    throw new Error("Select at least one class for this plan.");
+  }
+
+  let templates =
+    templateIds.length > 0
+      ? await prisma.classTemplate.findMany({
+          where: { id: { in: templateIds } },
+          select: {
+            id: true,
+            levelId: true,
+            active: true,
+            startDate: true,
+            endDate: true,
+            name: true,
+          },
+        })
+      : [];
+
+  if (plan.billingType === BillingType.PER_WEEK && templates.length === 0) {
+    const anchorTemplate = await prisma.classTemplate.findFirst({
+      where: {
+        levelId: plan.levelId,
+        active: true,
+        startDate: { lte: startDate },
+        OR: [{ endDate: null }, { endDate: { gte: startDate } }],
+      },
+      select: {
+        id: true,
+        levelId: true,
+        active: true,
+        startDate: true,
+        endDate: true,
+        name: true,
+      },
+      orderBy: [{ startDate: "asc" }, { id: "asc" }],
+    });
+
+    if (!anchorTemplate) {
+      throw new Error("No active classes are available for this level. Add a class first.");
+    }
+
+    templateIds = [anchorTemplate.id];
+    templates = [anchorTemplate];
   }
 
   if (templates.length !== templateIds.length) {
