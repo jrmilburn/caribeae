@@ -9,7 +9,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceMutations";
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
-import { resolveWeeklyCoverageWindow } from "@/server/invoicing/coverage";
+import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 
 const payAheadItemSchema = z.object({
@@ -85,33 +85,16 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
 
         const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
         const paidThrough = statusMap.get(enrolment.id)?.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-        let cursor = normalizeDate(paidThrough ?? enrolment.startDate, "paidThroughDate");
-        let coverageStart: Date | null = null;
-        let coverageEnd = cursor;
-        let createdPeriods = 0;
+        const payAhead = resolveWeeklyPayAheadSequence({
+          startDate: enrolment.startDate,
+          endDate: enrolmentEnd,
+          paidThroughDate: paidThrough,
+          durationWeeks: plan.durationWeeks,
+          quantity: item.quantity,
+          today,
+        });
 
-        for (let i = 0; i < item.quantity; i++) {
-          if (enrolmentEnd && isAfter(cursor, enrolmentEnd)) break;
-
-          const window = resolveWeeklyCoverageWindow({
-            enrolment: {
-              startDate: enrolment.startDate,
-              endDate: enrolment.endDate,
-              paidThroughDate: cursor,
-            },
-            plan: { durationWeeks: plan.durationWeeks ?? null },
-            today,
-          });
-
-          if (!coverageStart) {
-            coverageStart = window.coverageStart;
-          }
-          coverageEnd = window.coverageEnd;
-          cursor = window.coverageEnd;
-          createdPeriods += 1;
-        }
-
-        if (createdPeriods === 0) {
+        if (payAhead.periods === 0 || !payAhead.coverageStart || !payAhead.coverageEnd) {
           throw new Error("No remaining periods to invoice for this enrolment.");
         }
 
@@ -122,13 +105,13 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
             {
               kind: InvoiceLineItemKind.ENROLMENT,
               description: plan.name,
-              quantity: createdPeriods,
+              quantity: payAhead.periods,
               unitPriceCents: plan.priceCents,
             },
           ],
           status: InvoiceStatus.SENT,
-          coverageStart: coverageStart ?? cursor,
-          coverageEnd,
+          coverageStart: payAhead.coverageStart,
+          coverageEnd: payAhead.coverageEnd,
           creditsPurchased: null,
           issuedAt,
           dueAt,

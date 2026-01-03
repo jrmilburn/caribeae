@@ -42,6 +42,50 @@ export function resolveWeeklyCoverageWindow(params: {
   };
 }
 
+export function resolveWeeklyPayAheadSequence(params: {
+  startDate: Date;
+  endDate: Date | null;
+  paidThroughDate: Date | null;
+  durationWeeks: number;
+  quantity: number;
+  today?: Date;
+}) {
+  if (!params.durationWeeks || params.durationWeeks <= 0) {
+    throw new Error("Weekly plans require durationWeeks to be greater than zero.");
+  }
+  if (params.quantity <= 0) {
+    return { coverageStart: null as Date | null, coverageEnd: null as Date | null, periods: 0 };
+  }
+
+  const today = normalizeDate(params.today ?? new Date(), "today");
+  const endDate = normalizeOptionalDate(params.endDate);
+  const baseline = normalizeDate(params.paidThroughDate ?? params.startDate, "paidThroughDate");
+  const firstCoverageStart = maxDate([today, baseline]);
+
+  if (endDate && (isAfter(firstCoverageStart, endDate) || firstCoverageStart.getTime() === endDate.getTime())) {
+    return { coverageStart: null, coverageEnd: null, periods: 0 };
+  }
+
+  let currentStart = firstCoverageStart;
+  let coverageStart = firstCoverageStart;
+  let coverageEnd = firstCoverageStart;
+  let periods = 0;
+
+  for (let i = 0; i < params.quantity; i++) {
+    if (endDate && isAfter(currentStart, endDate)) break;
+    const rawEnd = addWeeks(currentStart, params.durationWeeks);
+    coverageEnd = endDate && isAfter(rawEnd, endDate) ? endDate : rawEnd;
+    currentStart = coverageEnd;
+    periods += 1;
+  }
+
+  return {
+    coverageStart: periods > 0 ? normalizeDate(coverageStart) : null,
+    coverageEnd: periods > 0 ? normalizeDate(coverageEnd) : null,
+    periods,
+  };
+}
+
 export function resolveCoverageForPlan(params: {
   enrolment: Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
   plan: Prisma.EnrolmentPlanUncheckedCreateInput | Prisma.EnrolmentPlanGetPayload<{ include: { level: true } }>;
