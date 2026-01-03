@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { EnrolmentStatus } from "@prisma/client";
-import { startOfDay } from "date-fns";
+import { isAfter, startOfDay } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -10,6 +10,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizePlan, normalizeStartDate } from "@/server/enrolment/planRules";
 import { validateSelection } from "@/server/enrolment/validateSelection";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
+import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -50,7 +51,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
 
     const templates = await tx.classTemplate.findMany({
       where: { id: { in: payload.templateIds } },
-      select: { id: true, levelId: true, active: true },
+      select: { id: true, levelId: true, active: true, startDate: true, endDate: true, name: true },
     });
 
     const selectionValidation = validateSelection({
@@ -68,6 +69,29 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       throw new Error(`Select ${requiredCount} classes for this plan.`);
     }
 
+    const enrolmentEnd = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
+    const baseStart = payload.startDate ?? startOfDay(enrolment.startDate);
+    const windows = templates.map((template) => {
+      const templateStart = startOfDay(template.startDate);
+      const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
+      const startDate = baseStart < templateStart ? templateStart : baseStart;
+
+      let endDate = enrolmentEnd;
+      if (templateEnd && (!endDate || isAfter(endDate, templateEnd))) {
+        endDate = templateEnd;
+      }
+
+      if (endDate && isAfter(startDate, endDate)) {
+        throw new EnrolmentValidationError({
+          code: "INVALID_DATE_RANGE",
+          templateId: template.id,
+          message: `Start date must be on or before the class end date for ${template.name ?? "this class"}.`,
+        });
+      }
+
+      return { templateId: template.id, templateName: template.name ?? "class", startDate, endDate };
+    });
+
     const siblings = await tx.enrolment.findMany({
       where: {
         studentId: enrolment.studentId,
@@ -84,20 +108,42 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       );
     }
 
-    const startDate = payload.startDate ?? startOfDay(enrolment.startDate);
+    const existing = await tx.enrolment.findMany({
+      where: {
+        studentId: enrolment.studentId,
+        templateId: { in: payload.templateIds },
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+      },
+      select: { id: true, templateId: true, startDate: true, endDate: true, status: true },
+    });
+
+    validateNoDuplicateEnrolments({
+      candidateWindows: windows,
+      existingEnrolments: existing,
+      ignoreEnrolmentIds: new Set(siblings.map((s) => s.id)),
+    });
+
+    const windowByTemplateId = new Map(windows.map((w) => [w.templateId, w]));
     const touchedTemplates = new Set<string>();
     const updatedEnrolments: string[] = [];
     const originalTemplates = siblings.map((s) => s.templateId);
 
     const available = [...siblings];
     for (const templateId of payload.templateIds) {
+      const window = windowByTemplateId.get(templateId);
+      if (!window) continue;
+
       const existing = available.find((e) => e.templateId === templateId);
       if (existing) {
         touchedTemplates.add(existing.templateId);
-        if (payload.startDate) {
+        const startDate = startOfDay(existing.startDate);
+        const endDate = existing.endDate ? startOfDay(existing.endDate) : null;
+        const needsStartUpdate = startDate.getTime() !== window.startDate.getTime();
+        const needsEndUpdate = (endDate?.getTime() ?? null) !== (window.endDate?.getTime() ?? null);
+        if (needsStartUpdate || needsEndUpdate) {
           await tx.enrolment.update({
             where: { id: existing.id },
-            data: { startDate },
+            data: { startDate: window.startDate, endDate: window.endDate },
           });
           updatedEnrolments.push(existing.id);
         }
@@ -111,8 +157,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
           where: { id: reusable.id },
           data: {
             templateId,
-            startDate,
-            endDate: reusable.endDate,
+            startDate: window.startDate,
+            endDate: window.endDate,
             status: reusable.status,
             cancelledAt: null,
           },
@@ -127,8 +173,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
           studentId: enrolment.studentId,
           planId: enrolment.planId,
           templateId,
-          startDate,
-          endDate: enrolment.endDate,
+          startDate: window.startDate,
+          endDate: window.endDate,
           status: enrolment.status,
           paidThroughDate: enrolment.paidThroughDate,
           paidThroughDateComputed: enrolment.paidThroughDateComputed,
