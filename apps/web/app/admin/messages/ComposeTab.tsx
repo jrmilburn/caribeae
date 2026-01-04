@@ -108,6 +108,12 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelC
     }
   }, [channel, mode, onChannelChange]);
 
+  React.useEffect(() => {
+    if (mode === "broadcast" && onChannelChange) {
+      onChannelChange(broadcastChannel);
+    }
+  }, [broadcastChannel, mode, onChannelChange]);
+
 const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null>) => {
   const instance = editor.current;
   if (!instance) throw new Error("Email editor not ready");
