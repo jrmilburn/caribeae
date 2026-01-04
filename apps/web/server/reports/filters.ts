@@ -1,4 +1,4 @@
-import { isValid, parseISO } from "date-fns";
+import { safeParseDateParam } from "@/server/schedule/rangeUtils";
 
 import type { AuditReportFilters } from "./getAuditReport";
 
@@ -7,9 +7,7 @@ type SearchParamValue = string | string[] | undefined | null;
 export function parseDateParam(value?: SearchParamValue): Date | null {
   if (!value) return null;
   const str = Array.isArray(value) ? value[0] : value;
-  const parsed = parseISO(str);
-  if (!isValid(parsed)) return null;
-  return parsed;
+  return safeParseDateParam(str);
 }
 
 export function filtersFromSearchParams(searchParams: URLSearchParams): AuditReportFilters {

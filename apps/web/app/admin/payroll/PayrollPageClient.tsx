@@ -207,8 +207,8 @@ function CreatePayRunDialog({
     if (range === "week") endDate.setDate(startDate.getDate() + 6);
     else if (range === "fortnight") endDate.setDate(startDate.getDate() + 13);
     else endDate.setMonth(startDate.getMonth() + 1, 0);
-    setStart(startDate.toISOString().slice(0, 10));
-    setEnd(endDate.toISOString().slice(0, 10));
+    setStart(startDate.toLocaleDateString("sv-SE"));
+    setEnd(endDate.toLocaleDateString("sv-SE"));
   };
 
   const canSubmit = start && end;
