@@ -1,14 +1,14 @@
 "use server";
 
-import { addDays, isAfter, max as maxDate, min as minDate, startOfDay } from "date-fns";
+import { startOfDay } from "date-fns";
 import { Prisma, TimesheetSource, TimesheetStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { normalizeLocalDate } from "./normalizeLocalDate";
 import { computeBaseMinutesInternal } from "./internals/computeBaseMinutesInternal";
+import { expandTemplatesToOccurrences, normalizeDateRange } from "@/server/schedule/rangeUtils";
 
 const inputSchema = z.object({
   from: z.union([z.date(), z.string()]),
@@ -23,8 +23,7 @@ export async function ensureTimesheetEntriesForRange(input: EnsureRangeInput) {
   await requireAdmin();
 
   const payload = inputSchema.parse(input);
-  const from = normalizeLocalDate(payload.from);
-  const to = normalizeLocalDate(payload.to);
+  const range = normalizeDateRange({ from: payload.from, to: payload.to });
 
   const templateWhere: Prisma.ClassTemplateWhereInput = payload.templateIds?.length
     ? { id: { in: payload.templateIds } }
@@ -32,31 +31,39 @@ export async function ensureTimesheetEntriesForRange(input: EnsureRangeInput) {
 
   const templates = await prisma.classTemplate.findMany({
     where: templateWhere,
-    include: { level: true },
+    include: { level: true, teacher: true },
   });
 
-  const relevantTemplateIds = templates.map((t) => t.id);
-  if (relevantTemplateIds.length === 0) return [];
+  const occurrences = expandTemplatesToOccurrences(templates, range);
+
+  console.log("[timesheets] ensureTimesheetEntriesForRange", {
+    templateCount: templates.length,
+    occurrenceCount: occurrences.length,
+    rangeFrom: range.from.toISOString(),
+    rangeTo: range.to.toISOString(),
+  });
+
+  if (occurrences.length === 0) return [];
 
   const [substitutions, cancellations, existingEntries] = await Promise.all([
     prisma.teacherSubstitution.findMany({
       where: {
-        templateId: { in: relevantTemplateIds },
-        date: { gte: from, lte: to },
+        templateId: { in: templates.map((t) => t.id) },
+        date: { gte: range.from, lte: range.to },
       },
       select: { id: true, templateId: true, date: true, teacherId: true },
     }),
     prisma.classCancellation.findMany({
       where: {
-        templateId: { in: relevantTemplateIds },
-        date: { gte: from, lte: to },
+        templateId: { in: templates.map((t) => t.id) },
+        date: { gte: range.from, lte: range.to },
       },
       select: { id: true, templateId: true, date: true },
     }),
     prisma.teacherTimesheetEntry.findMany({
       where: {
-        templateId: { in: relevantTemplateIds },
-        date: { gte: from, lte: to },
+        templateId: { in: templates.map((t) => t.id) },
+        date: { gte: range.from, lte: range.to },
       },
       select: {
         id: true,
@@ -85,52 +92,41 @@ export async function ensureTimesheetEntriesForRange(input: EnsureRangeInput) {
 
   const operations: Prisma.PrismaPromise<unknown>[] = [];
 
-  for (const template of templates) {
-    if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") continue;
+  for (const occurrence of occurrences) {
+    const date = occurrence.startTime;
+    const mapKey = key(occurrence.templateId, date);
+    const existing = existingEntryMap.get(mapKey);
+    const minutesAdjustment = existing ? adjustmentMap.get(existing.id) ?? 0 : 0;
+    const baseMinutes = computeBaseMinutesInternal(occurrence.template);
+    const isCancelled = cancellationSet.has(mapKey);
+    const status = isCancelled ? TimesheetStatus.CANCELLED : existing?.status ?? TimesheetStatus.SCHEDULED;
+    const source = existing?.source ?? TimesheetSource.DERIVED;
+    const minutesFinal = status === TimesheetStatus.CANCELLED ? 0 : baseMinutes + minutesAdjustment;
+    const teacherId = substitutionMap.get(mapKey) ?? occurrence.teacherId ?? null;
 
-    const templateStart = startOfDay(template.startDate);
-    const templateEnd = template.endDate ? startOfDay(template.endDate) : to;
-    const spanFrom = maxDate([from, templateStart]);
-    const spanTo = minDate([to, templateEnd]);
-    if (isAfter(spanFrom, spanTo)) continue;
-
-    const first = alignToTemplateDay(spanFrom, template.dayOfWeek);
-    for (let cursor = first; !isAfter(cursor, spanTo); cursor = addDays(cursor, 7)) {
-      const date = cursor;
-      const mapKey = key(template.id, date);
-      const existing = existingEntryMap.get(mapKey);
-      const minutesAdjustment = existing ? adjustmentMap.get(existing.id) ?? 0 : 0;
-      const baseMinutes = computeBaseMinutesInternal(template);
-      const isCancelled = cancellationSet.has(mapKey);
-      const status = isCancelled ? TimesheetStatus.CANCELLED : existing?.status ?? TimesheetStatus.SCHEDULED;
-      const source = existing?.source ?? TimesheetSource.DERIVED;
-      const minutesFinal = status === TimesheetStatus.CANCELLED ? 0 : baseMinutes + minutesAdjustment;
-      const teacherId = substitutionMap.get(mapKey) ?? template.teacherId ?? null;
-
-      operations.push(
-        prisma.teacherTimesheetEntry.upsert({
-          where: { templateId_date: { templateId: template.id, date } },
-          create: {
-            templateId: template.id,
-            date,
-            teacherId,
-            minutesBase: baseMinutes,
-            minutesAdjustment,
-            minutesFinal,
-            status,
-            source,
-          },
-          update: {
-            teacherId,
-            minutesBase: baseMinutes,
-            minutesAdjustment,
-            minutesFinal,
-            status,
-            source,
-          },
-        })
-      );
-    }
+    operations.push(
+      prisma.teacherTimesheetEntry.upsert({
+        where: { templateId_date: { templateId: occurrence.templateId, date } },
+        create: {
+          templateId: occurrence.templateId,
+          date,
+          teacherId,
+          minutesBase: baseMinutes,
+          minutesAdjustment,
+          minutesFinal,
+          status,
+          source,
+        },
+        update: {
+          teacherId,
+          minutesBase: baseMinutes,
+          minutesAdjustment,
+          minutesFinal,
+          status,
+          source,
+        },
+      })
+    );
   }
 
   if (operations.length === 0) return [];
@@ -139,13 +135,4 @@ export async function ensureTimesheetEntriesForRange(input: EnsureRangeInput) {
 
 function key(templateId: string, date: Date) {
   return `${templateId}:${startOfDay(date).getTime()}`;
-}
-
-function alignToTemplateDay(start: Date, templateDayOfWeek: number) {
-  const target = ((templateDayOfWeek % 7) + 7) % 7;
-  let cursor = startOfDay(start);
-  while (cursor.getDay() !== ((target + 1) % 7)) {
-    cursor = addDays(cursor, 1);
-  }
-  return cursor;
 }

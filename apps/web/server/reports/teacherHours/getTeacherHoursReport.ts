@@ -1,13 +1,13 @@
 "use server";
 
-import { endOfDay, endOfMonth, startOfDay, startOfMonth } from "date-fns";
+import { endOfMonth, startOfMonth } from "date-fns";
 import { TimesheetSource, TimesheetStatus } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
+import { normalizeDateRange } from "@/server/schedule/rangeUtils";
 
 /**
  * Audit-first plan:
@@ -81,10 +81,17 @@ export async function getTeacherHoursReport(input: z.infer<typeof inputSchema>):
 
   const payload = inputSchema.parse(input);
   const now = new Date();
-  const defaultFrom = startOfMonth(now);
-  const defaultTo = endOfMonth(now);
-  const from = startOfDay(payload.from ? normalizeLocalDate(payload.from) : defaultFrom);
-  const to = endOfDay(payload.to ? normalizeLocalDate(payload.to) : defaultTo);
+  const { from, to } = normalizeDateRange({
+    from: payload.from,
+    to: payload.to,
+    defaultFrom: startOfMonth(now),
+    defaultTo: endOfMonth(now),
+  });
+
+  console.log("[reports] teacherHours range", {
+    from: from.toISOString(),
+    to: to.toISOString(),
+  });
 
   const entries = await prisma.teacherTimesheetEntry.findMany({
     where: { date: { gte: from, lte: to } },

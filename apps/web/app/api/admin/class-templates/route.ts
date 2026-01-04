@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getTemplateOccurrences } from "@/server/classTemplate/getTemplateOccurrences";
+import { safeParseDateParam } from "@/server/schedule/rangeUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -10,17 +11,17 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
 
-  const from = searchParams.get("from");
-  const to = searchParams.get("to");
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
 
-  if (!from || !to) {
+  if (!fromParam || !toParam) {
     return NextResponse.json({ error: "from and to are required" }, { status: 400 });
   }
 
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
+  const fromDate = safeParseDateParam(fromParam);
+  const toDate = safeParseDateParam(toParam);
 
-  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+  if (!fromDate || !toDate) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
   }
 

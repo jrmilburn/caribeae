@@ -1,4 +1,4 @@
-import { addDays, setHours, setMinutes } from "date-fns";
+import { addDays, format, setHours, setMinutes } from "date-fns";
 import {
   type ScheduleClass,
   normalizeScheduleClass,
@@ -42,8 +42,8 @@ export function createApiScheduleDataAdapter(
   return {
     async fetchClasses({ from, to }) {
       const params = new URLSearchParams({
-        from: from.toISOString(),
-        to: to.toISOString(),
+        from: format(from, "yyyy-MM-dd"),
+        to: format(to, "yyyy-MM-dd"),
       });
 
       const response = await fetch(`${endpoint}?${params.toString()}`, {

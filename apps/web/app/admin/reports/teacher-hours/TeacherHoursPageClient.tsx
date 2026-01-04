@@ -52,7 +52,7 @@ function buildQueryString(params: { from?: string; to?: string }) {
 
 function toDateInput(date: Date | null | undefined) {
   if (!date) return "";
-  return new Date(date).toISOString().slice(0, 10);
+  return new Date(date).toLocaleDateString("sv-SE");
 }
 
 export default function TeacherHoursPageClient({ report }: Props) {
