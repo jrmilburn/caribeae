@@ -18,6 +18,7 @@ import {
   resolveCoverageForPlan,
   resolveWeeklyCoverageWindow,
 } from "@/server/invoicing/coverage";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -69,6 +70,10 @@ export async function createInitialInvoiceForEnrolment(
     });
     if (!enrolment) throw new Error("Enrolment not found");
     if (!enrolment.plan) throw new Error("Enrolment plan missing");
+    if (!enrolment.template) {
+      throw new Error("Class template missing for enrolment.");
+    }
+    assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
 
     const existingOpen = await tx.invoice.findFirst({
       where: { enrolmentId, status: { in: OPEN_INVOICE_STATUSES } },
@@ -172,6 +177,10 @@ export async function issueNextInvoiceForEnrolment(
 
     if (!enrolment) throw new Error("Enrolment not found");
     if (!enrolment.plan) throw new Error("Enrolment plan missing");
+    if (!enrolment.template) {
+      throw new Error("Class template missing for enrolment.");
+    }
+    assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
 
     const openInvoice = await tx.invoice.findFirst({
       where: { enrolmentId: enrolment.id, status: { in: OPEN_INVOICE_STATUSES } },

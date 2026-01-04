@@ -11,6 +11,7 @@ import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceM
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -46,6 +47,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       include: {
         plan: true,
         student: { select: { familyId: true, name: true } },
+        template: { select: { dayOfWeek: true, name: true } },
       },
     });
 
@@ -72,6 +74,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       const enrolment = enrolments.find((e) => e.id === item.enrolmentId);
       if (!enrolment) throw new Error("Enrolment not found.");
       if (!enrolment.plan) throw new Error("Enrolment plan missing.");
+      if (!enrolment.template) throw new Error("Class template missing for enrolment.");
+      assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
       if (enrolment.status !== EnrolmentStatus.ACTIVE) {
         throw new Error("Only active enrolments can be billed ahead.");
       }

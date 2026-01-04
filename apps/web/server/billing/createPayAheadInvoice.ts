@@ -11,6 +11,7 @@ import { createInvoiceWithLineItems } from "./invoiceMutations";
 import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -31,11 +32,14 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
     include: {
       plan: true,
       student: { select: { familyId: true } },
+      template: { select: { dayOfWeek: true, name: true } },
     },
   });
 
   if (!enrolment) throw new Error("Enrolment not found.");
   if (!enrolment.plan) throw new Error("Enrolment plan missing.");
+  if (!enrolment.template) throw new Error("Class template missing for enrolment.");
+  assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
   if (enrolment.plan.billingType !== BillingType.PER_WEEK) {
     throw new Error("Pay-ahead invoices are only supported for weekly plans.");
   }

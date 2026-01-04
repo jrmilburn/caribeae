@@ -66,10 +66,6 @@ export function StudentEnrolmentsTable({
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
 
-  if (!enrolments.length) {
-    return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
-  }
-
   const planSiblingsById = React.useMemo(() => {
     return enrolments.reduce<Record<string, EnrolmentRow[]>>((acc, enrolment) => {
       if (enrolment.planId) {
@@ -79,6 +75,10 @@ export function StudentEnrolmentsTable({
       return acc;
     }, {});
   }, [enrolments]);
+
+  if (!enrolments.length) {
+    return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
+  }
 
   const handleUndo = async (id: string) => {
     const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
@@ -119,13 +119,6 @@ export function StudentEnrolmentsTable({
               const day =
                 typeof template?.dayOfWeek === "number" ? dayLabel(template.dayOfWeek) : "—";
               const timeRange = formatTimeRange(template?.startTime, template?.endTime);
-
-              const siblingTemplates =
-                enrolment.planId && planSiblingsById[enrolment.planId]
-                  ? planSiblingsById[enrolment.planId]
-                      .map((s) => s.templateId)
-                      .filter(Boolean)
-                  : [enrolment.templateId];
 
               return (
                 <TableRow key={enrolment.id}>

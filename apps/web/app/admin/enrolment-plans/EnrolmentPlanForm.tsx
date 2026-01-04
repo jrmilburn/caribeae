@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 import { createEnrolmentPlan } from "@/server/enrolmentPlan/createEnrolmentPlan";
 import { updateEnrolmentPlan } from "@/server/enrolmentPlan/updateEnrolmentPlan";
@@ -33,6 +34,7 @@ type PlanFormState = {
   durationWeeks: string;
   blockClassCount: string;
   sessionsPerWeek: string;
+  isSaturdayOnly: boolean;
 };
 
 const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK"];
@@ -62,6 +64,7 @@ export function EnrolmentPlanForm({
     durationWeeks: "4",
     blockClassCount: "1",
     sessionsPerWeek: "",
+    isSaturdayOnly: false,
   }));
 
   React.useEffect(() => {
@@ -76,6 +79,7 @@ export function EnrolmentPlanForm({
         durationWeeks: String(plan.durationWeeks ?? ""),
         blockClassCount: String(plan.blockClassCount ?? 1),
         sessionsPerWeek: String(plan.sessionsPerWeek ?? ""),
+        isSaturdayOnly: Boolean(plan.isSaturdayOnly),
       });
     } else {
       setForm({
@@ -87,6 +91,7 @@ export function EnrolmentPlanForm({
         durationWeeks: "4",
         blockClassCount: "1",
         sessionsPerWeek: "",
+        isSaturdayOnly: false,
       });
     }
     setSubmitting(false);
@@ -122,6 +127,7 @@ export function EnrolmentPlanForm({
       durationWeeks: requiresDuration ? parsedDuration : null,
       sessionsPerWeek: hasSessionsInput && parsedSessionsPerWeek > 0 ? parsedSessionsPerWeek : null,
       blockClassCount: form.billingType === "PER_CLASS" ? parsedBlockCount || 1 : null,
+      isSaturdayOnly: form.isSaturdayOnly,
     };
 
     try {
@@ -267,6 +273,19 @@ export function EnrolmentPlanForm({
             <p className="text-xs text-muted-foreground">
               Use this to enforce multi-session plans (e.g. 2/week for 4 weeks or 5/week intensive).
             </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-sm">Saturday-only plan</Label>
+              <p className="text-xs text-muted-foreground">
+                Only valid for Saturday classes. Weekday classes require a normal plan.
+              </p>
+            </div>
+            <Switch
+              checked={form.isSaturdayOnly}
+              onCheckedChange={(checked) => setForm((p) => ({ ...p, isSaturdayOnly: checked }))}
+            />
           </div>
         </div>
 

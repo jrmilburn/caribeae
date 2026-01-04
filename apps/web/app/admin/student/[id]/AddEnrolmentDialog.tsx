@@ -24,6 +24,7 @@ import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule"
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
+import { isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 
 export function AddEnrolmentDialog({
   open,
@@ -65,6 +66,10 @@ export function AddEnrolmentDialog({
     () => Object.keys(selectedTemplates),
     [selectedTemplates]
   );
+  const selectionDayType = React.useMemo(
+    () => resolveSelectionDay(selectedTemplates),
+    [selectedTemplates]
+  );
   const selectedLevelId = React.useMemo(() => {
     const first = selectedTemplateIds[0];
     if (!first) return null;
@@ -73,8 +78,15 @@ export function AddEnrolmentDialog({
   }, [selectedTemplateIds, selectedTemplates]);
 
   const availablePlans = React.useMemo(() => {
-    return enrolmentPlans.filter((p) => !selectedLevelId || p.levelId === selectedLevelId);
-  }, [enrolmentPlans, selectedLevelId]);
+    const levelFiltered = enrolmentPlans.filter((p) => !selectedLevelId || p.levelId === selectedLevelId);
+    if (selectionDayType === "saturday") {
+      return levelFiltered.filter((plan) => plan.isSaturdayOnly);
+    }
+    if (selectionDayType === "weekday") {
+      return levelFiltered.filter((plan) => !plan.isSaturdayOnly);
+    }
+    return levelFiltered;
+  }, [enrolmentPlans, selectedLevelId, selectionDayType]);
 
   React.useEffect(() => {
     if (!availablePlans.find((p) => p.id === planId)) {
@@ -101,6 +113,7 @@ export function AddEnrolmentDialog({
     [availablePlans, planId]
   );
   const planIsWeekly = selectedPlan?.billingType === "PER_WEEK";
+  const planDay = selectedPlan ? (selectedPlan.isSaturdayOnly ? "saturday" : "weekday") : null;
 
   const selectionRequirement = React.useMemo(
     () =>
@@ -121,6 +134,21 @@ export function AddEnrolmentDialog({
     const planLevelId = selectedPlan?.levelId ?? null;
     if (planLevelId && occurrence.levelId && occurrence.levelId !== planLevelId) {
       toast.error("Select classes that match the enrolment plan level.");
+      return;
+    }
+
+    const occurrenceIsSaturday = isSaturdayOccurrence(occurrence);
+    const currentDayType = resolveSelectionDay(selectedTemplates);
+    if (planDay === "saturday" && !occurrenceIsSaturday) {
+      toast.error("Saturday-only plans can only be used for Saturday classes.");
+      return;
+    }
+    if (planDay === "weekday" && occurrenceIsSaturday) {
+      toast.error("Use a Saturday-only plan for Saturday classes.");
+      return;
+    }
+    if (currentDayType && currentDayType !== (occurrenceIsSaturday ? "saturday" : "weekday")) {
+      toast.error("Select classes that match the plan's day.");
       return;
     }
 
@@ -145,6 +173,12 @@ export function AddEnrolmentDialog({
       const maxSelectable = Math.max(selectionRequirement.requiredCount, 6);
       if (count >= maxSelectable) {
         toast.error(`You can select up to ${maxSelectable} classes at once. Deselect one to add another.`);
+        return prev;
+      }
+
+      const nextDayType = resolveSelectionDay({ ...prev, [occurrence.templateId]: occurrence });
+      if (nextDayType === "mixed") {
+        toast.error("Select classes on the same day type for this enrolment.");
         return prev;
       }
 
@@ -186,13 +220,13 @@ export function AddEnrolmentDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
-        <DialogHeader>
-          <DialogTitle>Add enrolment</DialogTitle>
-          <DialogDescription>
-            Select classes when needed for the plan. Weekly plans allow attendance in any class at the
-            student's level.
-          </DialogDescription>
-        </DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add enrolment</DialogTitle>
+            <DialogDescription>
+              Select classes when needed for the plan. Weekly plans allow attendance in any class at the
+              student&apos;s level.
+            </DialogDescription>
+          </DialogHeader>
 
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -204,15 +238,32 @@ export function AddEnrolmentDialog({
                 <SelectTrigger className="min-w-[220px]">
                   <SelectValue placeholder="Select plan" />
                 </SelectTrigger>
-                <SelectContent>
+            <SelectContent>
                   {availablePlans.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} ·{" "}
-                      {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                      <span className="flex items-center gap-2">
+                        <span>
+                          {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                        </span>
+                        {plan.isSaturdayOnly ? (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase leading-none">
+                            Saturday
+                          </span>
+                        ) : null}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {availablePlans.length === 0 ? (
+                <p className="text-xs text-destructive">
+                  {selectionDayType === "saturday"
+                    ? "No Saturday plans exist for this level. Create one in Plans."
+                    : selectionDayType === "weekday"
+                      ? "No weekday plans exist for this level. Create one in Plans."
+                      : "No enrolment plans are available for the selected level."}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
