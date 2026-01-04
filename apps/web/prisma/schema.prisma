@@ -25,13 +25,14 @@ model User {
 
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
-  classCancellations   ClassCancellation[]
+  classCancellations   ClassCancellation[]          @relation("ClassCancellationCreator")
   enrolmentAdjustments EnrolmentAdjustment[]
   timesheetEntries     TeacherTimesheetEntry[]      @relation("TimesheetEntryCreator")
   timesheetAdjustments TeacherTimesheetAdjustment[] @relation("TimesheetAdjustmentCreator")
   teacherPayRates      TeacherPayRate[]             @relation("TeacherPayRateCreator")
   payRuns              PayRun[]                     @relation("PayRunCreator")
   payrollAdjustments   PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
+  studentLevelChanges  StudentLevelChange[]         @relation("StudentLevelChangeCreator")
 }
 
 model Family {
@@ -80,6 +81,7 @@ model Student {
   enrolments       Enrolment[]
   attendances      Attendance[]
   invoiceLineItems InvoiceLineItem[]
+  levelChanges     StudentLevelChange[]
 }
 
 model ClassTemplate {
@@ -211,7 +213,7 @@ model ClassCancellation {
   reason String?
 
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdBy   User?   @relation("ClassCancellationCreator", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -404,6 +406,8 @@ model Level {
   classTemplates ClassTemplate[]
   enrolmentPlans EnrolmentPlan[]
   students       Student[]
+  levelChangesTo StudentLevelChange[]   @relation("StudentLevelChangeTo")
+  levelChangesFrom StudentLevelChange[] @relation("StudentLevelChangeFrom")
 }
 
 model Makeup {
@@ -773,4 +777,28 @@ model EmailCampaign {
   failed      Int
   // optional: store filters/segments etc as JSON
   meta        Json?
+}
+
+model StudentLevelChange {
+  id String @id @default(cuid())
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  fromLevelId String?
+  fromLevel   Level?  @relation("StudentLevelChangeFrom", fields: [fromLevelId], references: [id])
+
+  toLevelId String
+  toLevel   Level   @relation("StudentLevelChangeTo", fields: [toLevelId], references: [id])
+
+  effectiveDate DateTime
+  note          String?
+
+  createdById String?
+  createdBy   User?   @relation("StudentLevelChangeCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@index([effectiveDate])
 }
