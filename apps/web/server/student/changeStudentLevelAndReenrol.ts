@@ -208,13 +208,15 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
         })
       : [];
 
-    const invoiceByEnrolment = new Map<string, InvoiceWithCoverage | null>();
-    existingInvoices.forEach((inv) => {
-      const existing = invoiceByEnrolment.get(inv.enrolmentId);
-      if (!existing) {
-        invoiceByEnrolment.set(inv.enrolmentId, inv);
+      const invoiceByEnrolment = new Map<string, InvoiceWithCoverage>();
+            
+      for (const inv of existingInvoices) {
+        if (!inv.enrolmentId) continue; // <-- narrows to string
+        if (!invoiceByEnrolment.has(inv.enrolmentId)) {
+          invoiceByEnrolment.set(inv.enrolmentId, inv);
+        }
       }
-    });
+
 
     let totalCreditCents = 0;
     for (const enrolment of existingEnrolments) {
