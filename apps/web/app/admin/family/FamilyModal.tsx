@@ -5,8 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ClientFamily, FamilyActionResult } from "@/server/family/types";
-import type { Family } from "@prisma/client";
+import type { ClientFamilyWithStudents, FamilyActionResult, FamilyStudentPayload } from "@/server/family/types";
+import type { Family, Level } from "@prisma/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { Plus, Trash2 } from "lucide-react";
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -30,28 +33,40 @@ type FamilyModalProps = {
   onOpenChange: (open: boolean) => void;
 
   family?: Family | null;
+  levels: Level[];
 
-  onSave: (payload: ClientFamily) => Promise<FamilyActionResult>;
+  onSave: (payload: ClientFamilyWithStudents) => Promise<FamilyActionResult>;
 };
 
-export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalProps) {
+type DraftStudent = FamilyStudentPayload & { id: string };
+
+const EMPTY_FAMILY: ClientFamilyWithStudents = {
+  name: "",
+  primaryContactName: "",
+  primaryEmail: "",
+  primaryPhone: "",
+  secondaryContactName: "",
+  secondaryEmail: "",
+  secondaryPhone: "",
+  medicalContactName: "",
+  medicalContactPhone: "",
+  address: "",
+};
+
+export function FamilyModal({ open, onOpenChange, family, levels, onSave }: FamilyModalProps) {
   const mode: "create" | "edit" = family ? "edit" : "create";
+  const isCreate = mode === "create";
+  const totalSteps = isCreate ? 2 : 1;
 
-  const [form, setForm] = React.useState<ClientFamily>({
-    name: "",
-    primaryContactName: "",
-    primaryEmail: "",
-    primaryPhone: "",
-    secondaryContactName: "",
-    secondaryEmail: "",
-    secondaryPhone: "",
-    medicalContactName: "",
-    medicalContactPhone: "",
-    address: "",
-  });
+  const defaultLevelId = React.useMemo(() => levels?.[0]?.id ?? "", [levels]);
 
+  const [step, setStep] = React.useState<1 | 2>(1);
+  const [form, setForm] = React.useState<ClientFamilyWithStudents>(EMPTY_FAMILY);
+  const [students, setStudents] = React.useState<DraftStudent[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [touched, setTouched] = React.useState<{ name?: boolean }>({});
+  const [studentTouched, setStudentTouched] = React.useState<Record<string, { name?: boolean; levelId?: boolean }>>({});
+  const [serverError, setServerError] = React.useState<string | null>(null);
 
   // Prefill when opening in edit mode
   React.useEffect(() => {
@@ -71,36 +86,29 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
         address: family.address ?? "",
       });
     } else {
-      setForm({
-        name: "",
-        primaryContactName: "",
-        primaryEmail: "",
-        primaryPhone: "",
-        secondaryContactName: "",
-        secondaryEmail: "",
-        secondaryPhone: "",
-        medicalContactName: "",
-        medicalContactPhone: "",
-        address: "",
-      });
+      setForm({ ...EMPTY_FAMILY });
     }
 
+    setStudents([]);
     setTouched({});
+    setStudentTouched({});
     setSubmitting(false);
+    setServerError(null);
+    setStep(1);
   }, [open, family]);
 
   const close = () => onOpenChange(false);
 
-  const setField = <K extends keyof ClientFamily>(key: K, value: ClientFamily[K]) => {
+  const setField = <K extends keyof ClientFamilyWithStudents>(key: K, value: ClientFamilyWithStudents[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const nameError = touched.name && !form.name.trim() ? "Family name is required." : "";
 
-  const buildPayload = (): ClientFamily => {
-    const cleaned: ClientFamily = { name: form.name.trim() };
+  const buildPayload = (): ClientFamilyWithStudents => {
+    const cleaned: ClientFamilyWithStudents = { name: form.name.trim() };
 
-    const optKeys: Array<keyof Omit<ClientFamily, "name">> = [
+    const optKeys: Array<keyof Omit<ClientFamilyWithStudents, "name" | "students">> = [
       "primaryContactName",
       "primaryEmail",
       "primaryPhone",
@@ -122,128 +130,408 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
     return cleaned;
   };
 
-  const handleSubmit = async () => {
+  const buildStudentPayload = (): FamilyStudentPayload[] => {
+    return students.map((student) => ({
+      name: student.name.trim(),
+      levelId: student.levelId,
+      dateOfBirth: student.dateOfBirth?.trim() ? student.dateOfBirth.trim() : undefined,
+      medicalNotes: student.medicalNotes?.trim() ? student.medicalNotes.trim() : undefined,
+    }));
+  };
+
+  const createBlankStudent = (): DraftStudent => ({
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+    name: "",
+    dateOfBirth: "",
+    levelId: defaultLevelId,
+    medicalNotes: "",
+  });
+
+  const addStudent = () => {
+    setStudents((prev) => [...prev, createBlankStudent()]);
+  };
+
+  const updateStudent = <K extends keyof FamilyStudentPayload>(id: string, key: K, value: FamilyStudentPayload[K]) => {
+    setStudents((prev) =>
+      prev.map((student) => (student.id === id ? { ...student, [key]: value ?? "" } : student))
+    );
+  };
+
+  const removeStudent = (id: string) => {
+    setStudents((prev) => prev.filter((student) => student.id !== id));
+    setStudentTouched((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const markStudentsTouched = () => {
+    setStudentTouched((prev) => {
+      const next = { ...prev };
+      students.forEach((student) => {
+        next[student.id] = { name: true, levelId: true };
+      });
+      return next;
+    });
+  };
+
+  const validateStudents = () => {
+    if (!students.length) return true;
+    markStudentsTouched();
+    return students.every((student) => student.name.trim() && student.levelId.trim());
+  };
+
+  const handleNextStep = () => {
     setTouched({ name: true });
+    setServerError(null);
+    if (!form.name.trim()) return;
+    setStep(2);
+  };
+
+  const handleSaveFamilyOnly = async () => {
+    setTouched({ name: true });
+    setServerError(null);
     if (!form.name.trim()) return;
 
     try {
       setSubmitting(true);
       const res = await onSave(buildPayload());
-      if (res?.success) close();
+      if (res?.success) {
+        toast.success("Family updated.");
+        close();
+      } else {
+        setServerError(res?.error ?? "Unable to save family.");
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleCreateFamily = async () => {
+    setTouched({ name: true });
+    setServerError(null);
+    if (!form.name.trim()) {
+      setStep(1);
+      return;
+    }
+
+    const studentsOk = validateStudents();
+    if (!studentsOk) return;
+
+    try {
+      setSubmitting(true);
+      const payload: ClientFamilyWithStudents = {
+        ...buildPayload(),
+        students: buildStudentPayload(),
+      };
+
+      const res = await onSave(payload);
+      if (res?.success) {
+        toast.success("Family created.");
+        close();
+      } else {
+        setServerError(res?.error ?? "Unable to create family.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePrimaryAction = async () => {
+    if (isCreate) {
+      if (step === 1) {
+        handleNextStep();
+        return;
+      }
+      await handleCreateFamily();
+      return;
+    }
+
+    await handleSaveFamilyOnly();
+  };
+
+  const handleBack = () => {
+    setServerError(null);
+    setStep(1);
+  };
+
+  const primaryLabel =
+    isCreate && step === 1
+      ? "Next"
+      : submitting
+        ? mode === "create"
+          ? "Creating…"
+          : "Saving…"
+        : mode === "create"
+          ? "Create family"
+          : "Save changes";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "New family" : "Edit family"}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <SectionTitle>Family</SectionTitle>
-            <FieldRow label="Family name">
-              <div className="space-y-1">
+        {isCreate && (
+          <div className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm">
+            <div className="font-medium">Step {step} of {totalSteps}</div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {step === 1 ? "Family details" : "Students (optional)"}
+            </div>
+          </div>
+        )}
+
+        <div className={cn("relative", isCreate && "min-h-[520px]")}>
+          <div
+            className={cn(
+              "space-y-6",
+              isCreate && "absolute inset-0 transition-all duration-300",
+              isCreate && step !== 1 && "-translate-x-6 opacity-0 pointer-events-none",
+              isCreate && step === 1 && "translate-x-0 opacity-100"
+            )}
+          >
+            <div className="space-y-3">
+              <SectionTitle>Family</SectionTitle>
+              <FieldRow label="Family name">
+                <div className="space-y-1">
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setField("name", e.target.value)}
+                    onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                    placeholder="e.g. Smith Family"
+                    className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                  />
+                  {nameError ? (
+                    <p className="text-xs text-destructive">{nameError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      This is what appears in the family list.
+                    </p>
+                  )}
+                </div>
+              </FieldRow>
+            </div>
+
+            <div className="space-y-3">
+              <SectionTitle>Primary contact (optional)</SectionTitle>
+              <FieldRow label="Name">
                 <Input
-                  value={form.name}
-                  onChange={(e) => setField("name", e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                  placeholder="e.g. Smith Family"
-                  className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                  value={form.primaryContactName ?? ""}
+                  onChange={(e) => setField("primaryContactName", e.target.value)}
                 />
-                {nameError ? (
-                  <p className="text-xs text-destructive">{nameError}</p>
+              </FieldRow>
+              <FieldRow label="Email">
+                <Input
+                  value={form.primaryEmail ?? ""}
+                  onChange={(e) => setField("primaryEmail", e.target.value)}
+                />
+              </FieldRow>
+              <FieldRow label="Phone">
+                <Input
+                  value={form.primaryPhone ?? ""}
+                  onChange={(e) => setField("primaryPhone", e.target.value)}
+                />
+              </FieldRow>
+            </div>
+
+            <div className="space-y-3">
+              <SectionTitle>Secondary contact (optional)</SectionTitle>
+              <FieldRow label="Name">
+                <Input
+                  value={form.secondaryContactName ?? ""}
+                  onChange={(e) => setField("secondaryContactName", e.target.value)}
+                />
+              </FieldRow>
+              <FieldRow label="Email">
+                <Input
+                  value={form.secondaryEmail ?? ""}
+                  onChange={(e) => setField("secondaryEmail", e.target.value)}
+                />
+              </FieldRow>
+              <FieldRow label="Phone">
+                <Input
+                  value={form.secondaryPhone ?? ""}
+                  onChange={(e) => setField("secondaryPhone", e.target.value)}
+                />
+              </FieldRow>
+            </div>
+
+            <div className="space-y-3">
+              <SectionTitle>Address</SectionTitle>
+              <FieldRow label="Address">
+                <Input
+                  value={form.address ?? ""}
+                  onChange={(e) => setField("address", e.target.value)}
+                  placeholder="Street, suburb, state"
+                />
+              </FieldRow>
+            </div>
+
+            <div className="space-y-3">
+              <SectionTitle>Medical contact (optional)</SectionTitle>
+              <FieldRow label="Name">
+                <Input
+                  value={form.medicalContactName ?? ""}
+                  onChange={(e) => setField("medicalContactName", e.target.value)}
+                />
+              </FieldRow>
+              <FieldRow label="Phone">
+                <Input
+                  value={form.medicalContactPhone ?? ""}
+                  onChange={(e) => setField("medicalContactPhone", e.target.value)}
+                />
+              </FieldRow>
+            </div>
+
+            {serverError && !isCreate && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {serverError}
+              </div>
+            )}
+          </div>
+
+          {isCreate && (
+            <div
+              className={cn(
+                "space-y-4",
+                "absolute inset-0 transition-all duration-300",
+                step === 2 ? "translate-x-0 opacity-100" : "translate-x-6 opacity-0 pointer-events-none"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <SectionTitle>Students (optional)</SectionTitle>
+                  <p className="text-sm text-muted-foreground">Add students now or skip and add them later.</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addStudent} disabled={submitting || levels.length === 0}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add student
+                </Button>
+              </div>
+
+              {levels.length === 0 && (
+                <p className="text-xs text-destructive">Add at least one level before creating students.</p>
+              )}
+
+              <div className="space-y-3">
+                {students.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                    No students added. Click &ldquo;Add student&rdquo; to include them now or continue without students.
+                  </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    This is what appears in the family list.
-                  </p>
+                  students.map((student, index) => {
+                    const nameTouched = studentTouched[student.id]?.name;
+                    const levelTouched = studentTouched[student.id]?.levelId;
+                    const nameError = nameTouched && !student.name.trim();
+                    const levelError = levelTouched && !student.levelId.trim();
+
+                    return (
+                      <div key={student.id} className="space-y-4 rounded-lg border bg-card/30 p-4 shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-medium">Student {index + 1}</div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeStudent(student.id)}
+                            disabled={submitting}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-sm text-muted-foreground">Name</label>
+                            <Input
+                              value={student.name}
+                              onChange={(e) => updateStudent(student.id, "name", e.target.value)}
+                              onBlur={() =>
+                                setStudentTouched((prev) => ({
+                                  ...prev,
+                                  [student.id]: { ...(prev[student.id] ?? {}), name: true },
+                                }))
+                              }
+                              placeholder="e.g. Olivia Smith"
+                              className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                            />
+                            {nameError && <p className="text-xs text-destructive">Student name is required.</p>}
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm text-muted-foreground">Level</label>
+                            <Select
+                              value={student.levelId}
+                              onValueChange={(v) => {
+                                updateStudent(student.id, "levelId", v);
+                                setStudentTouched((prev) => ({
+                                  ...prev,
+                                  [student.id]: { ...(prev[student.id] ?? {}), levelId: true },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className={cn(levelError && "border-destructive focus-visible:ring-destructive")}>
+                                <SelectValue placeholder="Select level" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {levels.map((lvl) => (
+                                  <SelectItem key={lvl.id} value={lvl.id}>
+                                    {lvl.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {levelError && <p className="text-xs text-destructive">Level is required.</p>}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Date of birth (optional)</label>
+                          <Input
+                            type="date"
+                            value={student.dateOfBirth ?? ""}
+                            onChange={(e) => updateStudent(student.id, "dateOfBirth", e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
-            </FieldRow>
-          </div>
 
-          <div className="space-y-3">
-            <SectionTitle>Primary contact (optional)</SectionTitle>
-            <FieldRow label="Name">
-              <Input
-                value={form.primaryContactName ?? ""}
-                onChange={(e) => setField("primaryContactName", e.target.value)}
-              />
-            </FieldRow>
-            <FieldRow label="Email">
-              <Input
-                value={form.primaryEmail ?? ""}
-                onChange={(e) => setField("primaryEmail", e.target.value)}
-              />
-            </FieldRow>
-            <FieldRow label="Phone">
-              <Input
-                value={form.primaryPhone ?? ""}
-                onChange={(e) => setField("primaryPhone", e.target.value)}
-              />
-            </FieldRow>
-          </div>
-
-          <div className="space-y-3">
-            <SectionTitle>Secondary contact (optional)</SectionTitle>
-            <FieldRow label="Name">
-              <Input
-                value={form.secondaryContactName ?? ""}
-                onChange={(e) => setField("secondaryContactName", e.target.value)}
-              />
-            </FieldRow>
-            <FieldRow label="Email">
-              <Input
-                value={form.secondaryEmail ?? ""}
-                onChange={(e) => setField("secondaryEmail", e.target.value)}
-              />
-            </FieldRow>
-            <FieldRow label="Phone">
-              <Input
-                value={form.secondaryPhone ?? ""}
-                onChange={(e) => setField("secondaryPhone", e.target.value)}
-              />
-            </FieldRow>
-          </div>
-
-          <div className="space-y-3">
-            <SectionTitle>Address</SectionTitle>
-            <FieldRow label="Address">
-              <Input
-                value={form.address ?? ""}
-                onChange={(e) => setField("address", e.target.value)}
-                placeholder="Street, suburb, state"
-              />
-            </FieldRow>
-          </div>
-
-          <div className="space-y-3">
-            <SectionTitle>Medical contact (optional)</SectionTitle>
-            <FieldRow label="Name">
-              <Input
-                value={form.medicalContactName ?? ""}
-                onChange={(e) => setField("medicalContactName", e.target.value)}
-              />
-            </FieldRow>
-            <FieldRow label="Phone">
-              <Input
-                value={form.medicalContactPhone ?? ""}
-                onChange={(e) => setField("medicalContactPhone", e.target.value)}
-              />
-            </FieldRow>
-          </div>
+              {serverError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {serverError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <DialogFooter className="mt-2">
-          <Button type="button" variant="outline" onClick={close} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleSubmit} disabled={submitting || !form.name.trim()}>
-            {submitting ? (mode === "create" ? "Creating…" : "Saving…") : (mode === "create" ? "Create family" : "Save changes")}
-          </Button>
+        <DialogFooter className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full justify-start sm:w-auto">
+            {isCreate && step === 2 && (
+              <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
+                Back
+              </Button>
+            )}
+          </div>
+
+          <div className="flex w-full justify-end gap-2 sm:w-auto">
+            <Button type="button" variant="outline" onClick={close} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handlePrimaryAction}
+              disabled={submitting || !form.name.trim()}
+            >
+              {primaryLabel}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
