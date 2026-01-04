@@ -32,13 +32,18 @@ export function StudentEnrolmentsSection({
         <Button onClick={() => setOpen(true)}>Add enrolment</Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <StudentEnrolmentsTable enrolments={student.enrolments} levels={levels} />
+        <StudentEnrolmentsTable
+          enrolments={student.enrolments}
+          levels={levels}
+          studentLevelId={student.levelId}
+        />
         <AddEnrolmentDialog
           open={open}
           onOpenChange={setOpen}
           studentId={student.id}
           levels={levels}
           enrolmentPlans={levelPlans}
+          studentLevelId={student.levelId}
         />
       </CardContent>
     </Card>
