@@ -24,6 +24,13 @@ export default async function getFamily(id: string) {
               status: true,
             },
           },
+          levelChanges: {
+            include: {
+              fromLevel: true,
+              toLevel: true,
+            },
+            orderBy: { effectiveDate: "desc" },
+          },
         },
       },
       invoices: {
