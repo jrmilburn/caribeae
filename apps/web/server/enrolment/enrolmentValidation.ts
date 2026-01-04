@@ -35,7 +35,7 @@ export class EnrolmentValidationError extends Error {
   }
 }
 
-const BLOCKING_STATUSES = [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED];
+const BLOCKING_STATUSES: EnrolmentStatus[] = [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED];
 
 export function overlaps(aStart: Date, aEnd: Date | null, bStart: Date, bEnd: Date | null) {
   const aEndSafe = aEnd ?? new Date(8640000000000000);

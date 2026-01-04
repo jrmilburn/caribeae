@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { addDays, addMinutes, endOfDay, format, getISODay, startOfDay } from "date-fns";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ClassCancellation } from "@prisma/client";
 import { formatDateKey } from "@/lib/dateKey";
 
 export type TemplateOccurrence = {
@@ -55,7 +55,7 @@ export async function getTemplateOccurrences(params: { from: Date; to: Date }): 
     substitutionMap.set(`${sub.templateId}-${formatDateKey(sub.date)}`, sub);
   });
 
-  const cancellationMap = new Map<string, Prisma.ClassCancellation>();
+  const cancellationMap = new Map<string, ClassCancellation>();
   cancellations.forEach((cancellation) => {
     cancellationMap.set(`${cancellation.templateId}-${formatDateKey(cancellation.date)}`, cancellation);
   });

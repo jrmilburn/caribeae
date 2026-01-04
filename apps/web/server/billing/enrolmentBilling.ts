@@ -18,7 +18,6 @@
  */
 
 import { isAfter } from "date-fns";
-import { BillingType, EnrolmentAdjustmentType, EnrolmentCreditEventType, EnrolmentStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -27,7 +26,18 @@ import {
   resolveOccurrenceHorizon,
 } from "./occurrenceWalker";
 
-type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
+import {
+  BillingType,
+  EnrolmentAdjustmentType,
+  EnrolmentCreditEventType,
+  EnrolmentStatus,
+  PrismaClient,
+  type Prisma,
+  type EnrolmentPlan
+} from "@prisma/client";
+
+type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
+
 
 type EnrolmentWithPlanTemplate = Prisma.EnrolmentGetPayload<{
   include: {
@@ -48,8 +58,8 @@ export type EnrolmentBillingSnapshot = {
 
 function withTx<T>(client: PrismaClientOrTx | undefined, fn: (tx: Prisma.TransactionClient) => Promise<T>) {
   const candidate = client ?? prisma;
-  if (typeof (candidate as Prisma.PrismaClient).$transaction === "function") {
-    return (candidate as Prisma.PrismaClient).$transaction((tx) => fn(tx));
+  if (typeof (candidate as PrismaClient).$transaction === "function") {
+    return (candidate as PrismaClient).$transaction((tx) => fn(tx));
   }
   return fn(candidate as Prisma.TransactionClient);
 }
@@ -77,7 +87,7 @@ function addDaysUtc(date: Date, amount: number) {
   return next;
 }
 
-function sessionsPerWeek(plan: Prisma.EnrolmentPlan | null | undefined) {
+function sessionsPerWeek(plan: EnrolmentPlan | null | undefined) {
   if (!plan) return 1;
   const count = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
   return count;

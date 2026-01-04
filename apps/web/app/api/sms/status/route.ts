@@ -14,28 +14,32 @@ export async function POST(req: Request) {
   const url = process.env.NEXT_PUBLIC_APP_URL
     ? `${process.env.NEXT_PUBLIC_APP_URL}/api/sms/status`
     : req.url;
-  if (!twilioValidateRequest(sig, url, raw)) {
+
+  // ✅ Twilio expects params object (Record<string, any>), not raw string
+  const p = new URLSearchParams(raw);
+  const paramsObj: Record<string, string> = {};
+  p.forEach((value, key) => {
+    paramsObj[key] = value;
+  });
+
+  if (!twilioValidateRequest(sig, url, paramsObj)) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
-  const p = new URLSearchParams(raw);
   const sid = p.get("MessageSid") || p.get("SmsSid");
   if (!sid) return NextResponse.json({ ok: true, ignored: "missing sid" });
 
   const s = (p.get("MessageStatus") || p.get("SmsStatus") || "").toLowerCase();
+
   const patch: Record<string, unknown> = {};
   if (s === "delivered") {
     patch.status = "DELIVERED";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (patch as any).deliveredAt = new Date();
+    (patch).deliveredAt = new Date();
   } else if (s === "failed" || s === "undelivered") {
     patch.status = "FAILED";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (patch as any).failedAt = new Date();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (patch as any).errorCode = p.get("ErrorCode") || null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (patch as any).errorMessage = p.get("ErrorMessage") || null;
+    (patch).failedAt = new Date();
+    (patch).errorCode = p.get("ErrorCode") || null;
+    (patch).errorMessage = p.get("ErrorMessage") || null;
   } else if (s === "sent" || s === "queued" || s === "accepted") {
     patch.status = "SENT";
   } else {
@@ -67,6 +71,7 @@ export async function POST(req: Request) {
           status: patch.status,
         },
       });
+
       await supaServer.channel(inboxTopic).send({
         type: "broadcast",
         event: "inbox:updated",

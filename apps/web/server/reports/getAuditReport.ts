@@ -199,6 +199,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
         by: ["kind"],
         where: { invoice: invoiceWhere },
         _sum: { amountCents: true, quantity: true },
+        orderBy: { _sum: { amountCents: "desc" } }, // or "asc"
       }),
       prisma.invoiceLineItem.groupBy({
         by: ["productId"],
@@ -234,6 +235,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
         by: ["method"],
         where: paymentWhere,
         _sum: { amountCents: true },
+        orderBy: { _sum: { amountCents: "desc" } },
       }),
     ]);
 
@@ -307,14 +309,17 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
     totalSalesCents: invoiceLineItems.reduce((sum, item) => sum + item.amountCents, 0),
     totalsByKind: totalsByKind.map((row) => ({
       kind: row.kind,
-      amountCents: row._sum.amountCents ?? 0,
-      quantity: row._sum.quantity ?? 0,
+      amountCents: row._sum?.amountCents ?? 0,
+      quantity: row._sum?.quantity ?? 0,
     })),
+
     totalsByProduct: totalsByProduct.map((row) => ({
       productId: row.productId ?? "unknown",
-      productName: row.productId ? productNameById.get(row.productId) ?? "Unknown product" : "Unknown product",
-      amountCents: row._sum.amountCents ?? 0,
-      quantity: row._sum.quantity ?? 0,
+      productName: row.productId
+        ? productNameById.get(row.productId) ?? "Unknown product"
+        : "Unknown product",
+      amountCents: row._sum?.amountCents ?? 0,
+      quantity: row._sum?.quantity ?? 0,
     })),
     enrolmentTotals: { totalAmountCents: 0, totalQuantity: 0, byLevel: [] },
   };
@@ -390,7 +395,7 @@ export async function getAuditReport(filters: AuditReportFilters = {}): Promise<
     totalReceivedCents: payments.reduce((sum, payment) => sum + payment.amountCents, 0),
     byMethod: paymentTotals.map((row) => ({
       method: toCsvFriendlyMethod(row.method),
-      amountCents: row._sum.amountCents ?? 0,
+      amountCents: row._sum?.amountCents ?? 0,
     })),
     allocatedCents: paymentsWithDerived.reduce((sum, payment) => sum + payment.allocatedCents, 0),
     unallocatedCents: paymentsWithDerived.reduce((sum, payment) => sum + payment.unallocatedCents, 0),

@@ -15,25 +15,36 @@ async function findFamilyByPhone(phone: string) {
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
+
   const signature = req.headers.get("x-twilio-signature") || "";
   const url = process.env.NEXT_PUBLIC_APP_URL
     ? `${process.env.NEXT_PUBLIC_APP_URL}/api/sms/inbound`
     : req.url;
 
-  if (!twilioValidateRequest(signature, url, rawBody)) {
+  // ✅ Twilio expects form params (object), not raw string
+  const urlParams = new URLSearchParams(rawBody);
+  const paramsObj: Record<string, string> = {};
+  urlParams.forEach((value, key) => {
+    paramsObj[key] = value;
+  });
+
+  if (!twilioValidateRequest(signature, url, paramsObj)) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
-  const params = new URLSearchParams(rawBody);
-  const from = params.get("From") || "";
-  const to = params.get("To") || "";
-  const body = params.get("Body") || "";
-  const messageSid = params.get("MessageSid") || "";
+  // You can keep using urlParams below
+  const from = urlParams.get("From") || "";
+  const to = urlParams.get("To") || "";
+  const body = urlParams.get("Body") || "";
+  const messageSid = urlParams.get("MessageSid") || "";
 
   if (!from) return NextResponse.json({ ok: false, error: "Missing sender" }, { status: 400 });
 
   if (/^\s*stop\s*$/i.test(body)) {
-    await prisma.conversation.updateMany({ where: { phoneNumber: from }, data: { updatedAt: new Date() } });
+    await prisma.conversation.updateMany({
+      where: { phoneNumber: from },
+      data: { updatedAt: new Date() },
+    });
     return NextResponse.json({ ok: true });
   }
 

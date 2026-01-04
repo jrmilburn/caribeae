@@ -112,13 +112,13 @@ export async function getBillingDashboardData(filters: BillingDashboardFilters =
       }),
       prisma.invoice.aggregate({
         _sum: { amountCents: true, amountPaidCents: true },
-        where: { status: { in: OPEN_INVOICE_STATUSES } },
+        where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
       }),
       prisma.invoice.count({
         where: { status: InvoiceStatus.OVERDUE },
       }),
       prisma.invoice.count({
-        where: { status: { in: OPEN_INVOICE_STATUSES } },
+        where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
       }),
       prisma.payment.aggregate({
         _sum: { amountCents: true },

@@ -1,16 +1,14 @@
-"use server";
-
 import { prisma } from "@/lib/prisma";
 import { sendEmailBroadcast, type EmailRecipient } from "@/lib/server/email/sendgrid";
-import { auth } from "@clerk/nextjs/server"; // or your auth util
+import { auth } from "@clerk/nextjs/server";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { Prisma } from "@prisma/client";
+import { Prisma, MessageStatus } from "@prisma/client"; // 👈 add MessageStatus
 
 export async function sendEmailBroadcastAction(input: {
   subject: string;
   preheader?: string;
   html: string;
-  recipients: EmailRecipient[]; // deduped!
+  recipients: EmailRecipient[];
   meta?: Prisma.InputJsonValue;
 }) {
   await requireAdmin();
@@ -21,7 +19,6 @@ export async function sendEmailBroadcastAction(input: {
   if (!input.html?.trim()) return { ok: false, error: "Email body required" };
   if (!input.recipients?.length) return { ok: false, error: "No recipients" };
 
-  // de-dupe by email
   const seen = new Set<string>();
   const recipients = input.recipients.filter((r) => {
     const key = r.email.trim().toLowerCase();
@@ -39,6 +36,10 @@ export async function sendEmailBroadcastAction(input: {
 
   if (recipients.length) {
     const now = new Date();
+
+    const status: MessageStatus =
+      summary.failed > 0 ? MessageStatus.PENDING : MessageStatus.SENT;
+
     const messages = recipients.map((r) => ({
       direction: "OUTBOUND" as const,
       channel: "EMAIL" as const,
@@ -46,10 +47,11 @@ export async function sendEmailBroadcastAction(input: {
       subject: input.subject.trim(),
       fromEmail: process.env.SENDGRID_FROM_EMAIL ?? null,
       toEmail: r.email,
-      status: summary.failed > 0 ? "PENDING" : "SENT",
+      status, // 👈 enum, not string
       familyId: r.familyId ?? null,
       createdAt: now,
     }));
+
     await prisma.message.createMany({ data: messages });
   }
 

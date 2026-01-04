@@ -209,7 +209,7 @@ function StudentCard({
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{student.name}</p>
           <p className="text-xs text-muted-foreground">
-            DOB: {format(student.dateOfBirth, "dd MMM yyyy")}
+            DOB: {student.dateOfBirth ? format(student.dateOfBirth, "dd MMM yyyy") : "—"}
           </p>
         </div>
 

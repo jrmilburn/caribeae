@@ -5,15 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
-import { Button, type ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ADMIN_LAST_ROUTE_KEY, useAdminNavHistory } from "@/hooks/useAdminNavHistory";
+
+type BaseButtonProps = React.ComponentPropsWithoutRef<typeof Button>;
 
 type BackButtonProps = {
   fallbackHref?: string;
   label?: string;
   className?: string;
-} & Omit<ButtonProps, "variant" | "size">;
+} & Omit<BaseButtonProps, "variant" | "size">;
 
 export function BackButton({
   fallbackHref = "/admin/dashboard",

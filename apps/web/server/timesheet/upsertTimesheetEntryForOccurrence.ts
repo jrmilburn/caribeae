@@ -9,8 +9,6 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeLocalDate } from "./normalizeLocalDate";
 import { computeBaseMinutesInternal } from "./internals/computeBaseMinutesInternal";
 
-import { expandRangeDates } from "./expandDateRange";
-
 /**
  * Audit-first plan (kept as code comments for future reviewers):
  * - Date normalization: Attendance, substitutions, and cancellations all use parseDateKey (startOfDay on ISO strings). We reuse the same startOfDay normalization via normalizeLocalDate to ensure TeacherTimesheetEntry.date aligns with those records.

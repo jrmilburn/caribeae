@@ -56,7 +56,7 @@ function StatCard({
 export default async function DashboardPage() {
   const [summary, recentCommunications] = await Promise.all([
     getDashboardSummary(),
-    listCommunications(5),
+    listCommunications({ limit : 5 }),
   ]);
 
   const commsBase = "/admin/communications";

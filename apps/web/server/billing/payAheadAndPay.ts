@@ -1,7 +1,7 @@
 "use server";
 
-import { addDays, isAfter } from "date-fns";
-import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type Prisma } from "@prisma/client";
+import { addDays } from "date-fns";
+import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type EnrolmentPlan, type Invoice } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -29,7 +29,7 @@ const payAheadSchema = z.object({
 
 export type PayAheadAndPayInput = z.infer<typeof payAheadSchema>;
 
-function blockSize(plan: Prisma.EnrolmentPlan | null) {
+function blockSize(plan: EnrolmentPlan | null) {
   if (!plan) return 0;
   const size = plan.blockClassCount ?? 1;
   return size > 0 ? size : 0;
@@ -66,7 +66,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
     );
 
     const today = normalizeDate(new Date(), "today");
-    const createdInvoices: { invoice: Prisma.Invoice; enrolmentId: string }[] = [];
+    const createdInvoices: { invoice: Invoice; enrolmentId: string }[] = [];
     const issuedAt = new Date();
     const dueAt = addDays(issuedAt, 7);
 

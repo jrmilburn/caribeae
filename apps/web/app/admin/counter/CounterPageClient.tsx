@@ -295,7 +295,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       }
 
       const exceedsBalance = allocationsPayload.some((allocation) => {
-        const invoice = summary?.openInvoices.find((inv) => inv.id === allocation.invoiceId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const invoice = summary?.openInvoices.find((inv : any) => inv.id === allocation.invoiceId);
         if (!invoice) return false;
         const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
         return allocation.amountCents > balance;
@@ -550,7 +551,7 @@ function CounterTabs({
   loadingSummary: boolean;
   outstanding: number;
   totalOpenInvoices: number;
-  nextDue: FamilyBillingSummary["nextDueInvoice"];
+  nextDue: FamilyBillingSummary["nextDueInvoice"] | undefined;
   onOpenAction: (mode: ActionMode) => void;
 }) {
   return (
@@ -603,7 +604,6 @@ function CounterTabs({
 function BillingTab({
   summary,
   loadingSummary,
-  outstanding,
   totalOpenInvoices,
   nextDue,
   onOpenAction,
@@ -612,7 +612,7 @@ function BillingTab({
   loadingSummary: boolean;
   outstanding: number;
   totalOpenInvoices: number;
-  nextDue: FamilyBillingSummary["nextDueInvoice"];
+  nextDue: FamilyBillingSummary["nextDueInvoice"] | undefined;
   onOpenAction: (mode: ActionMode) => void;
 }) {
   if (!summary) {
@@ -694,7 +694,8 @@ function BillingTab({
                 </TableCell>
               </TableRow>
             ) : (
-              summary.openInvoices.map((invoice) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              summary.openInvoices.map((invoice : any) => {
                 const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
                 return (
                   <TableRow key={invoice.id}>
@@ -735,7 +736,8 @@ function StudentsTab({ summary }: { summary: FamilyBillingSummary | null }) {
       {summary.students.length === 0 ? (
         <p className="text-sm text-muted-foreground">No students for this family.</p>
       ) : (
-        summary.students.map((student) => (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        summary.students.map((student : any) => (
           <Card key={student.id} className="border-l-0 border-r-0 border-t-0 shadow-none">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-base">{student.name}</CardTitle>
@@ -745,7 +747,8 @@ function StudentsTab({ summary }: { summary: FamilyBillingSummary | null }) {
               {student.enrolments.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No active enrolments.</p>
               ) : (
-                student.enrolments.map((enrolment) => (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                student.enrolments.map((enrolment : any) => (
                   <div
                     key={enrolment.id}
                     className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -811,7 +814,8 @@ function HistoryTab({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {summary.payments.map((payment) => (
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any*/}
+              {summary.payments.map((payment : any) => (
                 <TableRow key={payment.id}>
                   <TableCell className="text-sm">{formatDate(payment.paidAt)}</TableCell>
                   <TableCell className="text-sm">{payment.method ?? "—"}</TableCell>
@@ -1016,7 +1020,8 @@ function CounterActionSheet({
                           </TableCell>
                         </TableRow>
                       ) : (
-                        invoiceAllocationRows.map((invoice) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        invoiceAllocationRows.map((invoice : any) => {
                           const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
                           const allocationValue = allocations[invoice.id] ?? centsToDollarString(balance);
                           return (
@@ -1062,7 +1067,8 @@ function CounterActionSheet({
             {lastPayments.length ? (
               <div className="space-y-2 rounded-md border bg-muted/30 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent</p>
-                {lastPayments.map((payment) => (
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {lastPayments.map((payment : any) => (
                   <div key={payment.id} className="flex items-center justify-between gap-2 text-sm">
                     <div className="space-y-1">
                       <div className="font-semibold">{formatCurrencyFromCents(payment.amountCents)}</div>

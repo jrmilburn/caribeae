@@ -4,14 +4,14 @@ import { format } from "date-fns";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { BUSINESS_CONTACT_LINES, BUSINESS_NAME } from "./constants";
 import { PdfBuilder } from "./pdfBuilder";
-import type { InvoiceReceiptData } from "./getInvoiceReceiptData";
+import type { PaymentReceiptData } from "./getPaymentReceiptData";
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "—";
   return format(value, "d MMM yyyy");
 }
 
-export async function renderPaymentReceiptPdf(data: InvoiceReceiptData): Promise<Buffer> {
+export async function renderPaymentReceiptPdf(data: PaymentReceiptData): Promise<Buffer> {
   const builder = new PdfBuilder();
 
   // Header
@@ -21,10 +21,9 @@ export async function renderPaymentReceiptPdf(data: InvoiceReceiptData): Promise
   builder.drawRule({ gapAfter: 14 });
 
   // Title
-  const title = data.invoice.status === "VOID" ? "Invoice Receipt (VOID)" : "Invoice Receipt";
-  builder.addText(title, { font: "F2", size: 15 });
-  builder.addText(`Invoice ID: ${data.invoice.id}`, { size: 10 });
-  builder.addText(`Generated: ${formatDate(new Date())}`, { size: 9 });
+  builder.addText("Payment Receipt", { font: "F2", size: 15 });
+  builder.addText(`Payment ID: ${data.payment.id}`, { size: 10 });
+  builder.addText(`Generated: ${format(new Date(), "d MMM yyyy, h:mm aaa")}`, { size: 9 });
   builder.addSpacing(12);
 
   // Family
@@ -38,89 +37,54 @@ export async function renderPaymentReceiptPdf(data: InvoiceReceiptData): Promise
   builder.addSpacing(12);
   builder.drawRule({ gapAfter: 14 });
 
-  // Invoice details
-  builder.addText("Invoice details", { font: "F2", size: 12 });
+  // Payment details
+  builder.addText("Payment details", { font: "F2", size: 12 });
   builder.addSpacing(4);
 
   builder.addText(
-    `Status: ${data.invoice.status} | Issued ${formatDate(data.invoice.issuedAt)} | Due ${formatDate(
-      data.invoice.dueAt
-    )}`,
+    `Amount: ${formatCurrencyFromCents(data.payment.amountCents)} | Paid at: ${formatDate(data.payment.paidAt)} | Method: ${
+      data.payment.method ?? "—"
+    }`,
     { size: 10 }
   );
 
-  const coverage =
-    data.invoice.coverageStart && data.invoice.coverageEnd
-      ? `${formatDate(data.invoice.coverageStart)} -> ${formatDate(data.invoice.coverageEnd)}`
-      : "—";
-
-  builder.addText(`Paid on: ${formatDate(data.invoice.paidAt)} | Coverage: ${coverage}`, { size: 10 });
-
-  if (data.invoice.creditsPurchased) {
-    builder.addText(`Credits purchased: ${data.invoice.creditsPurchased}`, { size: 10 });
-  }
-
-  builder.addSpacing(14);
-
-  // Line items
-  builder.addText("Line items", { font: "F2", size: 12 });
-
-  if (data.lineItems.length === 0) {
+  if (data.payment.note) {
     builder.addSpacing(4);
-    builder.addText("No line items recorded.", { size: 10 });
-  } else {
-    builder.addTable(
-      ["Description", "Qty", "Unit", "Amount"],
-      data.lineItems.map((item) => [
-        item.description,
-        String(item.quantity),
-        formatCurrencyFromCents(item.unitPriceCents),
-        formatCurrencyFromCents(item.amountCents),
-      ]),
-      [
-        { width: 54, align: "left" },
-        { width: 10, align: "right" },
-        { width: 16, align: "right" },
-        { width: 20, align: "right" },
-      ],
-      { topGap: 6 }
-    );
+    builder.addText(`Note: ${data.payment.note}`, { size: 10 });
   }
-
-  builder.addSpacing(12);
-
-  // Totals (simple, no extra rules)
-  builder.addText("Totals", { font: "F2", size: 12 });
-  builder.addSpacing(4);
-  builder.addText(`Total: ${formatCurrencyFromCents(data.totals.totalCents)}`, { size: 11 });
-  builder.addText(`Paid: ${formatCurrencyFromCents(data.totals.paidCents)}`, { size: 11 });
-  builder.addText(`Balance: ${formatCurrencyFromCents(data.totals.balanceCents)}`, {
-    size: 11,
-    font: "F2",
-  });
 
   builder.addSpacing(14);
 
-  // Payments applied
-  builder.addText("Payments applied", { font: "F2", size: 12 });
+  // Allocation summary
+  builder.addText("Allocation summary", { font: "F2", size: 12 });
+  builder.addSpacing(4);
+  builder.addText(`Allocated: ${formatCurrencyFromCents(data.totals.allocatedCents)}`, { size: 11 });
+  builder.addText(`Unallocated: ${formatCurrencyFromCents(data.totals.unallocatedCents)}`, { size: 11, font: "F2" });
+
+  builder.addSpacing(14);
+
+  // Allocations table
+  builder.addText("Allocations", { font: "F2", size: 12 });
 
   if (data.allocations.length === 0) {
     builder.addSpacing(4);
-    builder.addText("No payments have been allocated to this invoice.", { size: 10 });
+    builder.addText("No allocations recorded for this payment.", { size: 10 });
   } else {
     builder.addTable(
-      ["Payment", "Paid at", "Method", "Allocated"],
+      ["Invoice", "Issued", "Status", "Invoice total", "Allocated"],
       data.allocations.map((a) => [
-        a.paymentId,
-        formatDate(a.paidAt),
-        a.method ?? "—",
-        formatCurrencyFromCents(a.amountCents),
+        a.invoiceId,
+        formatDate(a.invoiceIssuedAt),
+        a.invoiceStatus,
+        formatCurrencyFromCents(a.invoiceTotalCents),
+        formatCurrencyFromCents(a.allocatedCents),
       ]),
       [
-        { width: 34, align: "left" },
-        { width: 22, align: "left" },
-        { width: 20, align: "left" },
-        { width: 16, align: "right" },
+        { width: 26, align: "left" },  // Invoice ID
+        { width: 14, align: "left" },  // Issued
+        { width: 14, align: "left" },  // Status
+        { width: 18, align: "right" }, // Invoice total
+        { width: 18, align: "right" }, // Allocated
       ],
       { topGap: 6 }
     );

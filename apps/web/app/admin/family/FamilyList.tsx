@@ -17,7 +17,6 @@ import { updateFamily } from "@/server/family/updateFamily";
 import { deleteFamily } from "@/server/family/deleteFamily";
 
 import type { ClientFamily } from "@/server/family/types";
-import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 
 import {
   DropdownMenu,
@@ -29,7 +28,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
-export default function FamilyList({ families, unpaidSummary }: { families: Family[]; unpaidSummary: UnpaidFamiliesSummary }) {
+export default function FamilyList({ families }: { families: Family[]; }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [newFamilyModal, setNewFamilyModal] = useState(false);
   const [selected, setSelected] = React.useState<Family | null>(null);

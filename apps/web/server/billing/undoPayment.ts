@@ -13,7 +13,7 @@ import { normalizeDate } from "@/server/invoicing/dateUtils";
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
   include: {
     enrolment: { include: { plan: true; template: true } };
-    lineItems: { select: { kind: InvoiceLineItemKind; quantity: number } };
+    lineItems: { select: { id: true; kind: true; quantity: true } };
   };
 }>;
 
@@ -80,7 +80,7 @@ async function recomputeInvoicePaymentState(
     },
     include: {
       enrolment: { include: { plan: true, template: true } },
-      lineItems: { select: { kind: true, quantity: true } },
+      lineItems: { select: { id: true, kind: true, quantity: true } },
     },
   });
 

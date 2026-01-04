@@ -94,8 +94,8 @@ export function RichEmailEditor({
       exec("insertImage", dataUrl);
       // Try to select the newly inserted image
       setTimeout(() => {
-        const image = editorRef.current?.querySelector("img:last-of-type") ?? null;
-        selectImage(image);
+        const el = editorRef.current?.querySelector("img:last-of-type") ?? null;
+        selectImage(el instanceof HTMLImageElement ? el : null);
       }, 0);
     } catch (error) {
       console.error("Image upload failed", error);

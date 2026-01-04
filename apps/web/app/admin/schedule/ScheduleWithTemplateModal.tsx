@@ -15,13 +15,86 @@ import type { NormalizedScheduleClass } from "@/packages/schedule";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+/**
+ * The schedule package often returns a "template DTO" that isn't the Prisma ClassTemplate type.
+ * TemplateModal expects a full-ish record (id/createdAt/updatedAt/etc).
+ *
+ * This adapter converts the schedule template into a ClassTemplate shape.
+ * If your schedule template already IS a ClassTemplate, this will still work.
+ */
+function coerceToClassTemplate(input: unknown): ClassTemplate {
+  if (!input || typeof input !== "object") {
+    throw new Error("Invalid template payload");
+  }
+
+  const t = input as Partial<ClassTemplate> & Record<string, unknown>;
+
+  // id is required to edit/update
+  if (typeof t.id !== "string" || !t.id) {
+    throw new Error("Template is missing id");
+  }
+
+  // createdAt/updatedAt are required by your TemplateModal prop type
+  // If your API returns them as strings, convert them to Dates.
+  const createdAt =
+    t.createdAt instanceof Date
+      ? t.createdAt
+      : typeof t.createdAt === "string"
+        ? new Date(t.createdAt)
+        : new Date();
+
+  const updatedAt =
+    t.updatedAt instanceof Date
+      ? t.updatedAt
+      : typeof t.updatedAt === "string"
+        ? new Date(t.updatedAt)
+        : new Date();
+
+  // Helper to allow nulls
+  const asNumberOrNull = (v: unknown) => (typeof v === "number" ? v : null);
+  const asStringOrNull = (v: unknown) => (typeof v === "string" ? v : null);
+
+  // startDate is required by your error message; if missing, we set a sensible default.
+  const startDate =
+    t.startDate instanceof Date
+      ? t.startDate
+      : typeof t.startDate === "string"
+        ? new Date(t.startDate)
+        : new Date();
+
+  const endDate =
+    t.endDate instanceof Date
+      ? t.endDate
+      : typeof t.endDate === "string"
+        ? new Date(t.endDate)
+        : null;
+
+  // levelId is required; if your schedule template doesn’t include it, that’s a backend/data issue.
+  if (typeof t.levelId !== "string" || !t.levelId) {
+    throw new Error("Template is missing levelId");
+  }
+
+  // active is required
+  const active = typeof t.active === "boolean" ? t.active : true;
+
+  return {
+    id: t.id,
+    name: (typeof t.name === "string" ? t.name : null) as ClassTemplate["name"],
+    createdAt,
+    updatedAt,
+    teacherId: asStringOrNull(t.teacherId) as ClassTemplate["teacherId"],
+    active,
+    startDate,
+    endDate,
+    levelId: t.levelId,
+    dayOfWeek: asNumberOrNull(t.dayOfWeek) as ClassTemplate["dayOfWeek"],
+    startTime: asNumberOrNull(t.startTime) as ClassTemplate["startTime"],
+    endTime: asNumberOrNull(t.endTime) as ClassTemplate["endTime"],
+    capacity: asNumberOrNull(t.capacity) as ClassTemplate["capacity"],
+  };
+}
 
 function FiltersPopover({
   levels,
@@ -38,7 +111,6 @@ function FiltersPopover({
   const [draft, setDraft] = useState<ScheduleFilters>(value);
 
   React.useEffect(() => {
-    // keep draft in sync if filters change externally
     setDraft(value);
   }, [value]);
 
@@ -50,11 +122,11 @@ function FiltersPopover({
         <Button variant="outline" size="sm" className="gap-2">
           <SlidersHorizontal className="h-4 w-4" />
           Filters
-          {activeCount > 0 && (
+          {activeCount > 0 ? (
             <Badge variant="secondary" className="ml-1">
               {activeCount}
             </Badge>
-          )}
+          ) : null}
         </Button>
       </PopoverTrigger>
 
@@ -105,7 +177,7 @@ function FiltersPopover({
               variant="ghost"
               size="sm"
               onClick={() => {
-                const cleared = { teacherId: null, levelId: null };
+                const cleared: ScheduleFilters = { teacherId: null, levelId: null };
                 setDraft(cleared);
                 onApply(cleared);
                 setOpen(false);
@@ -138,13 +210,12 @@ export default function ScheduleWithTemplateModal({
 }) {
   const scheduleRef = useRef<ScheduleViewHandle>(null);
 
-  const [filters, setFilters] = useState<ScheduleFilters>({
-    teacherId: null,
-    levelId: null,
-  });
+  const [filters, setFilters] = useState<ScheduleFilters>({ teacherId: null, levelId: null });
 
   const [modalOpen, setModalOpen] = useState(false);
+  // ✅ must match TemplateModal prop expectation
   const [selectedTemplate, setSelectedTemplate] = useState<ClassTemplate | null>(null);
+
   const [prefill, setPrefill] = useState<{
     date: Date;
     startMinutes: number;
@@ -162,7 +233,14 @@ export default function ScheduleWithTemplateModal({
   const handleClassClick = (occurrence: NormalizedScheduleClass) => {
     if (!occurrence.template) return;
 
-    setSelectedTemplate(occurrence.template);
+    // ✅ convert schedule template -> ClassTemplate for TemplateModal + selectedTemplate.id usage
+    try {
+      setSelectedTemplate(coerceToClassTemplate(occurrence.template));
+    } catch (e) {
+      console.error(e);
+      // If you want a toast here, add it.
+      return;
+    }
 
     const minutes = occurrence.startTime.getHours() * 60 + occurrence.startTime.getMinutes();
 
@@ -178,6 +256,7 @@ export default function ScheduleWithTemplateModal({
 
   const handleSave = async (payload: ClientTemplate) => {
     if (selectedTemplate) {
+      // ✅ id exists because selectedTemplate is ClassTemplate
       await updateTemplate(payload, selectedTemplate.id);
     } else {
       await createTemplate(payload);
@@ -197,14 +276,7 @@ export default function ScheduleWithTemplateModal({
         onSlotClick={handleSlotClick}
         onClassClick={handleClassClick}
         filters={filters}
-        headerActions={
-          <FiltersPopover
-            levels={levels}
-            teachers={teachers}
-            value={filters}
-            onApply={setFilters}
-          />
-        }
+        headerActions={<FiltersPopover levels={levels} teachers={teachers} value={filters} onApply={setFilters} />}
       />
 
       <TemplateModal

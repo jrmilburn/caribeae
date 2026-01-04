@@ -1,9 +1,11 @@
 // app/(protected)/layout.tsx
 import { AppNavbar } from "@/components/navbar/navbar";
 import { AppFooter } from "./footer";
+import { Suspense } from "react";
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
+    <Suspense fallback={null}>
     <AppNavbar>
       <div className="max-h-screen h-screen flex flex-col">
         <main className="flex-1 overflow-y-auto">
@@ -12,5 +14,6 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         <AppFooter />
       </div>
     </AppNavbar>
+    </Suspense>
   );
 }

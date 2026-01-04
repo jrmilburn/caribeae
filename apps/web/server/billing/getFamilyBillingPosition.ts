@@ -1,7 +1,15 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
-import { BillingType, PaymentStatus, type Prisma } from "@prisma/client";
+import {
+  BillingType,
+  PaymentStatus,
+  PrismaClient,
+  type Prisma,
+  type EnrolmentPlan,
+} from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -9,7 +17,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 
-type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
+type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
 function asDate(value?: Date | string | null) {
   if (!value) return null;
@@ -56,7 +64,7 @@ function evaluateEntitlement(params: {
   return { status: "UNKNOWN" as EntitlementStatus };
 }
 
-function blockSize(plan: Prisma.EnrolmentPlan | null | undefined) {
+function blockSize(plan: EnrolmentPlan | null | undefined) {
   if (!plan) return 0;
   const size = plan.blockClassCount ?? 1;
   return size > 0 ? size : 0;
@@ -92,11 +100,11 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
 
   if (!family) throw new Error("Family not found.");
 
-  const enrolmentIds = family.students.flatMap((s) => s.enrolments?.map((e) => e.id) ?? []);
+  const enrolmentIds = family.students.flatMap((s : any) => s.enrolments?.map((e : any) => e.id) ?? []);
 
   const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap] = await Promise.all([
     client.invoice.findMany({
-      where: { familyId, status: { in: OPEN_INVOICE_STATUSES } },
+      where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       include: {
         enrolment: {
           include: {
@@ -146,21 +154,21 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   ]);
 
   const latestCoverageMap = new Map<string, Date | null>(
-    latestCoverage.map((entry) => [entry.enrolmentId, asDate(entry._max.coverageEnd)])
+    latestCoverage.map((entry : any) => [entry.enrolmentId, asDate(entry._max.coverageEnd)])
   );
 
-  const openInvoicesWithBalance = openInvoices.map((invoice) => ({
+  const openInvoicesWithBalance = openInvoices.map((invoice : any) => ({
     ...invoice,
     balanceCents: Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
   }));
 
-  const outstandingCents = openInvoicesWithBalance.reduce((sum, inv) => sum + inv.balanceCents, 0);
+  const outstandingCents = openInvoicesWithBalance.reduce((sum : any, inv : any) => sum + inv.balanceCents, 0);
   const paidCents = paymentsAggregate._sum.amountCents ?? 0;
   const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
   const unallocatedCents = Math.max(paidCents - allocatedCents, 0);
 
-  const students = family.students.map((student) => {
-    const enrolments = (student.enrolments ?? []).filter((enrolment) => enrolment.status === "ACTIVE").map((enrolment) => {
+  const students = family.students.map((student : any) => {
+    const enrolments = (student.enrolments ?? []).filter((enrolment: any) => enrolment.status === "ACTIVE").map((enrolment : any) => {
       const plan = enrolment.plan ?? null;
       const snapshot = statusMap.get(enrolment.id);
       const paidThroughDate = snapshot?.paidThroughDate ?? asDate(enrolment.paidThroughDate);
@@ -201,15 +209,15 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     return { id: student.id, name: student.name, enrolments };
   });
 
-  const enrolmentsFlat = students.flatMap((s) => s.enrolments);
+  const enrolmentsFlat = students.flatMap((s : any) => s.enrolments);
   const latestPaidThroughDates = enrolmentsFlat
-    .map((e) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
+    .map((e : any) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
     .filter(Boolean) as Date[];
   const paidThroughLatest = latestPaidThroughDates.length
     ? latestPaidThroughDates.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
     : null;
 
-  const creditsTotal = enrolmentsFlat.reduce((sum, e) => sum + (e.creditsRemaining ?? 0), 0);
+  const creditsTotal = enrolmentsFlat.reduce((sum : any, e : any) => sum + (e.creditsRemaining ?? 0), 0);
 
   const nextDueInvoice = [...openInvoicesWithBalance]
     .sort((a, b) => {

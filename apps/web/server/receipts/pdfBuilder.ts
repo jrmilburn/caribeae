@@ -106,7 +106,7 @@ export class PdfBuilder {
     this.operations.push(this.lineOp(MARGIN, tableTopY, PAGE_WIDTH - MARGIN, tableTopY, ruleThickness));
 
     // Header row
-    this.drawTableRow(headers, cols, headerBaselineY, headerFont, fontSize, true);
+    this.drawTableRow(headers, cols, headerBaselineY, headerFont, fontSize);
 
     // Header separator (below header text)
     const headerSepY = headerBaselineY - 8;
@@ -115,7 +115,7 @@ export class PdfBuilder {
     // Body rows
     let cursorBaselineY = headerBaselineY - rowHeight;
     for (const row of rows) {
-      this.drawTableRow(row, cols, cursorBaselineY, bodyFont, fontSize, false);
+      this.drawTableRow(row, cols, cursorBaselineY, bodyFont, fontSize);
       cursorBaselineY -= rowHeight;
     }
 
@@ -242,7 +242,6 @@ export class PdfBuilder {
     baselineY: number,
     font: FontKey,
     size: number,
-    isHeader: boolean
   ) {
     const x0 = MARGIN;
     const paddingX = 6;

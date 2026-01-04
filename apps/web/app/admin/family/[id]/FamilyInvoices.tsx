@@ -107,6 +107,8 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
     ? latestPaidThrough.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
     : null;
 
+  const router = useRouter();
+
   // --- Open invoices (for payment allocation sheet + summary) ---
   const openInvoices = billing.openInvoices.map((invoice) => ({
     ...invoice,
@@ -800,7 +802,7 @@ function RecordPaymentSheet({
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
+            <Button type="button" variant="outline" onClick={() => setSheetOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || totalCents <= 0}>

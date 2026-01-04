@@ -6,6 +6,8 @@ import {
   InvoiceLineItemKind,
   InvoiceStatus,
   type Prisma,
+  type PrismaClient,
+  type EnrolmentPlan
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -13,7 +15,7 @@ import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
-type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
+type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
   include: {
@@ -31,7 +33,7 @@ function getClient(client?: PrismaClientOrTx) {
   return client ?? prisma;
 }
 
-export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Prisma.EnrolmentPlan) {
+export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: EnrolmentPlan) {
   const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
   const quantity = enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
   if (plan.billingType === BillingType.PER_WEEK) return 0;
@@ -104,7 +106,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       (await tx.invoice.findUnique({
         where: { id: invoiceId },
         include: {
-          enrolment: { include: { plan: true } },
+          enrolment: { include: { plan: true, template: true } },
           lineItems: { select: { kind: true, quantity: true } },
         },
       }));
@@ -177,8 +179,8 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
     return updatedInvoice;
   };
 
-  if (typeof (client as Prisma.PrismaClient).$transaction === "function") {
-    return (client as Prisma.PrismaClient).$transaction((tx) => run(tx));
+  if (typeof (client as PrismaClient).$transaction === "function") {
+    return (client as PrismaClient).$transaction((tx) => run(tx));
   }
   return run(client as Prisma.TransactionClient);
 }

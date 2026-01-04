@@ -1,10 +1,7 @@
 "use client";
 
-import { format } from "date-fns";
-import { Mail, Phone, Wallet } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 type Contact = {
@@ -37,9 +34,6 @@ type FamilyHeaderSummaryProps = {
 export function FamilyHeaderSummary({
   familyName,
   contact,
-  outstandingCents,
-  nextDue,
-  lastPayment,
   actions,
   sticky = true,
 }: FamilyHeaderSummaryProps) {

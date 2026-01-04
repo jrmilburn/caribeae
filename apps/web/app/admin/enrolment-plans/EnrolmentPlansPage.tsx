@@ -34,10 +34,6 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PlanWithLevel | null>(null);
 
-  const onClose = () => {
-    setOpen(false);
-    setEditing(null);
-  };
 
   const onDelete = async (plan: PlanWithLevel) => {
     const ok = window.confirm(`Delete enrolment plan "${plan.name}"?`);

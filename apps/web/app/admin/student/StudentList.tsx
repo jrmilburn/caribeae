@@ -81,7 +81,7 @@ export default function StudentList({ students }: { students: Student[] }) {
                   </Link>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {format(student.dateOfBirth, "dd MMM yyyy")}
+                  {student.dateOfBirth ? format(student.dateOfBirth, "dd MMM yyyy") : "—"}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {format(student.createdAt, "dd MMM yyyy")}

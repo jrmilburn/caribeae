@@ -26,7 +26,7 @@ type LineItemInput = {
 type InvoiceWithEntitlement = Prisma.InvoiceGetPayload<{
   include: {
     enrolment: { include: { plan: true } };
-    lineItems: { select: { id: true; kind: InvoiceLineItemKind } };
+    lineItems: { select: { id: true; kind: true } };
   };
 }>;
 
@@ -63,6 +63,7 @@ type CreatePaymentAndAllocateInput = {
   strategy?: "oldest-open-first";
   idempotencyKey?: string;
   skipAuth?: boolean;
+  client?: PrismaClientOrTx;
 };
 
 type AllocationBuildResult = {
@@ -237,7 +238,7 @@ async function buildOldestOpenAllocations(
   if (amountCents <= 0) return { allocations: [], invoices: [] };
   const invoices = await tx.invoice.findMany({
     where: { familyId, status: { in: [InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] } },
-    include: { enrolment: { include: { plan: true } }, lineItems: { select: { kind: true } } },
+    include: { enrolment: { include: { plan: true } }, lineItems: { select: { id: true, kind: true } } },
     orderBy: [{ dueAt: "asc" }, { issuedAt: "asc" }],
   });
 
@@ -268,7 +269,7 @@ async function validateAllocations(
 
   const invoices = await tx.invoice.findMany({
     where: { id: { in: invoiceIds } },
-    include: { enrolment: { include: { plan: true } }, lineItems: { select: { kind: true } } },
+    include: { enrolment: { include: { plan: true } }, lineItems: { select: { id: true, kind: true } } },
   });
 
   if (invoices.length !== invoiceIds.length) {
@@ -341,18 +342,29 @@ async function persistAllocations(
             paidCents: nextPaid,
           });
 
-    const updated = await tx.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        amountPaidCents: nextPaid,
-        status,
-        paidAt: status === InvoiceStatus.PAID ? invoice.paidAt ?? paidAt : status === InvoiceStatus.VOID ? invoice.paidAt : null,
-      },
-      include: {
-        enrolment: { include: { plan: true } },
-        lineItems: { select: { kind: true, quantity: true } },
-      },
-    });
+          const updated = await tx.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              amountPaidCents: nextPaid,
+              status,
+              paidAt:
+                status === InvoiceStatus.PAID
+                  ? invoice.paidAt ?? paidAt
+                  : status === InvoiceStatus.VOID
+                    ? invoice.paidAt
+                    : null,
+            },
+            include: {
+              enrolment: {
+                include: {
+                  plan: true,
+                  template: true, // ✅ add this
+                },
+              },
+              lineItems: { select: { kind: true, quantity: true } },
+            },
+          });
+
 
     if (status === InvoiceStatus.PAID && invoice.status !== InvoiceStatus.PAID) {
       await applyPaidInvoiceToEnrolment(updated.id, { client: tx, invoice: updated });

@@ -30,6 +30,12 @@ import { PaymentForm } from "./components/PaymentForm";
 type BillingData = Awaited<ReturnType<typeof getBillingDashboardData>>;
 type InvoiceWithBalance = BillingInvoice & { amountOwingCents: number };
 
+type InvoiceFormOnSubmit = React.ComponentProps<typeof InvoiceForm>["onSubmit"];
+type InvoiceFormPayload = Parameters<NonNullable<InvoiceFormOnSubmit>>[0];
+
+type PaymentFormOnSubmit = React.ComponentProps<typeof PaymentForm>["onSubmit"];
+type PaymentFormPayload = Parameters<NonNullable<PaymentFormOnSubmit>>[0];
+
 export default function BillingPageClient({
   data,
   invoiceStatuses,
@@ -81,15 +87,19 @@ export default function BillingPageClient({
     startFiltering(() => router.replace("/admin/billing"));
   };
 
-  const handleSaveInvoice = async (payload: Parameters<typeof createInvoice>[0]) => {
+
+  const handleSaveInvoice: NonNullable<InvoiceFormOnSubmit> = async (payload: InvoiceFormPayload) => {
     try {
+      const normalized = normalizeInvoicePayloadForServer(payload);
+
       if (editingInvoice) {
-        await updateInvoice(editingInvoice.id, payload);
+        await updateInvoice(editingInvoice.id, normalized);
         toast.success("Invoice updated.");
       } else {
-        await createInvoice(payload);
+        await createInvoice(normalized);
         toast.success("Invoice created.");
       }
+
       setEditingInvoice(null);
       router.refresh();
     } catch (err) {
@@ -97,6 +107,7 @@ export default function BillingPageClient({
       toast.error(message);
     }
   };
+
 
   const handleDeleteInvoice = async (invoice: InvoiceWithBalance) => {
     const ok = window.confirm("Delete this invoice? Payments will remain untouched.");
@@ -134,15 +145,32 @@ export default function BillingPageClient({
     }
   };
 
-  const handleSavePayment = async (payload: Parameters<typeof createPayment>[0]) => {
+
+  const handleSavePayment: NonNullable<PaymentFormOnSubmit> = async (payload: PaymentFormPayload) => {
     try {
+      // Build the exact shape your server actions accept
+      const normalized: Parameters<typeof createPayment>[0] = {
+        familyId: payload.familyId,
+        amountCents: payload.amountCents,
+        paidAt: nullToUndefined(payload.paidAt),
+
+        // ✅ fix: null -> undefined
+        method: nullToUndefined(payload.method),
+        note: nullToUndefined(payload.note),
+
+        allocations: payload.allocations,
+        // If your payload might have allocations: null, then:
+        // allocations: nullToUndefined(payload.allocations),
+      };
+
       if (editingPayment) {
-        await updatePayment(editingPayment.id, payload);
+        await updatePayment(editingPayment.id, normalized);
         toast.success("Payment updated.");
       } else {
-        await createPayment(payload);
+        await createPayment(normalized);
         toast.success("Payment recorded.");
       }
+
       setEditingPayment(null);
       router.refresh();
     } catch (err) {
@@ -309,3 +337,38 @@ export default function BillingPageClient({
     </div>
   );
 }
+
+function nullToUndefined<T>(value: T | null | undefined): T | undefined {
+  return value === null ? undefined : value;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeInvoicePayloadForServer(payload: any) {
+  return {
+    ...payload,
+    issuedAt: nullToUndefined(payload.issuedAt),
+    dueAt: nullToUndefined(payload.dueAt),
+    coverageStart: nullToUndefined(payload.coverageStart),
+    coverageEnd: nullToUndefined(payload.coverageEnd),
+    creditsPurchased: nullToUndefined(payload.creditsPurchased),
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    lineItems: (payload.lineItems ?? []).map((li: any) => {
+      const quantity = li.quantity ?? 1;
+
+      // If unitPriceCents is missing but amountCents exists, derive it.
+      // If both missing, default to 0 (or you can throw).
+      const unitPriceCents =
+        li.unitPriceCents ??
+        (li.amountCents != null ? Math.round(li.amountCents / quantity) : 0);
+
+      return {
+        ...li,
+        quantity,
+        unitPriceCents,
+      };
+    }),
+  };
+}
+
+

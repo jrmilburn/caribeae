@@ -108,13 +108,15 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelC
     }
   }, [channel, mode, onChannelChange]);
 
-  const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle>) => {
-    const instance = editor.current;
-    if (!instance) throw new Error("Email editor not ready");
-    const html = await instance.exportHtml();
-    if (!html.trim()) throw new Error("Message cannot be empty");
-    return html;
-  };
+const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null>) => {
+  const instance = editor.current;
+  if (!instance) throw new Error("Email editor not ready");
+
+  const html = await instance.exportHtml();
+  if (!html.trim()) throw new Error("Message cannot be empty");
+  return html;
+};
+
 
   const handleDirectSend = () => {
     startDirect(async () => {

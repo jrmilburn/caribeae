@@ -17,7 +17,8 @@ export async function getEnrolments() {
             status: "ACTIVE"
         },
         include: {
-            student: true
+            student: true,
+            plan: true
         }
     })
 

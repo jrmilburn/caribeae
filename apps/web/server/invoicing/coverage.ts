@@ -1,4 +1,4 @@
-import { addWeeks, isAfter, isBefore, max as maxDate } from "date-fns";
+import { addWeeks, isAfter, max as maxDate } from "date-fns";
 import { BillingType, type Prisma } from "@prisma/client";
 
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
@@ -9,7 +9,8 @@ export const enrolmentWithPlanInclude = {
     student: { select: { familyId: true } },
     template: { select: { dayOfWeek: true, name: true } },
   },
-} satisfies Prisma.EnrolmentInclude;
+} satisfies Prisma.EnrolmentDefaultArgs;
+
 
 export function resolveWeeklyCoverageWindow(params: {
   enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };

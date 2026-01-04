@@ -21,12 +21,14 @@ export async function GET(_request: Request, context: { params: unknown }) {
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
   }
 
-  const pdf = await renderPaymentReceiptPdf(data);
-  return new NextResponse(pdf, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="payment-${data.payment.id}-receipt.pdf"`,
-    },
-  });
+const pdf = await renderPaymentReceiptPdf(data);
+
+return new NextResponse(new Uint8Array(pdf), {
+  status: 200,
+  headers: {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `inline; filename="payment-${data.payment.id}-receipt.pdf"`,
+    "Cache-Control": "no-store",
+  },
+});
 }

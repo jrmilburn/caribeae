@@ -70,13 +70,12 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
     where: {
       status: { not: EnrolmentStatus.CANCELLED },
       startDate: { lte: date },
-      OR: [{ endDate: null }, { endDate: { gte: date } }],
       OR: [
         { templateId },
         {
           plan: { billingType: BillingType.PER_WEEK },
           student: { levelId },
-        },
+        }, { endDate: null }, { endDate: { gte: date } }
       ],
     },
     include: { student: true, plan: true, template: true },

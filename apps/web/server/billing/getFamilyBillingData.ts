@@ -13,7 +13,7 @@ export async function getFamilyBillingData(familyId: string) {
 
   const [openInvoices, payments] = await Promise.all([
     prisma.invoice.findMany({
-      where: { familyId, status: { in: OPEN_INVOICE_STATUSES } },
+      where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       orderBy: [{ dueAt: "asc" }, { issuedAt: "asc" }],
       select: {
         id: true,

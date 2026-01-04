@@ -76,7 +76,7 @@ export async function createInitialInvoiceForEnrolment(
     assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
 
     const existingOpen = await tx.invoice.findFirst({
-      where: { enrolmentId, status: { in: OPEN_INVOICE_STATUSES } },
+      where: { enrolmentId, status: { in: [...OPEN_INVOICE_STATUSES] } },
     });
     if (existingOpen) return { invoice: existingOpen, created: false };
 
@@ -183,7 +183,7 @@ export async function issueNextInvoiceForEnrolment(
     assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
 
     const openInvoice = await tx.invoice.findFirst({
-      where: { enrolmentId: enrolment.id, status: { in: OPEN_INVOICE_STATUSES } },
+      where: { enrolmentId: enrolment.id, status: { in: [...OPEN_INVOICE_STATUSES] } },
     });
     if (openInvoice) return { invoice: openInvoice, created: false };
 
@@ -264,9 +264,9 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     where: {
       status: "ACTIVE",
       startDate: { lte: today },
-      OR: [{ endDate: null }, { endDate: { gte: today } }],
       planId: { not: null },
       OR: [
+        { endDate: null }, { endDate: { gte: today } },
         {
           plan: { billingType: BillingType.PER_WEEK },
           OR: [
@@ -338,14 +338,14 @@ export async function getUnpaidFamiliesSummary() {
   const families = await prisma.family.findMany({
     where: {
       invoices: {
-        some: { status: { in: OPEN_INVOICE_STATUSES } },
+        some: { status: { in: [...OPEN_INVOICE_STATUSES] } },
       },
     },
     select: {
       id: true,
       name: true,
       invoices: {
-        where: { status: { in: OPEN_INVOICE_STATUSES } },
+        where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
         select: {
           id: true,
           amountCents: true,

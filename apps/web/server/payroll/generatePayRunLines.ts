@@ -183,7 +183,7 @@ export async function generatePayRunLines(input: z.infer<typeof schema>) {
           grossCents: line.grossCents,
           hourlyRateCentsSnapshot:
             line.breakdown.length === 1 ? line.breakdown[0]?.hourlyRateCents ?? null : null,
-          rateBreakdownJson: line.breakdown.length > 1 ? line.breakdown : null,
+          rateBreakdownJson: line.breakdown.length > 1 ? line.breakdown : Prisma.DbNull,
         });
       });
       await tx.payRunLine.createMany({ data: createData });

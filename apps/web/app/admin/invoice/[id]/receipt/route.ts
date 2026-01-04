@@ -27,15 +27,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  const pdf = await renderInvoiceReceiptPdf(data);
+const pdfBuffer = await renderInvoiceReceiptPdf(data);
 
-  return new NextResponse(pdf, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="invoice-${data.invoice.id}-receipt.pdf"`,
-      // optional but nice
-      "Cache-Control": "no-store",
-    },
-  });
+// Convert Node Buffer -> Uint8Array (BodyInit-compatible)
+const body = new Uint8Array(pdfBuffer);
+
+return new NextResponse(body, {
+  status: 200,
+  headers: {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `inline; filename="invoice-${data.invoice.id}-receipt.pdf"`,
+    "Cache-Control": "no-store",
+  },
+});
 }

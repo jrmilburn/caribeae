@@ -78,7 +78,6 @@ export default function FamilyForm({
   family,
   enrolContext,
   levels,
-  unpaidSummary,
   billing,
   billingPosition,
 }: FamilyFormProps) {
@@ -301,7 +300,6 @@ function FamilyTabs({
 function OverviewTab({
   family,
   billingPosition,
-  billing,
 }: {
   family: FamilyWithStudentsAndInvoices;
   billingPosition: FamilyBillingPosition;

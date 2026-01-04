@@ -296,9 +296,10 @@ function statusVariant(status: InvoiceStatus) {
     case "SENT":
       return "secondary" as const;
     case "VOID":
-      return "ghost" as const;
+      return "outline" as const; // ✅ was "ghost"
     case "DRAFT":
     default:
       return "default" as const;
   }
 }
+
