@@ -196,6 +196,7 @@ function StudentCard({
   onChangeLevel: (student: StudentWithHistory) => void;
 }) {
   const router = useRouter();
+  const levelChanges = Array.isArray(student.levelChanges) ? student.levelChanges : [];
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -291,9 +292,9 @@ function StudentCard({
         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Level history
         </div>
-        {levelChanges && levelChanges.length ? (
+        {levelChanges.length ? (
           <div className="space-y-1">
-            {student.levelChanges.map((change) => (
+            {levelChanges.map((change) => (
               <div key={change.id} className="text-xs text-muted-foreground">
                 {format(change.effectiveDate, "dd MMM yyyy")}:{" "}
                 {change.fromLevel?.name ?? "—"} → {change.toLevel?.name ?? "—"}
