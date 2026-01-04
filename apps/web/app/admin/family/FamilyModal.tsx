@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ClientFamily } from "@/server/family/types";
+import type { ClientFamily, FamilyActionResult } from "@/server/family/types";
 import type { Family } from "@prisma/client";
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -31,7 +31,7 @@ type FamilyModalProps = {
 
   family?: Family | null;
 
-  onSave: (payload: ClientFamily) => Promise<{ success: boolean }>;
+  onSave: (payload: ClientFamily) => Promise<FamilyActionResult>;
 };
 
 export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalProps) {
@@ -47,6 +47,7 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
     secondaryPhone: "",
     medicalContactName: "",
     medicalContactPhone: "",
+    address: "",
   });
 
   const [submitting, setSubmitting] = React.useState(false);
@@ -67,6 +68,7 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
         secondaryPhone: family.secondaryPhone ?? "",
         medicalContactName: family.medicalContactName ?? "",
         medicalContactPhone: family.medicalContactPhone ?? "",
+        address: family.address ?? "",
       });
     } else {
       setForm({
@@ -79,6 +81,7 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
         secondaryPhone: "",
         medicalContactName: "",
         medicalContactPhone: "",
+        address: "",
       });
     }
 
@@ -106,6 +109,7 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
       "secondaryPhone",
       "medicalContactName",
       "medicalContactPhone",
+      "address",
     ];
 
     for (const k of optKeys) {
@@ -201,6 +205,17 @@ export function FamilyModal({ open, onOpenChange, family, onSave }: FamilyModalP
               <Input
                 value={form.secondaryPhone ?? ""}
                 onChange={(e) => setField("secondaryPhone", e.target.value)}
+              />
+            </FieldRow>
+          </div>
+
+          <div className="space-y-3">
+            <SectionTitle>Address</SectionTitle>
+            <FieldRow label="Address">
+              <Input
+                value={form.address ?? ""}
+                onChange={(e) => setField("address", e.target.value)}
+                placeholder="Street, suburb, state"
               />
             </FieldRow>
           </div>

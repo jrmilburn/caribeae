@@ -31,6 +31,7 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
     secondaryPhone: family.secondaryPhone ?? "",
     medicalContactName: family.medicalContactName ?? "",
     medicalContactPhone: family.medicalContactPhone ?? "",
+    address: family.address ?? "",
   });
 
   const [saving, setSaving] = React.useState(false);
@@ -54,9 +55,13 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
         secondaryPhone: form.secondaryPhone.trim() || undefined,
         medicalContactName: form.medicalContactName.trim() || undefined,
         medicalContactPhone: form.medicalContactPhone.trim() || undefined,
+        address: form.address.trim() || undefined,
       };
 
-      await updateFamily(payload, family.id);
+      const result = await updateFamily(payload, family.id);
+      if (!result.success) {
+        throw new Error(result.error ?? "Unable to update family.");
+      }
       toast.success("Family updated.");
       router.refresh();
       onSaved?.();
@@ -102,6 +107,15 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
           <Field label="Primary email" className="sm:col-span-2">
             <Input value={form.primaryEmail} onChange={onChange("primaryEmail")} placeholder="name@email.com" />
           </Field>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">Address</h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Street address" className="sm:col-span-2">
+              <Input value={form.address} onChange={onChange("address")} placeholder="Street, suburb, state" />
+            </Field>
+          </div>
         </div>
 
         <div className="space-y-3">

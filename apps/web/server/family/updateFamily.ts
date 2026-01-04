@@ -2,35 +2,29 @@
 
 import { prisma } from "@/lib/prisma";
 
-import type { ClientFamily } from "./types";
+import type { ClientFamily, FamilyActionResult } from "./types";
+import { parseFamilyPayload } from "./types";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
-export async function updateFamily(payload : ClientFamily, id : string) {
+export async function updateFamily(payload: ClientFamily, id: string): Promise<FamilyActionResult> {
+    await getOrCreateUser();
 
-    const user = await getOrCreateUser()
+    const parsed = parseFamilyPayload(payload);
+    if (!parsed.success) {
+        return { success: false, error: parsed.error };
+    }
 
     const newFamily = await prisma.family.update({
         where: {
-            id: id
+            id: id,
         },
-        data: {
-            name: payload?.name,
-            primaryContactName: payload?.primaryContactName,
-            primaryEmail: payload?.primaryEmail,
-            primaryPhone: payload?.primaryPhone,
-            secondaryContactName: payload?.secondaryContactName,
-            secondaryEmail: payload?.secondaryEmail,
-            secondaryPhone: payload?.secondaryPhone,
-            medicalContactName: payload?.medicalContactName,
-            medicalContactPhone: payload?.medicalContactPhone
-        }
-    })
+        data: parsed.data,
+    });
 
-    if(!newFamily) {
-        return { success: false }
+    if (!newFamily) {
+        return { success: false, error: "Unable to update family." };
     }
 
-    return { success: true }
-
+    return { success: true, family: newFamily };
 }
