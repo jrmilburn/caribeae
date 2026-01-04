@@ -1,5 +1,6 @@
 import getFamily from "@/server/family/getFamily";
 import FamilyForm from "./FamilyForm";
+import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import { getLevels } from "@/server/level/getLevels";
 import { getUnpaidFamiliesSummary, maybeRunInvoicingSweep } from "@/server/invoicing";
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
@@ -36,9 +37,11 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
         }
       : null;
 
+  const typedFamily = family as FamilyWithStudentsAndInvoices | null;
+
   return (
     <FamilyForm
-      family={family}
+      family={typedFamily}
       enrolContext={enrolContext}
       levels={levels}
       unpaidSummary={unpaidSummary}

@@ -29,6 +29,13 @@ import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 
 type StudentWithHistory = FamilyWithStudentsAndInvoices["students"][number];
+type LevelChangeRecord = {
+  id: string;
+  effectiveDate: Date;
+  fromLevel?: { name: string | null } | null;
+  toLevel?: { name: string | null } | null;
+  note?: string | null;
+};
 
 type Props = {
   students: StudentWithHistory[];
@@ -196,7 +203,9 @@ function StudentCard({
   onChangeLevel: (student: StudentWithHistory) => void;
 }) {
   const router = useRouter();
-  const levelChanges = Array.isArray(student.levelChanges) ? student.levelChanges : [];
+  const levelChanges: LevelChangeRecord[] = Array.isArray(student.levelChanges)
+    ? (student.levelChanges as LevelChangeRecord[])
+    : [];
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();

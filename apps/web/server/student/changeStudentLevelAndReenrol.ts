@@ -210,6 +210,7 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
 
     const invoiceByEnrolment = new Map<string, InvoiceWithCoverage | null>();
     existingInvoices.forEach((inv) => {
+      if (!inv.enrolmentId) return;
       const existing = invoiceByEnrolment.get(inv.enrolmentId);
       if (!existing) {
         invoiceByEnrolment.set(inv.enrolmentId, inv);
