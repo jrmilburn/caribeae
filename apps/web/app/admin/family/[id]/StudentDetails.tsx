@@ -182,6 +182,13 @@ function EmptyState() {
   );
 }
 
+type LevelChangeItem =
+  StudentWithHistory["levelChanges"] extends Array<infer T>
+    ? T extends object
+      ? T
+      : never
+    : never;
+
 function StudentCard({
   student,
   onEdit,
@@ -196,7 +203,9 @@ function StudentCard({
   onChangeLevel: (student: StudentWithHistory) => void;
 }) {
   const router = useRouter();
-  const levelChanges = Array.isArray(student.levelChanges) ? student.levelChanges : [];
+  const levelChanges: LevelChangeItem[] = Array.isArray(student.levelChanges)
+    ? (student.levelChanges as LevelChangeItem[])
+    : [];
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();
