@@ -220,6 +220,8 @@ function StudentCard({
     await onDelete(student.id);
   };
 
+  const levelChanges = student.levelChanges ?? [];
+
   return (
     <button
       type="button"
@@ -289,7 +291,7 @@ function StudentCard({
         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Level history
         </div>
-        {student.levelChanges && student.levelChanges.length ? (
+        {levelChanges && levelChanges.length ? (
           <div className="space-y-1">
             {student.levelChanges.map((change) => (
               <div key={change.id} className="text-xs text-muted-foreground">
