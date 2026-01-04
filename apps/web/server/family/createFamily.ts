@@ -2,32 +2,26 @@
 
 import { prisma } from "@/lib/prisma";
 
-import type { ClientFamily } from "./types";
+import type { ClientFamily, FamilyActionResult } from "./types";
+import { parseFamilyPayload } from "./types";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
-export async function createFamily(payload : ClientFamily) {
+export async function createFamily(payload: ClientFamily): Promise<FamilyActionResult> {
+    await getOrCreateUser();
 
-    await getOrCreateUser()
-
-    const newFamily = await prisma.family.create({
-        data: {
-            name: payload?.name,
-            primaryContactName: payload?.primaryContactName,
-            primaryEmail: payload?.primaryEmail,
-            primaryPhone: payload?.primaryPhone,
-            secondaryContactName: payload?.secondaryContactName,
-            secondaryEmail: payload?.secondaryEmail,
-            secondaryPhone: payload?.secondaryPhone,
-            medicalContactName: payload?.medicalContactName,
-            medicalContactPhone: payload?.medicalContactPhone
-        }
-    })
-
-    if(!newFamily) {
-        return { success: false }
+    const parsed = parseFamilyPayload(payload);
+    if (!parsed.success) {
+        return { success: false, error: parsed.error };
     }
 
-    return { success: true }
+    const newFamily = await prisma.family.create({
+        data: parsed.data,
+    });
 
+    if (!newFamily) {
+        return { success: false, error: "Unable to create family." };
+    }
+
+    return { success: true, family: newFamily };
 }
