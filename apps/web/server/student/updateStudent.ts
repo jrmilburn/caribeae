@@ -6,7 +6,9 @@ import type { ClientStudent } from "./types";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
-export async function updateStudent(payload : ClientStudent, id : string) {
+type UpdateStudentPayload = ClientStudent & { id: string };
+
+export async function updateStudent(payload: UpdateStudentPayload) {
 
     await getOrCreateUser()
 
@@ -14,7 +16,7 @@ export async function updateStudent(payload : ClientStudent, id : string) {
 
     const updatedStudent = await prisma.student.update({
         where: {
-            id
+            id: payload.id
         },
         data: {
             name: payload?.name,

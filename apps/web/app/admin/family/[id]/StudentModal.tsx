@@ -59,6 +59,8 @@ type StudentModalProps = {
   levels: Level[];
 };
 
+type StudentFormState = ClientStudent & { id?: string };
+
 function toDateInputValue(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -80,29 +82,32 @@ export function StudentModal({
   // Prefer a sensible default level on create (first in list)
   const defaultLevelId = React.useMemo(() => levels?.[0]?.id ?? "", [levels]);
 
-  const [form, setForm] = React.useState<ClientStudent>({
+  const [form, setForm] = React.useState<StudentFormState>({
     name: "",
     dateOfBirth: "",
     medicalNotes: "",
     familyId,
     levelId: defaultLevelId,
-  } as ClientStudent);
+  });
 
   const [submitting, setSubmitting] = React.useState(false);
   const [touched, setTouched] = React.useState<{ name?: boolean; levelId?: boolean }>({});
+  const [initialLevelId, setInitialLevelId] = React.useState<string>("");
 
   React.useEffect(() => {
     if (!open) return;
 
     if (student) {
       setForm({
+        id: student.id,
         name: student.name ?? "",
         dateOfBirth: student.dateOfBirth ? toDateInputValue(student.dateOfBirth) : "",
         medicalNotes: (student).medicalNotes ?? "",
         familyId,
         // NOTE: assumes student has levelId
         levelId: (student).levelId ?? defaultLevelId,
-      } as ClientStudent);
+      });
+      setInitialLevelId(student.levelId ?? "");
     } else {
       setForm({
         name: "",
@@ -110,7 +115,8 @@ export function StudentModal({
         medicalNotes: "",
         familyId,
         levelId: defaultLevelId,
-      } as ClientStudent);
+      });
+      setInitialLevelId(defaultLevelId);
     }
 
     setTouched({});
@@ -137,9 +143,27 @@ export function StudentModal({
     const levelOk = String((form).levelId ?? "").trim().length > 0;
     if (!nameOk || !levelOk) return;
 
+    const currentLevelId = String((form).levelId ?? "");
+    if (mode === "edit" && currentLevelId !== initialLevelId) {
+      const confirmation = window.prompt(
+        "Changing a student's level here will not record a level change history. Type CONFIRM to proceed.",
+        ""
+      );
+
+      if ((confirmation ?? "").trim().toUpperCase() !== "CONFIRM") {
+        return;
+      }
+    }
+
+    const payload: StudentFormState = {
+      ...form,
+      id: student?.id ?? form.id,
+      familyId,
+    };
+
     try {
       setSubmitting(true);
-      const res = await onSave(form);
+      const res = await onSave(payload);
       if (res?.success) close();
     } finally {
       setSubmitting(false);
@@ -197,6 +221,10 @@ export function StudentModal({
                     ))}
                   </SelectContent>
                 </Select>
+
+                <p className="text-xs text-muted-foreground">
+                  For proper level progression/history use the Level Change workflow.
+                </p>
 
                 {levelError && <p className="text-xs text-destructive">{levelError}</p>}
               </div>

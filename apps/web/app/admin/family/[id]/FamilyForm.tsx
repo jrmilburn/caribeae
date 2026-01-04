@@ -125,7 +125,7 @@ export default function FamilyForm({
   const handleSaveStudent = async (payload: ClientStudent & { familyId: string; id?: string }) => {
     try {
       if (payload.id) {
-        await updateStudent(payload, payload.id);
+        await updateStudent({ ...payload, id: payload.id });
       } else {
         await createStudent(payload);
       }

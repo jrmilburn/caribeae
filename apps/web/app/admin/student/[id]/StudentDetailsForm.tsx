@@ -51,16 +51,14 @@ export function StudentDetailsForm({
     setSaving(true);
 
     try {
-      await updateStudent(
-        {
-          name: form.name,
-          levelId: form.levelId,
-          dateOfBirth: form.dateOfBirth,
-          medicalNotes: form.medicalNotes,
-          familyId: student.familyId,
-        },
-        student.id
-      );
+      await updateStudent({
+        id: student.id,
+        name: form.name,
+        levelId: form.levelId,
+        dateOfBirth: form.dateOfBirth,
+        medicalNotes: form.medicalNotes,
+        familyId: student.familyId,
+      });
 
       router.refresh();
     } finally {

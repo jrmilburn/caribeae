@@ -96,7 +96,7 @@ export default function StudentDetails({
   const onSave = async (payload: ClientStudent & { familyId: string; id?: string }) => {
     try {
       if (payload.id) {
-        await updateStudent(payload, payload.id);
+        await updateStudent({ ...payload, id: payload.id });
       } else {
         await createStudent(payload);
       }
