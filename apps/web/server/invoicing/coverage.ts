@@ -7,6 +7,7 @@ export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
+    template: { select: { dayOfWeek: true, name: true } },
   },
 } satisfies Prisma.EnrolmentInclude;
 

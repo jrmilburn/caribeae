@@ -21,6 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
@@ -35,12 +36,14 @@ export function CreateEnrolmentDialog({
   open,
   onOpenChange,
   templateId,
+  templateDayOfWeek,
   students,
   enrolmentPlans,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   templateId: string;
+  templateDayOfWeek: number | null;
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
 }) {
@@ -64,7 +67,15 @@ export function CreateEnrolmentDialog({
     }
   }, [open]);
 
-  const availablePlans = enrolmentPlans;
+  const availablePlans = React.useMemo(() => {
+    if (templateDayOfWeek === 5) {
+      return enrolmentPlans.filter((plan) => plan.isSaturdayOnly);
+    }
+    if (typeof templateDayOfWeek === "number") {
+      return enrolmentPlans.filter((plan) => !plan.isSaturdayOnly);
+    }
+    return enrolmentPlans;
+  }, [enrolmentPlans, templateDayOfWeek]);
   const selectedPlan = React.useMemo(
     () => availablePlans.find((p) => p.id === planId) ?? null,
     [availablePlans, planId]
@@ -138,12 +149,29 @@ export function CreateEnrolmentDialog({
               <SelectContent>
                 {availablePlans.map((plan) => (
                   <SelectItem key={plan.id} value={plan.id}>
-                    {plan.name} ·{" "}
-                    {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                    <span className="flex items-center gap-2">
+                      <span>
+                        {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                      </span>
+                      {plan.isSaturdayOnly ? (
+                        <Badge variant="secondary" className="uppercase">
+                          Saturday
+                        </Badge>
+                      ) : null}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {availablePlans.length === 0 ? (
+              <p className="text-xs text-destructive">
+                {templateDayOfWeek === 5
+                  ? "No Saturday plans exist for this level. Create one in Plans."
+                  : typeof templateDayOfWeek === "number"
+                    ? "No weekday plans exist for this level. Create one in Plans."
+                    : "No enrolment plans are available for this class."}
+              </p>
+            ) : null}
             {requiresMultipleTemplates ? (
               <p className="text-xs text-destructive">
                 {selectionRequirement.helper} Use the student schedule to select multiple classes.

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -28,11 +29,14 @@ export async function purchaseCredits(input: PurchaseCreditsInput) {
     include: {
       plan: true,
       student: { select: { familyId: true } },
+      template: { select: { dayOfWeek: true, name: true } },
     },
   });
 
   if (!enrolment) throw new Error("Enrolment not found.");
   if (!enrolment.plan) throw new Error("Enrolment plan missing.");
+  if (!enrolment.template) throw new Error("Class template missing for enrolment.");
+  assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
   if (enrolment.plan.billingType === BillingType.PER_WEEK) {
     throw new Error("Use the weekly pay-ahead flow for this enrolment.");
   }

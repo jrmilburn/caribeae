@@ -11,6 +11,7 @@ import { normalizePlan, normalizeStartDate } from "@/server/enrolment/planRules"
 import { validateSelection } from "@/server/enrolment/validateSelection";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
+import { assertPlanMatchesTemplates } from "./planCompatibility";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -51,8 +52,18 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
 
     const templates = await tx.classTemplate.findMany({
       where: { id: { in: payload.templateIds } },
-      select: { id: true, levelId: true, active: true, startDate: true, endDate: true, name: true },
+      select: {
+        id: true,
+        levelId: true,
+        active: true,
+        startDate: true,
+        endDate: true,
+        name: true,
+        dayOfWeek: true,
+      },
     });
+
+    assertPlanMatchesTemplates(enrolment.plan, templates);
 
     const selectionValidation = validateSelection({
       plan: enrolment.plan,

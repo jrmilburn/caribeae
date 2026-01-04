@@ -11,12 +11,13 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 type PrismaClientOrTx = Prisma.PrismaClient | Prisma.TransactionClient;
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
   include: {
-    enrolment: { include: { plan: true } };
+    enrolment: { include: { plan: true, template: { select: { dayOfWeek: true, name: true } } } };
     lineItems: { select: { kind: true; quantity: true } };
   };
 }>;
@@ -114,6 +115,10 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
 
     const enrolment = invoice.enrolment;
     if (!enrolment?.plan) return invoice;
+    if (!enrolment.template) {
+      throw new Error("Class template missing for enrolment.");
+    }
+    assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
 
     const hasEnrolmentLineItem = invoice.lineItems.some((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
     if (!hasEnrolmentLineItem) return invoice;

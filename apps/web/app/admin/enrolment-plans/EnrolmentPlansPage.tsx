@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,7 +90,16 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                 <TableBody>
                   {plans.map((plan) => (
                     <TableRow key={plan.id}>
-                      <TableCell className="font-medium">{plan.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{plan.name}</span>
+                          {plan.isSaturdayOnly ? (
+                            <Badge variant="secondary" className="uppercase">
+                              Saturday
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
                       <TableCell>{plan.level.name}</TableCell>
                       <TableCell className="capitalize">
                         {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}

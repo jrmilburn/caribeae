@@ -50,10 +50,6 @@ export function EnrolmentsTable({
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
 
-  if (!enrolments.length) {
-    return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
-  }
-
   const planSiblingsById = React.useMemo(() => {
     return enrolments.reduce<Record<string, EnrolmentWithStudent[]>>((acc, enrolment) => {
       if (enrolment.planId) {
@@ -63,6 +59,10 @@ export function EnrolmentsTable({
       return acc;
     }, {});
   }, [enrolments]);
+
+  if (!enrolments.length) {
+    return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
+  }
 
   const handleUndo = async (id: string) => {
     const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
@@ -95,11 +95,6 @@ export function EnrolmentsTable({
           </TableHeader>
           <TableBody>
             {enrolments.map((e) => {
-              const siblingTemplates =
-                e.planId && planSiblingsById[e.planId]
-                  ? planSiblingsById[e.planId].map((s) => s.templateId)
-                  : [e.templateId];
-
               return (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">

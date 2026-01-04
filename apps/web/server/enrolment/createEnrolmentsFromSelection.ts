@@ -18,6 +18,7 @@ import {
 } from "./planRules";
 import { validateSelection } from "./validateSelection";
 import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
+import { assertPlanMatchesTemplates } from "./planCompatibility";
 
 /**
  * Findings + Proposed Fix
@@ -96,6 +97,7 @@ export async function createEnrolmentsFromSelection(
             startDate: true,
             endDate: true,
             name: true,
+            dayOfWeek: true,
           },
         })
       : [];
@@ -115,6 +117,7 @@ export async function createEnrolmentsFromSelection(
         startDate: true,
         endDate: true,
         name: true,
+        dayOfWeek: true,
       },
       orderBy: [{ startDate: "asc" }, { id: "asc" }],
     });
@@ -130,6 +133,8 @@ export async function createEnrolmentsFromSelection(
   if (templates.length !== templateIds.length) {
     throw new Error("Some selected classes could not be found.");
   }
+
+  assertPlanMatchesTemplates(plan, templates);
 
   const selectionCheck = validateSelection({ plan, templateIds, templates });
   if (!selectionCheck.ok) {
