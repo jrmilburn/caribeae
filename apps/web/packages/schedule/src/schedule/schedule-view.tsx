@@ -39,6 +39,7 @@ export type ScheduleViewProps = {
   filters?: ScheduleFilters;
   headerActions?: React.ReactNode;
   selectedTemplateIds?: string[];
+  weekAnchor?: Date;
 };
 
 
@@ -55,13 +56,14 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       allowTemplateMoves = true,
       filters,
       headerActions,
-      selectedTemplateIds
+      selectedTemplateIds,
+      weekAnchor
     },
     ref
   ) {
     const [viewMode, setViewMode] = useState<"week" | "day">(defaultViewMode);
     const [currentWeek, setCurrentWeek] = useState<Date>(() =>
-      normalizeWeekAnchor(new Date())
+      normalizeWeekAnchor(weekAnchor ?? new Date())
     );
     const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
     const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
@@ -83,6 +85,13 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     const weekDates = useMemo(() => {
       return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
     }, [weekStart]);
+
+    React.useEffect(() => {
+      if (!weekAnchor) return;
+      const normalized = normalizeWeekAnchor(weekAnchor);
+      setCurrentWeek(normalized);
+      setSelectedDay(toMondayIndex(normalized));
+    }, [weekAnchor]);
 
     // Initial / week-navigation load (shows loading state)
     React.useEffect(() => {

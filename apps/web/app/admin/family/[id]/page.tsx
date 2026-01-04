@@ -4,6 +4,7 @@ import { getLevels } from "@/server/level/getLevels";
 import { getUnpaidFamiliesSummary, maybeRunInvoicingSweep } from "@/server/invoicing";
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
+import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
 
 type PageProps = {
   params: { id: string };
@@ -18,9 +19,10 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   const search = await searchParams;
 
   await maybeRunInvoicingSweep();
-  const [family, levels, unpaidSummary, billing, billingPosition] = await Promise.all([
+  const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition] = await Promise.all([
     getFamily(id),
     getLevels(),
+    getEnrolmentPlans(),
     getUnpaidFamiliesSummary(),
     getFamilyBillingData(id),
     getFamilyBillingPosition(id),
@@ -42,6 +44,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       unpaidSummary={unpaidSummary}
       billing={billing}
       billingPosition={billingPosition}
+      enrolmentPlans={enrolmentPlans}
     />
   );
 }

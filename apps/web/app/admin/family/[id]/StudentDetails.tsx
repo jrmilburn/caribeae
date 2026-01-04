@@ -1,12 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { Student } from "@prisma/client";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { StudentModal } from "./StudentModal";
 import type { ClientStudent } from "@/server/student/types";
-import type { Level } from "@prisma/client";
+import type { EnrolmentPlan, Level } from "@prisma/client";
 
 import { MoreVertical, Trash2 } from "lucide-react";
 
@@ -26,17 +25,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import type { EnrolContext } from "./FamilyForm";
+import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
+import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
+
+type StudentWithHistory = FamilyWithStudentsAndInvoices["students"][number];
 
 type Props = {
-  students: Student[];
+  students: StudentWithHistory[];
   familyId: string;
   enrolContext?: EnrolContext | null;
   levels: Level[];
   layout?: "section" | "plain";
   className?: string;
   onAddStudent?: () => void;
-  onEditStudent?: (student: Student) => void;
+  onEditStudent?: (student: StudentWithHistory) => void;
   renderModal?: boolean;
+  enrolmentPlans: EnrolmentPlan[];
 };
 
 export default function StudentDetails({
@@ -49,11 +53,13 @@ export default function StudentDetails({
   onAddStudent,
   onEditStudent,
   renderModal = true,
+  enrolmentPlans,
 }: Props) {
   const router = useRouter();
 
   const [open, setOpen] = React.useState(false);
-  const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = React.useState<StudentWithHistory | null>(null);
+  const [changingStudent, setChangingStudent] = React.useState<StudentWithHistory | null>(null);
 
   const handleAdd = () => {
     if (onAddStudent) {
@@ -64,7 +70,7 @@ export default function StudentDetails({
     setOpen(true);
   };
 
-  const handleEdit = (student: Student) => {
+  const handleEdit = (student: StudentWithHistory) => {
     if (onEditStudent) {
       onEditStudent(student);
       return;
@@ -132,6 +138,7 @@ export default function StudentDetails({
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 enrolContext={enrolContext ?? null}
+                onChangeLevel={setChangingStudent}
               />
             ))}
           </div>
@@ -151,6 +158,18 @@ export default function StudentDetails({
           levels={levels}
         />
       ) : null}
+
+      {changingStudent ? (
+        <ChangeStudentLevelDialog
+          open={Boolean(changingStudent)}
+          onOpenChange={(next) => {
+            if (!next) setChangingStudent(null);
+          }}
+          student={changingStudent}
+          levels={levels}
+          enrolmentPlans={enrolmentPlans}
+        />
+      ) : null}
     </>
   );
 }
@@ -168,13 +187,16 @@ function StudentCard({
   onEdit,
   onDelete,
   enrolContext,
+  onChangeLevel,
 }: {
-  student: Student;
-  onEdit: (student: Student) => void;
+  student: StudentWithHistory;
+  onEdit: (student: StudentWithHistory) => void;
   onDelete: (id: string) => void;
   enrolContext?: { templateId: string; startDate?: string } | null;
+  onChangeLevel: (student: StudentWithHistory) => void;
 }) {
   const router = useRouter();
+  const levelChanges = Array.isArray(student.levelChanges) ? student.levelChanges : [];
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -239,6 +261,14 @@ function StudentCard({
             <DropdownMenuItem onClick={goToManage}>
               Manage Student
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onChangeLevel(student);
+              }}
+            >
+              Change level
+            </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
@@ -255,6 +285,25 @@ function StudentCard({
           {student.medicalNotes}
         </p>
       ) : null}
+
+      <div className="mt-3 space-y-1">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Level history
+        </div>
+        {levelChanges.length ? (
+          <div className="space-y-1">
+            {levelChanges.map((change) => (
+              <div key={change.id} className="text-xs text-muted-foreground">
+                {format(change.effectiveDate, "dd MMM yyyy")}:{" "}
+                {change.fromLevel?.name ?? "—"} → {change.toLevel?.name ?? "—"}
+                {change.note ? ` · ${change.note}` : ""}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No level changes recorded.</p>
+        )}
+      </div>
     </button>
   );
 }
