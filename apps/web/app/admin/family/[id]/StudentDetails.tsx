@@ -221,8 +221,6 @@ function StudentCard({
     await onDelete(student.id);
   };
 
-  const levelChanges = student.levelChanges ?? [];
-
   return (
     <button
       type="button"
