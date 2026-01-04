@@ -196,7 +196,9 @@ function StudentCard({
   onChangeLevel: (student: StudentWithHistory) => void;
 }) {
   const router = useRouter();
-  const levelChanges = Array.isArray(student.levelChanges) ? student.levelChanges : [];
+  const levelChanges: StudentWithHistory["levelChanges"] = Array.isArray(student.levelChanges)
+    ? student.levelChanges
+    : [];
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();
