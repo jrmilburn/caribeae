@@ -34,13 +34,6 @@ type FamilyHeaderSummaryProps = {
   sticky?: boolean;
 };
 
-function formatDate(value?: Date | string | null) {
-  if (!value) return "—";
-  const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return format(d, "d MMM yyyy");
-}
-
 export function FamilyHeaderSummary({
   familyName,
   contact,
@@ -50,9 +43,6 @@ export function FamilyHeaderSummary({
   actions,
   sticky = true,
 }: FamilyHeaderSummaryProps) {
-  const outstanding = outstandingCents ?? 0;
-  const nextDueLabel = nextDue?.dueAt ? formatDate(nextDue.dueAt) : null;
-  const lastPaymentLabel = lastPayment?.paidAt ? `${formatDate(lastPayment.paidAt)}` : null;
 
   return (
     <div
@@ -82,57 +72,10 @@ export function FamilyHeaderSummary({
               ) : null}
             </div>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <HeaderStat
-              icon={<Wallet className="h-4 w-4 text-muted-foreground" />}
-              label="Outstanding"
-              value={formatCurrencyFromCents(outstanding)}
-            />
-            <HeaderStat
-              label="Next due"
-              value={nextDueLabel ?? "—"}
-              badge={nextDue?.status ? <Badge variant="secondary">{nextDue.status}</Badge> : null}
-            />
-            <HeaderStat
-              label="Last payment"
-              value={lastPaymentLabel ?? "—"}
-              badge={
-                lastPayment?.amountCents != null ? (
-                  <Badge variant="outline">{formatCurrencyFromCents(lastPayment.amountCents)}</Badge>
-                ) : null
-              }
-            />
-          </div>
         </div>
 
         {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </div>
-    </div>
-  );
-}
-
-function HeaderStat({
-  icon,
-  label,
-  value,
-  badge,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string;
-  badge?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border bg-card/60 px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        {icon ? <div className="text-muted-foreground">{icon}</div> : null}
-        <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
-          <div className="text-lg font-semibold leading-tight">{value}</div>
-        </div>
-      </div>
-      {badge ? <div className="text-xs">{badge}</div> : null}
     </div>
   );
 }

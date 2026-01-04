@@ -16,7 +16,6 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import FamilyDetails from "./FamilyDetails";
 import StudentDetails from "./StudentDetails";
 import FamilyInvoices from "./FamilyInvoices";
-import { UnpaidFamiliesIndicator } from "../UnpaidFamiliesIndicator";
 import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 import { StudentModal } from "./StudentModal";
 
@@ -178,9 +177,6 @@ export default function FamilyForm({
           </div>
         }
       />
-
-      <UnpaidFamiliesIndicator summary={unpaidSummary} />
-
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto space-y-4">
           <FamilyTabs
@@ -250,16 +246,12 @@ function FamilyTabs({
 }: FamilyTabsProps) {
   return (
     <Card className="border-none shadow-none">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-base">Family record</CardTitle>
-            <p className="text-sm text-muted-foreground">Tabs keep billing, students, and history tidy.</p>
-          </div>
+      <CardHeader className="space-y-3 p-0">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between px-2">
           <Badge variant="secondary">{family.students.length} students</Badge>
         </div>
 
-        <Tabs value={activeTab} onValueChange={onTabChange}>
+        <Tabs value={activeTab} onValueChange={onTabChange} className="px-2">
           <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
@@ -272,7 +264,7 @@ function FamilyTabs({
           </TabsContent>
 
           {visitedTabs.has("billing") ? (
-            <TabsContent value="billing" className="pt-4">
+            <TabsContent value="billing" className="pt-4 max-w-none ">
               <BillingTab
                 family={family}
                 billing={billing}

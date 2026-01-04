@@ -80,7 +80,7 @@ export function SettingsPageClient({
         </Card>
       </aside>
 
-      <div className="flex-1 space-y-6">
+      <div className="flex-1 space-y-6 overflow-y-auto">
         {active === "levels" && <LevelsSection levels={levels} />}
         {active === "plans" && <EnrolmentPlansSection plans={plans} levels={levels} />}
         {active === "teachers" && <TeachersSection teachers={teachers} />}

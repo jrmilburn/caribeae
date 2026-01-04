@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { FamilyModal } from "./FamilyModal"
-import { UnpaidFamiliesIndicator } from "./UnpaidFamiliesIndicator";
 
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
@@ -75,7 +74,6 @@ export default function FamilyList({ families, unpaidSummary }: { families: Fami
 
   return (
     <div className="w-full">
-      <UnpaidFamiliesIndicator summary={unpaidSummary} />
       <ListHeader
         title="Families"
         totalCount={families.length}

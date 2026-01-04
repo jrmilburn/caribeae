@@ -50,11 +50,13 @@ model Family {
   medicalContactName  String?
   medicalContactPhone String?
 
+  address String?
+
   students Student[]
   invoices Invoice[]
 
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  updatedAt     DateTime       @updatedAt @default(now())
   payments      Payment[]
   conversations Conversation[]
   messages      Message[]
@@ -64,7 +66,7 @@ model Student {
   id String @id @default(cuid())
 
   name         String
-  dateOfBirth  DateTime
+  dateOfBirth  DateTime?
   medicalNotes String?
 
   family   Family @relation(fields: [familyId], references: [id])
@@ -73,8 +75,8 @@ model Student {
   level   Level?  @relation(fields: [levelId], references: [id])
   levelId String?
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdAt        DateTime          @default(now()) 
+  updatedAt        DateTime          @updatedAt @default(now())
   enrolments       Enrolment[]
   attendances      Attendance[]
   invoiceLineItems InvoiceLineItem[]
