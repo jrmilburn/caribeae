@@ -7,7 +7,7 @@ export default async function Home() {
 
   const { userId } = await auth();
 
-  if (!userId) return null;
+  if (!userId) redirect("/sign-in");
 
   redirect("/admin/schedule")
 
