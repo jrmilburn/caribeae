@@ -19,7 +19,7 @@ import FamilyInvoices from "./FamilyInvoices";
 import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 import { StudentModal } from "./StudentModal";
 
-import type { Level } from "@prisma/client";
+import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
@@ -40,6 +40,13 @@ export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
             paidThroughDate: true;
             status: true;
           };
+        };
+        levelChanges: {
+          include: {
+            fromLevel: true;
+            toLevel: true;
+          };
+          orderBy: { effectiveDate: "desc" };
         };
       };
     };
@@ -72,6 +79,7 @@ type FamilyFormProps = {
   unpaidSummary: UnpaidFamiliesSummary;
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
   billingPosition: FamilyBillingPosition;
+  enrolmentPlans: EnrolmentPlan[];
 };
 
 export default function FamilyForm({
@@ -80,6 +88,7 @@ export default function FamilyForm({
   levels,
   billing,
   billingPosition,
+  enrolmentPlans,
 }: FamilyFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState("overview");
@@ -184,16 +193,17 @@ export default function FamilyForm({
             onTabChange={handleTabChange}
             family={family}
             billing={billing}
-            billingPosition={billingPosition}
-            enrolContext={enrolContext}
-            levels={levels}
-            onAddStudent={handleAddStudent}
-            onEditStudent={handleEditStudent}
-            paymentSheetOpen={paymentSheetOpen}
-            onPaymentSheetChange={setPaymentSheetOpen}
-          />
-        </div>
+          billingPosition={billingPosition}
+          enrolContext={enrolContext}
+          levels={levels}
+          onAddStudent={handleAddStudent}
+          onEditStudent={handleEditStudent}
+          paymentSheetOpen={paymentSheetOpen}
+          onPaymentSheetChange={setPaymentSheetOpen}
+          enrolmentPlans={enrolmentPlans}
+        />
       </div>
+    </div>
 
       <FamilyActionSheet open={familySheetOpen} onOpenChange={setFamilySheetOpen}>
         <FamilyDetails family={family} layout="plain" onSaved={() => setFamilySheetOpen(false)} />
@@ -227,6 +237,7 @@ type FamilyTabsProps = {
   onEditStudent: (student: Student) => void;
   paymentSheetOpen: boolean;
   onPaymentSheetChange: (open: boolean) => void;
+  enrolmentPlans: EnrolmentPlan[];
 };
 
 function FamilyTabs({
@@ -242,6 +253,7 @@ function FamilyTabs({
   onEditStudent,
   paymentSheetOpen,
   onPaymentSheetChange,
+  enrolmentPlans,
 }: FamilyTabsProps) {
   return (
     <Card className="border-none shadow-none">
@@ -282,6 +294,7 @@ function FamilyTabs({
                 levels={levels}
                 onAddStudent={onAddStudent}
                 onEditStudent={onEditStudent}
+                enrolmentPlans={enrolmentPlans}
               />
             </TabsContent>
           ) : null}
@@ -367,12 +380,14 @@ function StudentsTab({
   levels,
   onAddStudent,
   onEditStudent,
+  enrolmentPlans,
 }: {
   family: FamilyWithStudentsAndInvoices;
   enrolContext?: EnrolContext | null;
   levels: Level[];
   onAddStudent: () => void;
   onEditStudent: (student: Student) => void;
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   return (
     <div className="space-y-3">
@@ -385,6 +400,7 @@ function StudentsTab({
         onAddStudent={onAddStudent}
         onEditStudent={onEditStudent}
         renderModal={false}
+        enrolmentPlans={enrolmentPlans}
       />
     </div>
   );
