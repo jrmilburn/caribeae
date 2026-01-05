@@ -1,4 +1,4 @@
-import { addDays, addMinutes, endOfDay, format, getISODay, isValid, parseISO, startOfDay } from "date-fns";
+import { addDays, addMinutes, format, getISODay, isValid, parse, parseISO } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
 import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
@@ -34,14 +34,76 @@ export type TemplateOccurrence = {
   cancellationReason?: string | null;
 };
 
+export const SCHEDULE_TIME_ZONE = "Australia/Brisbane";
+
+type TimeZoneDateParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function getTimeZoneDateParts(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): TimeZoneDateParts {
+  const formatter = new Intl.DateTimeFormat("en-AU", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(date).reduce<Record<string, number>>((acc, part) => {
+    if (part.type !== "literal") {
+      acc[part.type] = Number(part.value);
+    }
+    return acc;
+  }, {});
+
+  return {
+    year: parts.year ?? 0,
+    month: parts.month ?? 0,
+    day: parts.day ?? 0,
+    hour: parts.hour ?? 0,
+    minute: parts.minute ?? 0,
+    second: parts.second ?? 0,
+  };
+}
+
+function getTimeZoneOffset(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): number {
+  const parts = getTimeZoneDateParts(date, timeZone);
+  const asUTC = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second
+  );
+  return asUTC - date.getTime();
+}
+
 export function safeParseDateParam(value: DateParam): Date | null {
-  const parsed = value instanceof Date ? value : value ? parseISO(value) : null;
-  if (!parsed || !isValid(parsed)) return null;
-  return parsed;
+  if (!value) return null;
+
+  const parsed =
+    value instanceof Date
+      ? value
+      : parse(value, "yyyy-MM-dd", new Date());
+
+  if (isValid(parsed)) return dateAtMinutesLocal(parsed, 0);
+
+  const fallback = value instanceof Date ? value : parseISO(value);
+  if (!fallback || !isValid(fallback)) return null;
+  return dateAtMinutesLocal(fallback, 0);
 }
 
 export function formatAsDateParam(value: Date): string {
-  return format(startOfDay(value), "yyyy-MM-dd");
+  return format(dateAtMinutesLocal(value, 0), "yyyy-MM-dd");
 }
 
 export function normalizeDateRange(params: {
@@ -53,14 +115,28 @@ export function normalizeDateRange(params: {
   const baseFrom = params.from ?? params.defaultFrom ?? new Date();
   const baseTo = params.to ?? params.defaultTo ?? baseFrom;
 
-  const normalizedFrom = startOfDay(normalizeLocalDate(baseFrom));
-  const normalizedTo = endOfDay(normalizeLocalDate(baseTo));
+  const normalizedFrom = dateAtMinutesLocal(normalizeLocalDate(baseFrom), 0);
+  const normalizedTo = dateAtMinutesLocal(normalizeLocalDate(baseTo), (24 * 60) - 1);
 
   if (normalizedTo.getTime() < normalizedFrom.getTime()) {
     throw new Error("Range end must be on or after range start");
   }
 
   return { from: normalizedFrom, to: normalizedTo };
+}
+
+export function dateAtMinutesLocal(day: Date, minutes: number, timeZone: string = SCHEDULE_TIME_ZONE): Date {
+  const parts = getTimeZoneDateParts(day, timeZone);
+  const utcTimestamp = Date.UTC(parts.year, parts.month - 1, parts.day, 0, minutes, 0, 0);
+  const offset = getTimeZoneOffset(new Date(utcTimestamp), timeZone);
+  return new Date(utcTimestamp - offset);
+}
+
+export function getLocalTimeInfo(date: Date, timeZone: string = SCHEDULE_TIME_ZONE) {
+  const parts = getTimeZoneDateParts(date, timeZone);
+  const dayOfWeek = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(); // 0=Sun
+  const minutesSinceMidnight = parts.hour * 60 + parts.minute;
+  return { parts, dayOfWeek, minutesSinceMidnight };
 }
 
 export function resolveTemplateDurationMinutes(template: TemplateWithTiming): number {
@@ -84,16 +160,16 @@ export function expandTemplatesToOccurrences(
     if (template.dayOfWeek === null || template.dayOfWeek === undefined) return [];
     if (template.startTime === null || template.startTime === undefined) return [];
 
-    const rangeStart = startOfDay(range.from);
-    const rangeEnd = endOfDay(range.to);
-    const templateStart = startOfDay(template.startDate);
-    const templateEnd = template.endDate ? endOfDay(template.endDate) : null;
+    const rangeStart = dateAtMinutesLocal(range.from, 0);
+    const rangeEnd = dateAtMinutesLocal(range.to, (24 * 60) - 1);
+    const templateStart = dateAtMinutesLocal(template.startDate, 0);
+    const templateEnd = template.endDate ? dateAtMinutesLocal(template.endDate, (24 * 60) - 1) : null;
 
     if (templateEnd && templateEnd < rangeStart) return [];
     if (templateStart > rangeEnd) return [];
 
     const targetIsoDay = template.dayOfWeek === 6 ? 7 : template.dayOfWeek + 1; // Prisma comment: 0=Mon..6=Sun
-    let cursor = startOfDay(rangeStart);
+    let cursor = dateAtMinutesLocal(rangeStart, 0);
     const rangeIso = getISODay(cursor);
     const daysUntilTarget = (targetIsoDay - rangeIso + 7) % 7;
     cursor = addDays(cursor, daysUntilTarget);
@@ -110,8 +186,8 @@ export function expandTemplatesToOccurrences(
     while (cursor <= rangeEnd) {
       if (templateEnd && cursor > templateEnd) break;
 
-      const startTime = addMinutes(cursor, template.startTime ?? 0);
-      const endTime = addMinutes(startTime, durationMin);
+      const startTime = dateAtMinutesLocal(cursor, template.startTime ?? 0);
+      const endTime = dateAtMinutesLocal(cursor, (template.startTime ?? 0) + durationMin);
 
       occurrences.push({
         id: `${template.id}-${format(cursor, "yyyy-MM-dd")}`,

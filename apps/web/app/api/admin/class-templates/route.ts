@@ -13,6 +13,7 @@ export async function GET(request: Request) {
 
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
+  const levelId = searchParams.get("levelId");
 
   if (!fromParam || !toParam) {
     return NextResponse.json({ error: "from and to are required" }, { status: 400 });
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
   }
 
-  const classes = await getTemplateOccurrences({ from: fromDate, to: toDate });
+  const classes = await getTemplateOccurrences({ from: fromDate, to: toDate, levelId: levelId ?? undefined });
 
   return NextResponse.json({ classes });
 }

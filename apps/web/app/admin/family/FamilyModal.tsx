@@ -385,10 +385,42 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
               </FieldRow>
             </div>
 
-            {serverError && !isCreate && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {serverError}
+                {serverError && !isCreate && (
+                  <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {serverError}
+                  </div>
+                )}
+
+            {isCreate && step === 1 && (
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <div className="flex w-full justify-end gap-2 sm:w-auto">
+                  <Button type="button" variant="outline" onClick={close} disabled={submitting}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handlePrimaryAction}
+                    disabled={submitting || !form.name.trim()}
+                  >
+                    {primaryLabel}
+                  </Button>
+                </div>
               </div>
+            )}
+
+            {!isCreate && (
+              <DialogFooter className="mt-4">
+                <Button type="button" variant="outline" onClick={close} disabled={submitting}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handlePrimaryAction}
+                  disabled={submitting || !form.name.trim()}
+                >
+                  {primaryLabel}
+                </Button>
+              </DialogFooter>
             )}
           </div>
 
@@ -507,32 +539,31 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
                   {serverError}
                 </div>
               )}
+
+              {isCreate && step === 2 && (
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex w-full justify-start sm:w-auto">
+                    <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
+                      Back
+                    </Button>
+                  </div>
+                  <div className="flex w-full justify-end gap-2 sm:w-auto">
+                    <Button type="button" variant="outline" onClick={close} disabled={submitting}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handlePrimaryAction}
+                      disabled={submitting || !form.name.trim()}
+                    >
+                      {primaryLabel}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
-
-        <DialogFooter className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex w-full justify-start sm:w-auto">
-            {isCreate && step === 2 && (
-              <Button type="button" variant="ghost" onClick={handleBack} disabled={submitting}>
-                Back
-              </Button>
-            )}
-          </div>
-
-          <div className="flex w-full justify-end gap-2 sm:w-auto">
-            <Button type="button" variant="outline" onClick={close} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handlePrimaryAction}
-              disabled={submitting || !form.name.trim()}
-            >
-              {primaryLabel}
-            </Button>
-          </div>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
