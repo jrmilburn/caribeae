@@ -301,7 +301,7 @@ export function AddEnrolmentDialog({
             </div>
           </div>
 
-          <div className="flex h-[520px] flex-col overflow-hidden rounded border">
+          <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
             <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
               <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
                 <Badge variant="secondary" className="font-semibold">
@@ -315,7 +315,7 @@ export function AddEnrolmentDialog({
                 Set student level first.
               </div>
             ) : (
-              <div className="flex-1">
+              <div className="flex-1 min-h-0">
                 <ScheduleView
                   levels={levels}
                   onClassClick={onClassClick}
