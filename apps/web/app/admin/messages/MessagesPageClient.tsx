@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { InboxConversation } from "@/server/messages/actions";
 import type { Family, Level, InvoiceStatus } from "@prisma/client";
+import type { ClassFilterOption } from "@/server/communication/getClassFilterOptions";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ type Props = {
   families: Family[];
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
+  classOptions: ClassFilterOption[];
 };
 
 function ComposeSheet({
@@ -74,18 +76,28 @@ function BroadcastSheet({
   families,
   levels,
   invoiceStatuses,
+  classOptions,
 }: {
   families: Family[];
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
+  classOptions: ClassFilterOption[];
 }) {
+  const [channel, setChannel] = React.useState<Channel>("SMS");
+  const isEmail = channel === "EMAIL";
+
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button variant="outline">Broadcast</Button>
       </SheetTrigger>
 
-      <SheetContent className="w-full sm:max-w-4xl">
+      <SheetContent
+        className={cn(
+          "w-full transition-all duration-300 sm:w-[90vw]",
+          isEmail ? "sm:max-w-[90vw]" : "sm:max-w-4xl",
+        )}
+      >
         <div className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>Broadcast</SheetTitle>
@@ -97,7 +109,9 @@ function BroadcastSheet({
               families={families}
               levels={levels}
               invoiceStatuses={invoiceStatuses}
+              classOptions={classOptions}
               mode="broadcast"
+              onChannelChange={setChannel}
             />
           </div>
         </div>
@@ -111,6 +125,7 @@ export default function MessagesPageClient({
   families,
   levels,
   invoiceStatuses,
+  classOptions,
 }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -121,7 +136,12 @@ export default function MessagesPageClient({
         </div>
 
         <div className="flex gap-2">
-          <BroadcastSheet families={families} levels={levels} invoiceStatuses={invoiceStatuses} />
+          <BroadcastSheet
+            families={families}
+            levels={levels}
+            invoiceStatuses={invoiceStatuses}
+            classOptions={classOptions}
+          />
           <ComposeSheet families={families} levels={levels} invoiceStatuses={invoiceStatuses} />
         </div>
       </div>
