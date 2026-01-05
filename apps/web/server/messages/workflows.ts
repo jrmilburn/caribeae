@@ -26,6 +26,7 @@ export type BroadcastFilters = {
   levelIds?: string[];
   invoiceStatuses?: InvoiceStatus[];
   activeEnrolments?: boolean;
+  classTemplateIds?: string[];
 };
 
 async function familiesFromFilters(filters: BroadcastFilters) {
@@ -53,6 +54,25 @@ async function familiesFromFilters(filters: BroadcastFilters) {
       select: { student: { select: { familyId: true } } },
     });
     enrolments.forEach((e) => familyIds.add(e.student.familyId));
+  }
+
+  if (filters.classTemplateIds?.length) {
+    const validTemplates = await prisma.classTemplate.findMany({
+      where: { id: { in: filters.classTemplateIds } },
+      select: { id: true },
+    });
+    const templateIds = validTemplates.map((t) => t.id);
+
+    if (templateIds.length) {
+      const enrolments = await prisma.enrolment.findMany({
+        where: {
+          templateId: { in: templateIds },
+          ...(filters.activeEnrolments ? { status: EnrolmentStatus.ACTIVE } : {}),
+        },
+        select: { student: { select: { familyId: true } } },
+      });
+      enrolments.forEach((e) => familyIds.add(e.student.familyId));
+    }
   }
 
   // If no filters were selected, default to all families to avoid empty broadcasts.
