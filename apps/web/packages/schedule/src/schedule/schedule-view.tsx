@@ -196,7 +196,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     );
 
     return (
-      <div className="flex h-full w-full flex-col">
+      <div className="flex h-full w-full min-h-0 flex-col">
         {showHeader && (
           <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2">
