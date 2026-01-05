@@ -62,7 +62,14 @@ export function createApiScheduleDataAdapter(
       }
 
       const payload = (await response.json()) as { classes?: ScheduleClass[] };
-      return Array.isArray(payload.classes) ? payload.classes : [];
+
+      if (!Array.isArray(payload.classes)) return [];
+
+      return payload.classes.map((c) => ({
+        ...c,
+        startTime: new Date(c.startTime),
+        endTime: new Date(c.endTime),
+      }));
     },
 
     async moveTemplate(input) {

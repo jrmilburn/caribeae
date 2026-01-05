@@ -1,4 +1,4 @@
-import { addDays, addMinutes, endOfDay, format, getISODay, isValid, parseISO, startOfDay } from "date-fns";
+import { addDays, addMinutes, endOfDay, format, getISODay, isValid, parse, parseISO, startOfDay } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
 import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
@@ -35,9 +35,18 @@ export type TemplateOccurrence = {
 };
 
 export function safeParseDateParam(value: DateParam): Date | null {
-  const parsed = value instanceof Date ? value : value ? parseISO(value) : null;
-  if (!parsed || !isValid(parsed)) return null;
-  return parsed;
+  if (!value) return null;
+
+  const parsed =
+    value instanceof Date
+      ? value
+      : parse(value, "yyyy-MM-dd", new Date());
+
+  if (isValid(parsed)) return parsed;
+
+  const fallback = value instanceof Date ? value : parseISO(value);
+  if (!fallback || !isValid(fallback)) return null;
+  return fallback;
 }
 
 export function formatAsDateParam(value: Date): string {
@@ -61,6 +70,19 @@ export function normalizeDateRange(params: {
   }
 
   return { from: normalizedFrom, to: normalizedTo };
+}
+
+export function dateAtMinutesLocal(day: Date, minutes: number): Date {
+  const midnightLocal = new Date(
+    day.getFullYear(),
+    day.getMonth(),
+    day.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  return addMinutes(midnightLocal, minutes);
 }
 
 export function resolveTemplateDurationMinutes(template: TemplateWithTiming): number {
@@ -110,8 +132,8 @@ export function expandTemplatesToOccurrences(
     while (cursor <= rangeEnd) {
       if (templateEnd && cursor > templateEnd) break;
 
-      const startTime = addMinutes(cursor, template.startTime ?? 0);
-      const endTime = addMinutes(startTime, durationMin);
+      const startTime = dateAtMinutesLocal(cursor, template.startTime ?? 0);
+      const endTime = dateAtMinutesLocal(cursor, (template.startTime ?? 0) + durationMin);
 
       occurrences.push({
         id: `${template.id}-${format(cursor, "yyyy-MM-dd")}`,
