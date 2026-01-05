@@ -79,13 +79,21 @@ function BroadcastSheet({
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
 }) {
+  const [channel, setChannel] = React.useState<Channel>("SMS");
+  const isEmail = channel === "EMAIL";
+
   return (
     <Sheet>
       <SheetTrigger asChild>
         <Button variant="outline">Broadcast</Button>
       </SheetTrigger>
 
-      <SheetContent className="w-full sm:max-w-4xl">
+      <SheetContent
+        className={cn(
+          "w-full transition-all duration-300 sm:w-[90vw]",
+          isEmail ? "sm:max-w-[90vw]" : "sm:max-w-4xl",
+        )}
+      >
         <div className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>Broadcast</SheetTitle>
@@ -98,6 +106,7 @@ function BroadcastSheet({
               levels={levels}
               invoiceStatuses={invoiceStatuses}
               mode="broadcast"
+              onChannelChange={setChannel}
             />
           </div>
         </div>
