@@ -281,7 +281,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl" ref={dialogContentRef}>
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto" ref={dialogContentRef}>
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "New family" : "Edit family"}</DialogTitle>
         </DialogHeader>
