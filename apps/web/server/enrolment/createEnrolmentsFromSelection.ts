@@ -40,6 +40,7 @@ const payloadSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional().nullable(),
   status: z.nativeEnum(EnrolmentStatus).optional(),
+  effectiveLevelId: z.string().optional().nullable(),
 });
 
 export async function createEnrolmentsFromSelection(
@@ -63,11 +64,12 @@ export async function createEnrolmentsFromSelection(
 
   if (!plan) throw new Error("Enrolment plan not found.");
   if (!student) throw new Error("Student not found.");
-  if (plan.billingType === BillingType.PER_WEEK && !student.levelId) {
-    throw new Error("Set the student's level before creating a weekly enrolment.");
+  const effectiveLevelId = payload.effectiveLevelId ?? student.levelId ?? null;
+  if (!effectiveLevelId) {
+    throw new Error("Set the student's level before creating an enrolment.");
   }
-  if (plan.levelId !== student.levelId && student.levelId) {
-    throw new Error("Plan level must match the student level.");
+  if (plan.levelId !== effectiveLevelId) {
+    throw new Error("Enrolment plan level must match the selected level.");
   }
 
   if (plan.billingType === BillingType.PER_WEEK && !plan.durationWeeks) {
@@ -132,6 +134,15 @@ export async function createEnrolmentsFromSelection(
 
   if (templates.length !== templateIds.length) {
     throw new Error("Some selected classes could not be found.");
+  }
+
+  const missingLevelTemplate = templates.find((template) => !template.levelId);
+  if (missingLevelTemplate) {
+    throw new Error("Selected classes must have a level set before enrolling.");
+  }
+  const mismatchedTemplate = templates.find((template) => template.levelId && template.levelId !== effectiveLevelId);
+  if (mismatchedTemplate) {
+    throw new Error("Selected classes must match the student's level.");
   }
 
   assertPlanMatchesTemplates(plan, templates);

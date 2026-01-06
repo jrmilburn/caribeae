@@ -9,6 +9,7 @@ import {
 export type FetchClassesParams = {
   from: Date;
   to: Date;
+  levelId?: string | null;
 };
 
 export type ScheduleDataAdapter = {
@@ -27,7 +28,8 @@ export type ScheduleDataAdapter = {
 
 // Minimal placeholder for consumers to wire in their own server actions later.
 export const placeholderScheduleDataAdapter: ScheduleDataAdapter = {
-  async fetchClasses() {
+  async fetchClasses(_params: FetchClassesParams) {
+    void _params;
     return [];
   },
 };
@@ -40,11 +42,14 @@ export function createApiScheduleDataAdapter(
   endpoint: string = "/api/admin/class-templates"
 ): ScheduleDataAdapter {
   return {
-    async fetchClasses({ from, to }) {
+    async fetchClasses({ from, to, levelId }) {
       const params = new URLSearchParams({
         from: format(from, "yyyy-MM-dd"),
         to: format(to, "yyyy-MM-dd"),
       });
+      if (levelId) {
+        params.set("levelId", levelId);
+      }
 
       const response = await fetch(`${endpoint}?${params.toString()}`, {
         method: "GET",
@@ -57,7 +62,14 @@ export function createApiScheduleDataAdapter(
       }
 
       const payload = (await response.json()) as { classes?: ScheduleClass[] };
-      return Array.isArray(payload.classes) ? payload.classes : [];
+
+      if (!Array.isArray(payload.classes)) return [];
+
+      return payload.classes.map((c) => ({
+        ...c,
+        startTime: new Date(c.startTime),
+        endTime: new Date(c.endTime),
+      }));
     },
 
     async moveTemplate(input) {

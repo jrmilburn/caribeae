@@ -18,6 +18,7 @@ import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule"
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
 import { dayOfWeekFromDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
+import { Badge } from "@/components/ui/badge";
 
 type EnrolmentWithPlan = Enrolment & { plan: EnrolmentPlan; templateId: string };
 
@@ -28,6 +29,7 @@ export function ChangeEnrolmentDialog({
   onOpenChange,
   initialTemplateIds,
   onChanged,
+  studentLevelId,
 }: {
   enrolment: EnrolmentWithPlan;
   levels: Level[];
@@ -35,6 +37,7 @@ export function ChangeEnrolmentDialog({
   onOpenChange: (open: boolean) => void;
   initialTemplateIds: string[];
   onChanged?: () => void;
+  studentLevelId?: string | null;
 }) {
   const router = useRouter();
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>({});
@@ -99,10 +102,21 @@ export function ChangeEnrolmentDialog({
       : selectedTemplateIds.length === selectionRequirement.requiredCount;
 
   const canSubmit = selectionSatisfied && Boolean(startDate) && !saving;
+  const effectiveLevelId = studentLevelId ?? enrolment.plan.levelId ?? null;
+  const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
+  const scheduleBlocked = !effectiveLevelId;
 
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
+    if (!effectiveLevelId) {
+      toast.error("Set the student's level first.");
+      return;
+    }
     if (occurrence.levelId && occurrence.levelId !== enrolment.plan.levelId) {
       toast.error("Select classes that match the enrolment plan level.");
+      return;
+    }
+    if (occurrence.levelId && occurrence.levelId !== effectiveLevelId) {
+      toast.error("Select classes that match the student's level.");
       return;
     }
 
@@ -142,6 +156,10 @@ export function ChangeEnrolmentDialog({
   };
 
   const handleSave = async () => {
+    if (!effectiveLevelId) {
+      toast.error("Set the student's level first.");
+      return;
+    }
     if (!canSubmit) {
       toast.error(selectionRequirement.helper);
       return;
@@ -153,6 +171,7 @@ export function ChangeEnrolmentDialog({
         enrolmentId: enrolment.id,
         templateIds: selectedTemplateIds,
         startDate: `${startDate}T00:00:00`,
+        effectiveLevelId,
       });
       toast.success("Enrolment updated.");
       onOpenChange(false);
@@ -200,14 +219,31 @@ export function ChangeEnrolmentDialog({
             </div>
           </div>
 
-          <div className="h-[520px] overflow-hidden rounded border">
-            <ScheduleView
-              levels={levels}
-              onClassClick={onClassClick}
-              allowTemplateMoves={false}
-              defaultViewMode="week"
-              selectedTemplateIds={selectedTemplateIds}
-            />
+          <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
+            <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+              <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
+                <Badge variant="secondary" className="font-semibold">
+                  Showing classes for {effectiveLevel?.name ?? "—"}
+                </Badge>
+              </div>
+              {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+            </div>
+            {scheduleBlocked ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Set student level first.
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0">
+                <ScheduleView
+                  levels={levels}
+                  onClassClick={onClassClick}
+                  allowTemplateMoves={false}
+                  defaultViewMode="week"
+                  selectedTemplateIds={selectedTemplateIds}
+                  filters={{ levelId: effectiveLevelId, teacherId: null }}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between rounded-md border bg-muted/40 px-4 py-3 text-sm">

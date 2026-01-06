@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { endOfDay, startOfDay } from "date-fns";
 import type { ClassCancellation, Prisma } from "@prisma/client";
+import { endOfDay, startOfDay } from "date-fns";
 import { formatDateKey } from "@/lib/dateKey";
 import {
   expandTemplatesToOccurrences,
@@ -8,7 +8,11 @@ import {
   type TemplateOccurrence,
 } from "@/server/schedule/rangeUtils";
 
-export async function getTemplateOccurrences(params: { from: Date | string; to: Date | string }): Promise<TemplateOccurrence[]> {
+export async function getTemplateOccurrences(params: {
+  from: Date | string;
+  to: Date | string;
+  levelId?: string | null;
+}): Promise<TemplateOccurrence[]> {
   const range = normalizeDateRange(params);
 
   console.log("[schedule] getTemplateOccurrences", {
@@ -16,6 +20,7 @@ export async function getTemplateOccurrences(params: { from: Date | string; to: 
     toParam: params.to,
     normalizedFrom: range.from.toISOString(),
     normalizedTo: range.to.toISOString(),
+    levelId: params.levelId ?? null,
   });
 
   const templates = await prisma.classTemplate.findMany({
@@ -23,6 +28,7 @@ export async function getTemplateOccurrences(params: { from: Date | string; to: 
       active: true,
       startDate: { lte: range.to },
       OR: [{ endDate: null }, { endDate: { gte: range.from } }],
+      ...(params.levelId ? { levelId: params.levelId } : {}),
     },
     include: { level: true, teacher: true },
   });

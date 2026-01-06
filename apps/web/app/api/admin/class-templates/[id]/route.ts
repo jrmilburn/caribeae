@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 import { differenceInMinutes } from "date-fns";
+import { getLocalTimeInfo } from "@/server/schedule/rangeUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,10 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid timestamps" }, { status: 400 });
   }
 
-  const dayOfWeek = (start.getDay() + 6) % 7; // JS Sunday=0 -> Monday=0
+  const { dayOfWeek: localDayOfWeek, minutesSinceMidnight } = getLocalTimeInfo(start);
+  const dayOfWeek = (localDayOfWeek + 6) % 7; // JS Sunday=0 -> Monday=0
   const durationMin = Math.max(0, differenceInMinutes(end, start));
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const startMinutes = minutesSinceMidnight;
   const endMinutes = startMinutes + durationMin;
 
   const updated = await prisma.classTemplate.update({

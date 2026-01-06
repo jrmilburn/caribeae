@@ -12,7 +12,7 @@ export function AppFooter({ className }: { className?: string }) {
         <div className="flex items-center gap-2">
           <span>Powered by</span>
           <Link
-            href="https://studioparallel.com"
+            href="https://www.studioparallel.au"
             target="_blank"
             rel="noreferrer"
             className="text-foreground/80 hover:text-foreground transition"

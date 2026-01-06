@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { Family, Level, InvoiceStatus } from "@prisma/client";
+import type { ClassFilterOption } from "@/server/communication/getClassFilterOptions";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmailBuilder, type EmailBuilderHandle } from "@/components/ui/email-builder";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronDown, X } from "lucide-react";
 
 import {
   previewBroadcastRecipientsAction,
@@ -22,13 +26,36 @@ type ComposeTabProps = {
   families: Family[];
   levels: Level[];
   invoiceStatuses: InvoiceStatus[];
+  classOptions?: ClassFilterOption[];
   mode?: "direct" | "broadcast"; // NEW
   onChannelChange?: (channel: Channel) => void;
 };
 
 export type Channel = "SMS" | "EMAIL";
 
-export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelChange }: ComposeTabProps) {
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function toTimeLabel(minutes: number | null) {
+  if (minutes === null || minutes === undefined) return null;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(mins).padStart(2, "0")} ${suffix}`;
+}
+
+function formatSchedule(option: ClassFilterOption) {
+  const day = typeof option.dayOfWeek === "number" ? DAY_LABELS[option.dayOfWeek] : null;
+  const start = toTimeLabel(option.startTime);
+  const end = toTimeLabel(option.endTime);
+
+  if (day && start && end) return `${day} ${start}–${end}`;
+  if (day && start) return `${day} ${start}`;
+  if (day) return day;
+  return "Schedule TBD";
+}
+
+export function ComposeTab({ families, levels, invoiceStatuses, classOptions = [], mode, onChannelChange }: ComposeTabProps) {
   const showTabs = !mode;
   const defaultValue = mode ?? "direct";
 
@@ -51,6 +78,9 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelC
   const [selectedLevels, setSelectedLevels] = React.useState<Set<string>>(new Set());
   const [selectedInvoiceStatuses, setSelectedInvoiceStatuses] = React.useState<Set<InvoiceStatus>>(new Set());
   const [activeOnly, setActiveOnly] = React.useState(false);
+  const [selectedClasses, setSelectedClasses] = React.useState<Set<string>>(new Set());
+  const [classSearch, setClassSearch] = React.useState("");
+  const [classPopoverOpen, setClassPopoverOpen] = React.useState(false);
 
   const [preview, setPreview] = React.useState<{
     recipients: { familyId: string; familyName: string; destination: string | null }[];
@@ -108,6 +138,41 @@ export function ComposeTab({ families, levels, invoiceStatuses, mode, onChannelC
     }
   }, [channel, mode, onChannelChange]);
 
+  React.useEffect(() => {
+    if (mode === "broadcast" && onChannelChange) {
+      onChannelChange(broadcastChannel);
+    }
+  }, [broadcastChannel, mode, onChannelChange]);
+
+  React.useEffect(() => {
+    if (!classPopoverOpen) setClassSearch("");
+  }, [classPopoverOpen]);
+
+  const filteredClasses = React.useMemo(() => {
+    const term = classSearch.trim().toLowerCase();
+    if (!term) return classOptions;
+    return classOptions.filter((option) => {
+      const label = `${option.name ?? "Untitled"} ${option.levelName ?? ""} ${formatSchedule(option)}`;
+      return label.toLowerCase().includes(term);
+    });
+  }, [classOptions, classSearch]);
+
+  const selectedClassList = React.useMemo(
+    () => classOptions.filter((option) => selectedClasses.has(option.id)),
+    [classOptions, selectedClasses]
+  );
+
+  const toggleClass = (id: string) => {
+    setSelectedClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const classButtonLabel = selectedClasses.size ? `Select classes (${selectedClasses.size})` : "Select classes";
+
 const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null>) => {
   const instance = editor.current;
   if (!instance) throw new Error("Email editor not ready");
@@ -155,6 +220,7 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
           levelIds: Array.from(selectedLevels),
           invoiceStatuses: Array.from(selectedInvoiceStatuses),
           activeEnrolments: activeOnly,
+          classTemplateIds: Array.from(selectedClasses),
         },
       });
       setPreview(res);
@@ -184,6 +250,7 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
           levelIds: Array.from(selectedLevels),
           invoiceStatuses: Array.from(selectedInvoiceStatuses),
           activeEnrolments: activeOnly,
+          classTemplateIds: Array.from(selectedClasses),
         },
       });
 
@@ -335,6 +402,77 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
               </Badge>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <Label className="text-xs">Classes</Label>
+        <div className="flex flex-col gap-2">
+          <Popover open={classPopoverOpen} onOpenChange={setClassPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" className="w-full justify-between md:w-[260px]">
+                <span className="truncate">{classButtonLabel}</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[360px] p-0" align="start">
+              <Command>
+                <CommandInput
+                  placeholder="Search classes…"
+                  value={classSearch}
+                  onChange={(e) => setClassSearch(e.target.value)}
+                  autoFocus
+                />
+                <CommandList>
+                  {filteredClasses.length === 0 ? (
+                    <CommandEmpty>No classes found.</CommandEmpty>
+                  ) : (
+                    <CommandGroup>
+                      {filteredClasses.map((option) => {
+                        const selected = selectedClasses.has(option.id);
+                        return (
+                          <CommandItem key={option.id} onSelect={() => toggleClass(option.id)}>
+                            <div
+                              className={cn(
+                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border",
+                                selected ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"
+                              )}
+                            >
+                              {selected ? <Check className="h-3 w-3" /> : null}
+                            </div>
+                            <div className="flex min-w-0 flex-col">
+                              <span className="truncate text-sm font-medium">{option.name ?? "Untitled"}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {[formatSchedule(option), option.levelName ?? "—"].filter(Boolean).join(" • ")}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {selectedClassList.length ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedClassList.map((option) => (
+                <Badge key={option.id} variant="secondary" className="flex items-center gap-1 rounded-full px-3 py-1 text-xs">
+                  <span className="truncate max-w-[200px]">{option.name ?? "Untitled"}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleClass(option.id)}
+                    className="ml-1 flex rounded-full p-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                    aria-label={`Remove ${option.name ?? "class"}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 

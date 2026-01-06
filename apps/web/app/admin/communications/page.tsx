@@ -3,6 +3,8 @@ import { unstable_noStore as noStore } from "next/cache";
 import { Badge } from "@/components/ui/badge";
 import { CommunicationsTable } from "./CommunicationsTable";
 import { listCommunications } from "@/server/communication/listCommunications";
+import { getClassFilterOptions } from "@/server/communication/getClassFilterOptions";
+import { ClassFilter } from "./ClassFilter";
 import { MessageChannel, MessageDirection, MessageStatus } from "@prisma/client";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -21,9 +23,15 @@ function asEnum<T extends string>(value: string | undefined, allowed: readonly T
   return allowed.includes(value as T) ? (value as T) : null;
 }
 
-function buildHref(base: string, next: Record<string, string | null | undefined>) {
+function buildHref(base: string, next: Record<string, string | string[] | null | undefined>) {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(next)) {
+    if (Array.isArray(v)) {
+      for (const val of v) {
+        if (val) sp.append(k, val);
+      }
+      continue;
+    }
     if (v) sp.set(k, v);
   }
   const qs = sp.toString();
@@ -36,13 +44,38 @@ type CurrentFilters = {
   direction: MessageDirection | null;
   q: string | null;
   familyId: string | null;
+  classIds: string[];
 };
 
-function FiltersRow({ current }: { current: CurrentFilters }) {
-  const base = "/admin/communications";
+function mergeFilters(current: CurrentFilters, next: Partial<CurrentFilters>): CurrentFilters {
+  return {
+    channel: next.channel !== undefined ? (next.channel as CurrentFilters["channel"]) : current.channel,
+    status: next.status !== undefined ? (next.status as CurrentFilters["status"]) : current.status,
+    direction: next.direction !== undefined ? (next.direction as CurrentFilters["direction"]) : current.direction,
+    q: next.q !== undefined ? (next.q as CurrentFilters["q"]) : current.q,
+    familyId: next.familyId !== undefined ? (next.familyId as CurrentFilters["familyId"]) : current.familyId,
+    classIds: next.classIds !== undefined ? next.classIds : current.classIds,
+  };
+}
 
+function filtersEqual(a: CurrentFilters, b: CurrentFilters) {
+  return (
+    a.channel === b.channel &&
+    a.status === b.status &&
+    a.direction === b.direction &&
+    a.q === b.q &&
+    a.familyId === b.familyId &&
+    a.classIds.length === b.classIds.length &&
+    a.classIds.every((id, idx) => id === b.classIds[idx])
+  );
+}
+
+function FiltersRow({ current, base }: { current: CurrentFilters; base: string }) {
   const chips: Array<{ label: string; next: Partial<CurrentFilters> }> = [
-    { label: "All", next: { channel: null, status: null, direction: null, q: null, familyId: null } },
+    {
+      label: "All",
+      next: { channel: null, status: null, direction: null, q: null, familyId: null, classIds: [] },
+    },
     { label: "SMS", next: { channel: MessageChannel.SMS } },
     { label: "Email", next: { channel: MessageChannel.EMAIL } },
     { label: "Delivered", next: { status: MessageStatus.DELIVERED } },
@@ -53,52 +86,29 @@ function FiltersRow({ current }: { current: CurrentFilters }) {
     { label: "Inbound", next: { direction: MessageDirection.INBOUND } },
   ];
 
-  const isAllChip = (next: Partial<CurrentFilters>) =>
-    next.channel === null &&
-    next.status === null &&
-    next.direction === null &&
-    next.q === null &&
-    next.familyId === null;
-
-  const isActive = (next: Partial<CurrentFilters>) => {
-    if (isAllChip(next)) {
-      return !current.channel && !current.status && !current.direction && !current.q && !current.familyId;
-    }
-
-    const keys = Object.keys(next) as Array<keyof CurrentFilters>;
-    for (const k of keys) {
-      const v = next[k];
-      if (v === undefined) continue;
-      if (current[k] !== v) return false;
-    }
-    return true;
-  };
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {chips.map((c) => {
-        const merged: CurrentFilters = isAllChip(c.next)
-          ? { channel: null, status: null, direction: null, q: null, familyId: null }
-          : { ...current, ...c.next };
-
+        const merged = mergeFilters(current, c.next);
         const href = buildHref(base, {
           channel: merged.channel ?? null,
           status: merged.status ?? null,
           direction: merged.direction ?? null,
           q: merged.q ?? null,
           familyId: merged.familyId ?? null,
+          classIds: merged.classIds,
         });
 
         return (
           <Link key={c.label} href={href}>
-            <Badge variant={isActive(c.next) ? "default" : "secondary"} className="cursor-pointer">
+            <Badge variant={filtersEqual(current, merged) ? "default" : "secondary"} className="cursor-pointer">
               {c.label}
             </Badge>
           </Link>
         );
       })}
 
-      {current.channel || current.status || current.direction || current.q || current.familyId ? (
+      {current.channel || current.status || current.direction || current.q || current.familyId || current.classIds.length ? (
         <Link href={base} className="ml-2 text-xs text-muted-foreground hover:underline">
           Clear filters
         </Link>
@@ -122,16 +132,39 @@ export default async function CommunicationsPage({ searchParams }: PageProps) {
   const q = qRaw?.trim() ? qRaw.trim() : null;
   const familyId = familyIdRaw?.trim() ? familyIdRaw.trim() : null;
 
-  const communications = await listCommunications({
-    limit: 200,
-    filters: {
-      channel: channel ?? undefined,
-      status: status ?? undefined,
-      direction: direction ?? undefined,
-      q: q ?? undefined,
-      familyId: familyId ?? undefined,
-    },
-  });
+  const classIdsRaw = sp.classIds;
+  const classIds = Array.isArray(classIdsRaw)
+    ? classIdsRaw.flatMap((id) => id.split(","))
+    : typeof classIdsRaw === "string"
+      ? classIdsRaw.split(",")
+      : [];
+  const normalizedClassIds = Array.from(new Set(classIds.map((id) => id.trim()).filter(Boolean)));
+
+  const base = "/admin/communications";
+
+  const [communications, classOptions] = await Promise.all([
+    listCommunications({
+      limit: 200,
+      filters: {
+        channel: channel ?? undefined,
+        status: status ?? undefined,
+        direction: direction ?? undefined,
+        q: q ?? undefined,
+        familyId: familyId ?? undefined,
+        classIds: normalizedClassIds,
+      },
+    }),
+    getClassFilterOptions(),
+  ]);
+
+  const currentFilters: CurrentFilters = {
+    channel,
+    status,
+    direction,
+    q,
+    familyId,
+    classIds: normalizedClassIds,
+  };
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -139,8 +172,9 @@ export default async function CommunicationsPage({ searchParams }: PageProps) {
         <h1 className="text-base font-semibold">Communications</h1>
         <p className="text-xs text-muted-foreground">Recent emails and messages that have been sent.</p>
 
-        <div className="mt-2">
-          <FiltersRow current={{ channel, status, direction, q, familyId }} />
+        <div className="mt-2 flex flex-col gap-3">
+          <FiltersRow current={currentFilters} base={base} />
+          <ClassFilter options={classOptions} selectedIds={normalizedClassIds} />
         </div>
       </div>
 

@@ -70,7 +70,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
   if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
 
       {viewMode === "week" ? (
         <WeekView

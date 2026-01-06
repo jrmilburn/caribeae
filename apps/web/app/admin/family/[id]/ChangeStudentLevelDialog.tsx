@@ -65,6 +65,9 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
     () => (effectiveDate ? new Date(`${effectiveDate}T00:00:00`) : new Date()),
     [effectiveDate]
   );
+  const effectiveLevelId = selectedLevelId || null;
+  const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
+  const scheduleBlocked = !effectiveLevelId;
 
   const availablePlans = React.useMemo(
     () => enrolmentPlans.filter((plan) => plan.levelId === selectedLevelId),
@@ -93,17 +96,20 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
   const hasAvailableTemplates = !availabilityKnown || (availabilityCount ?? 0) > 0;
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !effectiveLevelId) {
+      setAvailabilityCount(null);
+      return;
+    }
     startCheckingAvailability(async () => {
       try {
-        const res = await getTemplatesForLevelAndDate(selectedLevelId, `${effectiveDate}T00:00:00`);
+        const res = await getTemplatesForLevelAndDate(effectiveLevelId, `${effectiveDate}T00:00:00`);
         setAvailabilityCount(res.count);
       } catch (err) {
         console.error(err);
         setAvailabilityCount(null);
       }
     });
-  }, [effectiveDate, open, selectedLevelId]);
+  }, [effectiveDate, effectiveLevelId, open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -127,7 +133,11 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
   }, [levels, open, student.levelId, today]);
 
   const onClassClick = (occurrence: NormalizedScheduleClass) => {
-    if (occurrence.levelId && occurrence.levelId !== selectedLevelId) {
+    if (!effectiveLevelId) {
+      toast.error("Set student level first.");
+      return;
+    }
+    if (occurrence.levelId && occurrence.levelId !== effectiveLevelId) {
       toast.error("Select classes that match the new level.");
       return;
     }
@@ -234,16 +244,32 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
                 Select at least one class template for the new level. Level changes are blocked unless enrolments are created.
               </div>
 
-              <div className="h-[520px] overflow-hidden rounded border">
-                <ScheduleView
-                  levels={levels}
-                  onClassClick={onClassClick}
-                  allowTemplateMoves={false}
-                  defaultViewMode="week"
-                  selectedTemplateIds={selectedTemplateIds}
-                  filters={{ levelId: selectedLevelId, teacherId: null }}
-                  weekAnchor={weekAnchor}
-                />
+              <div className="flex h-[520px] flex-col overflow-hidden rounded border">
+                <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
+                    <Badge variant="secondary" className="font-semibold">
+                      Showing classes for {effectiveLevel?.name ?? "—"}
+                    </Badge>
+                  </div>
+                  {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+                </div>
+                {scheduleBlocked ? (
+                  <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                    Set student level first.
+                  </div>
+                ) : (
+                  <div className="flex-1">
+                    <ScheduleView
+                      levels={levels}
+                      onClassClick={onClassClick}
+                      allowTemplateMoves={false}
+                      defaultViewMode="week"
+                      selectedTemplateIds={selectedTemplateIds}
+                      filters={{ levelId: effectiveLevelId, teacherId: null }}
+                      weekAnchor={weekAnchor}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 rounded-md border bg-muted/40 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
