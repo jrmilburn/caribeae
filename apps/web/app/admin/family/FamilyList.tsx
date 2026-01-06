@@ -86,6 +86,7 @@ export default function FamilyList({ families, levels }: { families: Family[]; l
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         setNewFamilyModal={setNewFamilyModal}
+        setSelected={setSelected}
       />
 
 
@@ -118,7 +119,8 @@ function ListHeader({
   filteredCount,
   searchTerm,
   setSearchTerm,
-  setNewFamilyModal
+  setNewFamilyModal,
+  setSelected
 }: {
   title: string;
   totalCount: number;
@@ -126,6 +128,7 @@ function ListHeader({
   searchTerm: string;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   setNewFamilyModal: React.Dispatch<React.SetStateAction<boolean>>;
+  setSelected: React.Dispatch<React.SetStateAction<Family | null>>
 }) {
   const hasQuery = searchTerm.trim().length > 0;
 

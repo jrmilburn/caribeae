@@ -17,6 +17,7 @@ type ChangeEnrolmentInput = {
   enrolmentId: string;
   templateIds: string[];
   startDate?: string;
+  effectiveLevelId?: string | null;
 };
 
 export async function changeEnrolment(input: ChangeEnrolmentInput) {
@@ -50,6 +51,14 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       throw new Error("Enrolment plan missing.");
     }
 
+    const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
+    if (!effectiveLevelId) {
+      throw new Error("Set the student's level before changing this enrolment.");
+    }
+    if (enrolment.plan.levelId !== effectiveLevelId) {
+      throw new Error("Enrolment plan level must match the selected level.");
+    }
+
     const templates = await tx.classTemplate.findMany({
       where: { id: { in: payload.templateIds } },
       select: {
@@ -62,6 +71,15 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         dayOfWeek: true,
       },
     });
+
+    const missingLevelTemplate = templates.find((template) => !template.levelId);
+    if (missingLevelTemplate) {
+      throw new Error("Selected classes must have a level set before enrolling.");
+    }
+    const mismatchedTemplate = templates.find((template) => template.levelId && template.levelId !== effectiveLevelId);
+    if (mismatchedTemplate) {
+      throw new Error("Selected classes must match the student's level.");
+    }
 
     assertPlanMatchesTemplates(enrolment.plan, templates);
 

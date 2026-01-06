@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { unstable_noStore as noStore } from "next/cache";
-import { Prisma, MessageChannel, MessageDirection, MessageStatus } from "@prisma/client";
+import { Prisma, EnrolmentStatus, MessageChannel, MessageDirection, MessageStatus } from "@prisma/client";
 
 export type CommunicationSummary = {
   id: string;
@@ -25,6 +25,7 @@ export type CommunicationFilters = {
   direction?: MessageDirection;
   q?: string;
   familyId?: string;
+  classIds?: string[];
 };
 
 export async function listCommunications(args?: {
@@ -39,24 +40,66 @@ export async function listCommunications(args?: {
   const limit = args?.limit ?? 200;
   const f = args?.filters;
 
-  const where: Prisma.MessageWhereInput = {};
+  const filters: Prisma.MessageWhereInput[] = [];
 
-  if (f?.channel) where.channel = f.channel;
-  if (f?.status) where.status = f.status;
-  if (f?.direction) where.direction = f.direction;
-  if (f?.familyId) where.familyId = f.familyId;
+  if (f?.channel) filters.push({ channel: f.channel });
+  if (f?.status) filters.push({ status: f.status });
+  if (f?.direction) filters.push({ direction: f.direction });
+  if (f?.familyId) filters.push({ familyId: f.familyId });
 
   if (f?.q) {
-    where.OR = [
-      { subject: { contains: f.q, mode: "insensitive" } },
-      { body: { contains: f.q, mode: "insensitive" } },
-      { toEmail: { contains: f.q, mode: "insensitive" } },
-      { fromEmail: { contains: f.q, mode: "insensitive" } },
-      { toNumber: { contains: f.q, mode: "insensitive" } },
-      { fromNumber: { contains: f.q, mode: "insensitive" } },
-      { family: { is: { name: { contains: f.q, mode: "insensitive" } } } },
-    ];
+    filters.push({
+      OR: [
+        { subject: { contains: f.q, mode: "insensitive" } },
+        { body: { contains: f.q, mode: "insensitive" } },
+        { toEmail: { contains: f.q, mode: "insensitive" } },
+        { fromEmail: { contains: f.q, mode: "insensitive" } },
+        { toNumber: { contains: f.q, mode: "insensitive" } },
+        { fromNumber: { contains: f.q, mode: "insensitive" } },
+        { family: { is: { name: { contains: f.q, mode: "insensitive" } } } },
+      ],
+    });
   }
+
+  const classIds =
+    f?.classIds
+      ?.map((id) => id.trim())
+      .filter(Boolean) ?? [];
+
+  if (classIds.length) {
+    const validClassIds = await prisma.classTemplate.findMany({
+      where: { id: { in: classIds } },
+      select: { id: true },
+    });
+
+    const verifiedClassIds = validClassIds.map((c) => c.id);
+
+    if (!verifiedClassIds.length) {
+      return [];
+    }
+
+    filters.push({
+      OR: [
+        {
+          family: {
+            students: {
+              some: {
+                enrolments: {
+                  some: {
+                    templateId: { in: verifiedClassIds },
+                    status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+  }
+
+  const where: Prisma.MessageWhereInput =
+    filters.length === 0 ? {} : { AND: filters };
 
   const messages = await prisma.message.findMany({
     where,

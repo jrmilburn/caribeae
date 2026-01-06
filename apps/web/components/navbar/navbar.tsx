@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import Image from "next/image";
+
 import {
   LayoutDashboard,
   CalendarDays,
@@ -83,16 +85,18 @@ export function AppNavbar({ children, brandName = "Caribeae Admin" }: AppNavbarP
     <div className="flex max-h-screen h-full w-full bg-background">
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-        <div className="flex h-14 items-center gap-3 px-4">
+        <div className="flex h-14 items-center gap-3 px-0">
             <BackButton aria-label="Back" />
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-muted">
-            <span className="text-sm font-semibold">CS</span>
+          <div className="grid h-9 w-9 place-items-center">
+            <span className="text-sm font-semibold"><Image 
+              alt="logo"
+              src="/logo.png"
+              width={64}
+              height={64}
+            /></span>
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{brandName}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              Swim school management
-            </div>
           </div>
         </div>
 

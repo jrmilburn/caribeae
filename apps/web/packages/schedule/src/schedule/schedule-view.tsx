@@ -76,15 +76,17 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       [dataAdapter, dataEndpoint]
     );
 
-    const weekStart = useMemo(
-      () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
-      [currentWeek]
-    );
-    const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const weekStart = useMemo(
+    () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
+    [currentWeek]
+  );
+  const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const levelFilter = filters?.levelId ?? null;
+  const teacherFilter = filters?.teacherId ?? null;
 
-    const weekDates = useMemo(() => {
-      return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-    }, [weekStart]);
+  const weekDates = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  }, [weekStart]);
 
     React.useEffect(() => {
       if (!weekAnchor) return;
@@ -103,6 +105,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           const data = await adapter.fetchClasses({
             from: weekStart,
             to: displayWeekEnd,
+            levelId: levelFilter ?? undefined,
           });
           if (cancelled) return;
           setClasses(data.map(normalizeScheduleClass));
@@ -117,7 +120,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       return () => {
         cancelled = true;
       };
-    }, [adapter, weekStart, displayWeekEnd]);
+    }, [adapter, weekStart, displayWeekEnd, levelFilter]);
 
     // Background refresh (does NOT flip `loading`, so the grid stays mounted)
     const softRefresh = React.useCallback(() => {
@@ -126,6 +129,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           const data = await adapter.fetchClasses({
             from: weekStart,
             to: displayWeekEnd,
+            levelId: levelFilter ?? undefined,
           });
           setClasses(data.map(normalizeScheduleClass));
         } catch (err) {
@@ -133,13 +137,13 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           setError(err instanceof Error ? err.message : "Unable to refresh schedule");
         }
       })();
-    }, [adapter, weekStart, displayWeekEnd]);
+    }, [adapter, weekStart, displayWeekEnd, levelFilter]);
 
     React.useImperativeHandle(ref, () => ({ softRefresh }), [softRefresh]);
 
     const filteredClasses = useMemo(() => {
-      const levelId = filters?.levelId ?? null;
-      const teacherId = filters?.teacherId ?? null;
+      const levelId = levelFilter;
+      const teacherId = teacherFilter;
 
       if (!levelId && !teacherId) return classes;
 
@@ -148,7 +152,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
         if (teacherId && c.teacherId !== teacherId) return false;
         return true;
       });
-    }, [classes, filters]);
+    }, [classes, levelFilter, teacherFilter]);
 
 
     const onMoveClass = React.useCallback(
@@ -192,7 +196,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     );
 
     return (
-      <div className="flex h-full w-full flex-col">
+      <div className="flex h-full w-full min-h-0 flex-col">
         {showHeader && (
           <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2">

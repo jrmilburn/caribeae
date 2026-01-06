@@ -58,9 +58,11 @@ function minutesToDate(minutes: number) {
 export function StudentEnrolmentsTable({
   enrolments,
   levels,
+  studentLevelId,
 }: {
   enrolments: EnrolmentRow[];
   levels: Level[];
+  studentLevelId?: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
@@ -178,6 +180,7 @@ export function StudentEnrolmentsTable({
           onOpenChange={(open) => !open && setEditing(null)}
           enrolment={editing as EnrolmentRow & { plan: NonNullable<EnrolmentRow["plan"]> }}
           levels={levels}
+          studentLevelId={studentLevelId}
           initialTemplateIds={
             editing.planId && planSiblingsById[editing.planId]
               ? planSiblingsById[editing.planId].map((e) => e.templateId)
