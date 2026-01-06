@@ -1,6 +1,6 @@
 "use client";
 
-import type { Family } from "@prisma/client";
+import type { Family, Level } from "@prisma/client";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Search, X, MoreVerticalIcon } from "lucide-react";
@@ -16,7 +16,7 @@ import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
 import { deleteFamily } from "@/server/family/deleteFamily";
 
-import type { ClientFamily } from "@/server/family/types";
+import type { ClientFamilyWithStudents } from "@/server/family/types";
 
 import {
   DropdownMenu,
@@ -28,7 +28,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
-export default function FamilyList({ families }: { families: Family[]; }) {
+export default function FamilyList({ families, levels }: { families: Family[]; levels: Level[]; }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [newFamilyModal, setNewFamilyModal] = useState(false);
   const [selected, setSelected] = React.useState<Family | null>(null);
@@ -52,7 +52,13 @@ export default function FamilyList({ families }: { families: Family[]; }) {
     setNewFamilyModal(true);
   };
 
-  const handleSave = async (payload: ClientFamily) => {
+  React.useEffect(() => {
+    if (!newFamilyModal) {
+      setSelected(null);
+    }
+  }, [newFamilyModal]);
+
+  const handleSave = async (payload: ClientFamilyWithStudents) => {
     if (selected) {
       const update = await updateFamily(payload, selected.id);
       router.refresh();
@@ -88,6 +94,7 @@ export default function FamilyList({ families }: { families: Family[]; }) {
         onOpenChange={setNewFamilyModal}
         family={selected}
         onSave={handleSave}
+        levels={levels}
       />
 
       <div className="">
@@ -163,7 +170,10 @@ function ListHeader({
         )}
       </div>
       <Button
-        onClick={() => setNewFamilyModal(true)}
+        onClick={() => {
+          setSelected(null);
+          setNewFamilyModal(true);
+        }}
       >
         New
       </Button>
