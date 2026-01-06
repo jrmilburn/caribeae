@@ -67,6 +67,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
   const [touched, setTouched] = React.useState<{ name?: boolean }>({});
   const [studentTouched, setStudentTouched] = React.useState<Record<string, { name?: boolean; levelId?: boolean }>>({});
   const [serverError, setServerError] = React.useState<string | null>(null);
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
 
   // Prefill when opening in edit mode
   React.useEffect(() => {
@@ -267,9 +268,20 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
           ? "Create family"
           : "Save changes";
 
+  React.useEffect(() => {
+    if (!isCreate) return;
+    const node = dialogContentRef.current;
+    if (!node) return;
+
+    // Reset scroll to top when moving between steps so users don't land mid-way through the form.
+    requestAnimationFrame(() => {
+      node.scrollTo({ top: 0 });
+    });
+  }, [step, isCreate]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl" ref={dialogContentRef}>
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "New family" : "Edit family"}</DialogTitle>
         </DialogHeader>
@@ -526,6 +538,15 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
                             type="date"
                             value={student.dateOfBirth ?? ""}
                             onChange={(e) => updateStudent(student.id, "dateOfBirth", e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm text-muted-foreground">Medical notes (optional)</label>
+                          <Input
+                            value={student.medicalNotes ?? ""}
+                            onChange={(e) => updateStudent(student.id, "medicalNotes", e.target.value)}
+                            placeholder="Allergies, conditions, important info…"
                           />
                         </div>
                       </div>
