@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { isSameDay } from "date-fns";
 
 import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import { dayOfWeekToName } from "./schedule-types";
 import WeekView from "./week-view";
 import DayView from "./day-view";
 
@@ -17,7 +17,7 @@ export type ScheduleGridProps = {
   weekDates: Date[];
   onSlotClick?: (date: Date) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
-  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
+  onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   viewMode: "week" | "day";
   setViewMode: React.Dispatch<React.SetStateAction<"week" | "day">>;
   selectedDay: number;
@@ -65,7 +65,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
   const normalized = useMemo(() => attachLayout(classesWithLevels), [classesWithLevels]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const selectedDayName = DAYS_OF_WEEK[selectedDay] ?? "Monday";
+  const selectedDayName = dayOfWeekToName(selectedDay);
 
   if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />
 
@@ -96,7 +96,8 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           TIME_SLOTS={TIME_SLOTS}
           dayName={selectedDayName as DayOfWeek}
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
-          classes={normalized.filter((c) => isSameDay(c.startTime, weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? new Date()))}
+          dayOfWeek={selectedDay}
+          classes={normalized.filter((c) => c.dayOfWeek === selectedDay)}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
           onMoveClass={onMoveClass}
@@ -146,10 +147,10 @@ function dayToIndex(day: DayOfWeek): number {
 type LayoutInfo = { column: number; columns: number };
 
 function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedScheduleClass & LayoutInfo> {
-  const byDay = new Map<DayOfWeek, NormalizedScheduleClass[]>();
+  const byDay = new Map<number, NormalizedScheduleClass[]>();
   for (const inst of instances) {
-    if (!byDay.has(inst.dayName)) byDay.set(inst.dayName, []);
-    byDay.get(inst.dayName)!.push(inst);
+    if (!byDay.has(inst.dayOfWeek)) byDay.set(inst.dayOfWeek, []);
+    byDay.get(inst.dayOfWeek)!.push(inst);
   }
 
   const layoutMap = new Map<string, LayoutInfo>();

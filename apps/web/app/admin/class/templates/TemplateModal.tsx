@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import type { ClientTemplate } from "@/server/classTemplate/types";
@@ -295,6 +294,10 @@ export function TemplateModal({
   }, [selectedLevel, lengthMode, isEditMode, durationMin]);
 
   const close = () => onOpenChange(false);
+  const handleNavigate = (href: string) => {
+    close();
+    router.push(href);
+  };
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
