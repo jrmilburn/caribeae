@@ -15,10 +15,11 @@ type DayViewProps = {
   TIME_SLOTS: TimeSlot[];
   dayName: DayOfWeek;
   dayDate: Date;
+  dayOfWeek: number;
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onSlotClick?: (date: Date) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
-  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
+  onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
   getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
@@ -35,6 +36,7 @@ export default function DayView(props: DayViewProps) {
     TIME_SLOTS,
     dayName,
     dayDate,
+    dayOfWeek,
     classes,
     onSlotClick,
     onClassClick,
@@ -155,7 +157,7 @@ export default function DayView(props: DayViewProps) {
                 const templateId = e.dataTransfer.getData("text/plain");
                 if (!templateId) return;
 
-                await onMoveClass(templateId, nextStartForSlot(slot.time12));
+                await onMoveClass(templateId, nextStartForSlot(slot.time12), dayOfWeek);
                 setDropTarget(null);
               }}
             />
