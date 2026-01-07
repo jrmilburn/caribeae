@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import type { ClientTemplate } from "@/server/classTemplate/types";
@@ -293,6 +292,10 @@ if (template) {
   }, [selectedLevel, lengthMode, isEditMode, durationMin]);
 
   const close = () => onOpenChange(false);
+  const handleNavigate = (href: string) => {
+    close();
+    router.push(href);
+  };
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -421,11 +424,12 @@ if (template) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     {viewHref ? (
-                      <DropdownMenuItem asChild>
-                        <Link href={viewHref} className="flex items-center gap-2">
-                          <NotebookText className="h-4 w-4" />
-                          View class
-                        </Link>
+                      <DropdownMenuItem
+                        onSelect={() => handleNavigate(viewHref)}
+                        className="flex items-center gap-2"
+                      >
+                        <NotebookText className="h-4 w-4" />
+                        View class
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled className="flex items-center gap-2">
@@ -443,11 +447,12 @@ if (template) {
                       Substitute teacher
                     </DropdownMenuItem>
                     {attendanceHref ? (
-                      <DropdownMenuItem asChild>
-                        <Link href={attendanceHref} className="flex items-center gap-2">
-                          <ClipboardList className="h-4 w-4" />
-                          Take attendance
-                        </Link>
+                      <DropdownMenuItem
+                        onSelect={() => handleNavigate(attendanceHref)}
+                        className="flex items-center gap-2"
+                      >
+                        <ClipboardList className="h-4 w-4" />
+                        Take attendance
                       </DropdownMenuItem>
                     ) : (
                       <DropdownMenuItem disabled className="flex items-center gap-2">
