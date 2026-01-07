@@ -22,6 +22,7 @@ export type TemplateOccurrence = {
   id: string;
   templateId: string;
   templateName?: string | null;
+  dayOfWeek: number; // 0-6 (Mon-Sun)
   startTime: Date;
   endTime: Date;
   capacity?: number | null;
@@ -193,6 +194,7 @@ export function expandTemplatesToOccurrences(
         id: `${template.id}-${format(cursor, "yyyy-MM-dd")}`,
         templateId: template.id,
         templateName: template.name,
+        dayOfWeek: template.dayOfWeek,
         startTime,
         endTime,
         capacity: template.capacity ?? template.level?.defaultCapacity ?? null,
