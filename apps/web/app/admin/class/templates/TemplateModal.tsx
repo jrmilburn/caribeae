@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import type { ClientTemplate } from "@/server/classTemplate/types";
+import Link from "next/link";
 
 import {
   Dialog,
