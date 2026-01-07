@@ -295,10 +295,6 @@ export function TemplateModal({
   }, [selectedLevel, lengthMode, isEditMode, durationMin]);
 
   const close = () => onOpenChange(false);
-  const handleNavigate = (href: string) => {
-    close();
-    router.push(href);
-  };
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
