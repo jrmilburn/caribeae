@@ -224,7 +224,7 @@ export default function ScheduleWithTemplateModal({
     teacherId?: string;
   } | null>(null);
 
-  const handleSlotClick = (date: Date, dayOfWeek: number) => {
+  const handleSlotClick = (date: Date, _dayOfWeek: number) => {
     const minutes = date.getHours() * 60 + date.getMinutes();
     setSelectedTemplate(null);
     setPrefill({ date, startMinutes: minutes, dayOfWeek });

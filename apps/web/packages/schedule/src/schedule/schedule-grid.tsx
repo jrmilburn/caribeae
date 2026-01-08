@@ -152,7 +152,7 @@ type LayoutInfo = {
 };
 
 function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedScheduleClass & LayoutInfo> {
-  const { laneByTeacherId, laneCount, unassignedLane } = buildTeacherLanes(instances);
+  const { orderedTeacherIds } = buildTeacherLanes(instances);
   const byDay = new Map<number, NormalizedScheduleClass[]>();
   for (const inst of instances) {
     if (!byDay.has(inst.dayOfWeek)) byDay.set(inst.dayOfWeek, []);
