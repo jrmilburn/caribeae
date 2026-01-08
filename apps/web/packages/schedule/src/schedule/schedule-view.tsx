@@ -29,7 +29,7 @@ export type ScheduleViewProps = {
   levels: Level[];
   dataAdapter?: ScheduleDataAdapter;
   dataEndpoint?: string;
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (occurrence: NormalizedScheduleClass) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;

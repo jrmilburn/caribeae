@@ -24,7 +24,7 @@ type DayViewProps = {
       laneColumns: number;
     }
   >;
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek : number) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   draggingId: string | null;
@@ -146,7 +146,7 @@ export default function DayView(props: DayViewProps) {
               style={{ height: `${SLOT_HEIGHT_PX}px` }}
               onClick={() => {
                 if (!onSlotClick) return;
-                onSlotClick(nextStartForSlot(slot.time12));
+                onSlotClick(nextStartForSlot(slot.time12), dayOfWeek);
               }}
               onDragOver={(e) => {
                 if (!isDraggable || !draggingClass) return;

@@ -15,7 +15,7 @@ export type ScheduleGridProps = {
   loading: boolean;
   classes: NormalizedScheduleClass[];
   weekDates: Date[];
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   viewMode: "week" | "day";
@@ -152,7 +152,7 @@ type LayoutInfo = {
 };
 
 function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedScheduleClass & LayoutInfo> {
-  const { orderedTeacherIds } = buildTeacherLanes(instances);
+  const { laneByTeacherId, laneCount, unassignedLane } = buildTeacherLanes(instances);
   const byDay = new Map<number, NormalizedScheduleClass[]>();
   for (const inst of instances) {
     if (!byDay.has(inst.dayOfWeek)) byDay.set(inst.dayOfWeek, []);
