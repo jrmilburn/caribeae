@@ -219,7 +219,6 @@ export default function ScheduleWithTemplateModal({
   const [prefill, setPrefill] = useState<{
     date: Date;
     startMinutes: number;
-    dayOfWeek: number;
     levelId?: string;
     teacherId?: string;
     dayOfWeek?: number;
