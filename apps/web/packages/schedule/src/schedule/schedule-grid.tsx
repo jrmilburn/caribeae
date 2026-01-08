@@ -160,8 +160,22 @@ function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedSch
   }
 
   const layoutMap = new Map<string, { laneOffset: number; laneColumns: number }>();
+  const laneMetaByDay = new Map<
+    number,
+    { laneByTeacherId: Map<string, number>; laneCount: number; unassignedLane: number | null }
+  >();
 
-  byDay.forEach((dayInstances) => {
+  byDay.forEach((dayInstances, dayIndex) => {
+    const { laneByTeacherId, laneCount, unassignedLane } = buildDayLanes(
+      dayInstances,
+      orderedTeacherIds
+    );
+    laneMetaByDay.set(dayIndex, {
+      laneByTeacherId,
+      laneCount,
+      unassignedLane,
+    });
+
     const byTeacher = new Map<string | null, NormalizedScheduleClass[]>();
     for (const inst of dayInstances) {
       const teacherKey = inst.teacherId ?? inst.teacher?.id ?? null;
@@ -207,8 +221,14 @@ function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedSch
 
   return instances.map((inst) => {
     const teacherKey = inst.teacherId ?? inst.teacher?.id ?? null;
+    const dayMeta = laneMetaByDay.get(inst.dayOfWeek);
+    const laneByTeacherId = dayMeta?.laneByTeacherId;
+    const laneCount = dayMeta?.laneCount ?? 1;
+    const unassignedLane = dayMeta?.unassignedLane ?? null;
     const laneIndex =
-      teacherKey ? laneByTeacherId.get(teacherKey) ?? unassignedLane ?? 0 : unassignedLane ?? 0;
+      teacherKey
+        ? laneByTeacherId?.get(teacherKey) ?? unassignedLane ?? 0
+        : unassignedLane ?? 0;
     const layout = layoutMap.get(inst.id);
     return {
       ...inst,
@@ -222,14 +242,10 @@ function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedSch
 
 function buildTeacherLanes(instances: NormalizedScheduleClass[]) {
   const teacherEntries = new Map<string, string>();
-  let hasUnassigned = false;
 
   for (const inst of instances) {
     const teacherId = inst.teacherId ?? inst.teacher?.id ?? null;
-    if (!teacherId) {
-      hasUnassigned = true;
-      continue;
-    }
+    if (!teacherId) continue;
     if (!teacherEntries.has(teacherId)) {
       teacherEntries.set(teacherId, inst.teacher?.name ?? teacherId);
     }
@@ -241,13 +257,30 @@ function buildTeacherLanes(instances: NormalizedScheduleClass[]) {
     return a[0].localeCompare(b[0]);
   });
 
+  return { orderedTeacherIds: orderedTeachers.map(([teacherId]) => teacherId) };
+}
+
+function buildDayLanes(dayInstances: NormalizedScheduleClass[], orderedTeacherIds: string[]) {
+  const teachersToday = new Set<string>();
+  let hasUnassigned = false;
+
+  for (const inst of dayInstances) {
+    const teacherId = inst.teacherId ?? inst.teacher?.id ?? null;
+    if (!teacherId) {
+      hasUnassigned = true;
+      continue;
+    }
+    teachersToday.add(teacherId);
+  }
+
+  const orderedToday = orderedTeacherIds.filter((teacherId) => teachersToday.has(teacherId));
   const laneByTeacherId = new Map<string, number>();
-  orderedTeachers.forEach(([teacherId], index) => {
+  orderedToday.forEach((teacherId, index) => {
     laneByTeacherId.set(teacherId, index);
   });
 
-  const unassignedLane = hasUnassigned ? orderedTeachers.length : null;
-  const laneCount = orderedTeachers.length + (hasUnassigned ? 1 : 0);
+  const unassignedLane = hasUnassigned ? orderedToday.length : null;
+  const laneCount = orderedToday.length + (hasUnassigned ? 1 : 0);
 
   return { laneByTeacherId, laneCount: Math.max(laneCount, 1), unassignedLane };
 }
