@@ -217,35 +217,6 @@ if (template) {
   const prefillDay =
     typeof prefill?.dayOfWeek === "number" ? String(prefill.dayOfWeek) : null;
 
-  setForm({
-    name: template.name ?? "",
-    levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
-    teacherId: template.teacherId ?? (teachers?.[0]?.id ?? ""),
-    startDate: dateToInput(new Date(template.startDate)),
-    endDate: template.endDate ? dateToInput(new Date(template.endDate)) : "",
-
-    // ✅ use prefill if provided, else template
-    dayOfWeek:
-      prefillDay ??
-      (template.dayOfWeek === null || template.dayOfWeek === undefined
-        ? ""
-        : String(template.dayOfWeek)),
-
-    startTime:
-      prefillStart !== null
-        ? minutesToTimeInput(prefillStart)
-        : typeof start === "number"
-        ? minutesToTimeInput(start)
-        : "",
-
-    endTime: "",
-    capacity:
-      template.capacity === null || template.capacity === undefined
-        ? ""
-        : String(template.capacity),
-    active: template.active ?? true,
-  });
-
       setForm({
         name: template.name ?? "",
         levelId: template.levelId ?? (levels?.[0]?.id ?? ""),
@@ -325,9 +296,7 @@ if (template) {
     const defaultLen = clampToAllowedDuration(lvl.defaultLengthMin);
 
     if (lengthMode === "default") setDurationMin(defaultLen);
-
-    if (isEditMode) setLengthMode(durationMin === defaultLen ? "default" : "custom");
-  }, [selectedLevel, lengthMode, isEditMode, durationMin]);
+  }, [selectedLevel, lengthMode]);
 
   const close = () => onOpenChange(false);
 
