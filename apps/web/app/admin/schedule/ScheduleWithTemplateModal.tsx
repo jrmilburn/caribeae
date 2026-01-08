@@ -222,12 +222,13 @@ export default function ScheduleWithTemplateModal({
     dayOfWeek: number;
     levelId?: string;
     teacherId?: string;
+    dayOfWeek?: number;
   } | null>(null);
 
-  const handleSlotClick = (date: Date, dayOfWeek: number) => {
+  const handleSlotClick = (date: Date, _dayOfWeek: number) => {
     const minutes = date.getHours() * 60 + date.getMinutes();
     setSelectedTemplate(null);
-    setPrefill({ date, startMinutes: minutes, dayOfWeek });
+    setPrefill({ date, startMinutes: minutes, dayOfWeek: _dayOfWeek });
     setModalOpen(true);
   };
 
