@@ -77,8 +77,14 @@ export const DAY_OF_WEEK_NAMES: DayOfWeek[] = [
   "Sunday",
 ];
 
+export const DAY_OF_WEEK_SHORT_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
 export function dayOfWeekToName(dayOfWeek: number): DayOfWeek {
   return DAY_OF_WEEK_NAMES[dayOfWeek] ?? "Monday";
+}
+
+export function dayOfWeekToShortLabel(dayOfWeek: number): string {
+  return DAY_OF_WEEK_SHORT_LABELS[dayOfWeek] ?? "Mon";
 }
 
 export function normalizeScheduleClass(ci: ScheduleClass): NormalizedScheduleClass {
