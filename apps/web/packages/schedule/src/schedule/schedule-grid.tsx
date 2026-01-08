@@ -144,49 +144,112 @@ function dayToIndex(day: DayOfWeek): number {
   return ordered.indexOf(day);
 }
 
-type LayoutInfo = { column: number; columns: number };
+type LayoutInfo = {
+  laneIndex: number;
+  laneCount: number;
+  laneOffset: number;
+  laneColumns: number;
+};
 
 function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedScheduleClass & LayoutInfo> {
+  const { laneByTeacherId, laneCount, unassignedLane } = buildTeacherLanes(instances);
   const byDay = new Map<number, NormalizedScheduleClass[]>();
   for (const inst of instances) {
     if (!byDay.has(inst.dayOfWeek)) byDay.set(inst.dayOfWeek, []);
     byDay.get(inst.dayOfWeek)!.push(inst);
   }
 
-  const layoutMap = new Map<string, LayoutInfo>();
+  const layoutMap = new Map<string, { laneOffset: number; laneColumns: number }>();
 
   byDay.forEach((dayInstances) => {
-    const events = dayInstances
-      .map((c) => {
-        const start = c.startTime.getHours() * 60 + c.startTime.getMinutes();
-        return { id: c.id, start, end: start + c.durationMin };
-      })
-      .sort((a, b) => a.start - b.start);
-
-    let active: typeof events = [];
-
-    for (const event of events) {
-      active = active.filter((e) => e.end > event.start);
-
-      const usedCols = active.map((e) => layoutMap.get(e.id)!.column);
-      let col = 0;
-      while (usedCols.includes(col)) col++;
-
-      active.push(event);
-      const columns = Math.max(active.length, col + 1);
-
-      for (const e of active) {
-        const existing = layoutMap.get(e.id);
-        layoutMap.set(e.id, { column: existing?.column ?? col, columns });
-      }
+    const byTeacher = new Map<string | null, NormalizedScheduleClass[]>();
+    for (const inst of dayInstances) {
+      const teacherKey = inst.teacherId ?? inst.teacher?.id ?? null;
+      if (!byTeacher.has(teacherKey)) byTeacher.set(teacherKey, []);
+      byTeacher.get(teacherKey)!.push(inst);
     }
+
+    byTeacher.forEach((teacherInstances) => {
+      const events = teacherInstances
+        .map((c) => {
+          const start = c.startTime.getHours() * 60 + c.startTime.getMinutes();
+          return { id: c.id, start, end: start + c.durationMin };
+        })
+        .sort((a, b) => a.start - b.start);
+
+      let active: typeof events = [];
+
+      for (const event of events) {
+        active = active.filter((e) => e.end > event.start);
+
+        const usedOffsets = active.map((e) => layoutMap.get(e.id)?.laneOffset ?? 0);
+        let laneOffset = 0;
+        while (usedOffsets.includes(laneOffset)) laneOffset++;
+
+        active.push(event);
+
+        const laneColumns =
+          Math.max(
+            laneOffset,
+            ...active.map((e) => layoutMap.get(e.id)?.laneOffset ?? 0)
+          ) + 1;
+
+        for (const e of active) {
+          const existing = layoutMap.get(e.id);
+          layoutMap.set(e.id, {
+            laneOffset: existing?.laneOffset ?? laneOffset,
+            laneColumns: Math.max(existing?.laneColumns ?? 1, laneColumns),
+          });
+        }
+      }
+    });
   });
 
-  return instances.map((inst) => ({
-    ...inst,
-    column: layoutMap.get(inst.id)?.column ?? 0,
-    columns: layoutMap.get(inst.id)?.columns ?? 1,
-  }));
+  return instances.map((inst) => {
+    const teacherKey = inst.teacherId ?? inst.teacher?.id ?? null;
+    const laneIndex =
+      teacherKey ? laneByTeacherId.get(teacherKey) ?? unassignedLane ?? 0 : unassignedLane ?? 0;
+    const layout = layoutMap.get(inst.id);
+    return {
+      ...inst,
+      laneIndex,
+      laneCount,
+      laneOffset: layout?.laneOffset ?? 0,
+      laneColumns: layout?.laneColumns ?? 1,
+    };
+  });
+}
+
+function buildTeacherLanes(instances: NormalizedScheduleClass[]) {
+  const teacherEntries = new Map<string, string>();
+  let hasUnassigned = false;
+
+  for (const inst of instances) {
+    const teacherId = inst.teacherId ?? inst.teacher?.id ?? null;
+    if (!teacherId) {
+      hasUnassigned = true;
+      continue;
+    }
+    if (!teacherEntries.has(teacherId)) {
+      teacherEntries.set(teacherId, inst.teacher?.name ?? teacherId);
+    }
+  }
+
+  const orderedTeachers = Array.from(teacherEntries.entries()).sort((a, b) => {
+    const nameCompare = a[1].localeCompare(b[1], undefined, { sensitivity: "base" });
+    if (nameCompare !== 0) return nameCompare;
+    return a[0].localeCompare(b[0]);
+  });
+
+  const laneByTeacherId = new Map<string, number>();
+  orderedTeachers.forEach(([teacherId], index) => {
+    laneByTeacherId.set(teacherId, index);
+  });
+
+  const unassignedLane = hasUnassigned ? orderedTeachers.length : null;
+  const laneCount = orderedTeachers.length + (hasUnassigned ? 1 : 0);
+
+  return { laneByTeacherId, laneCount: Math.max(laneCount, 1), unassignedLane };
 }
 
 function getTeacherColor(teacherId?: string | null) {
