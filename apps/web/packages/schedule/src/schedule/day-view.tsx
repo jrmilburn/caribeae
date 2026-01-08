@@ -16,8 +16,15 @@ type DayViewProps = {
   dayName: DayOfWeek;
   dayDate: Date;
   dayOfWeek: number;
-  classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
-  onSlotClick?: (date: Date) => void;
+  classes: Array<
+    NormalizedScheduleClass & {
+      laneIndex: number;
+      laneCount: number;
+      laneOffset: number;
+      laneColumns: number;
+    }
+  >;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   draggingId: string | null;
@@ -139,7 +146,7 @@ export default function DayView(props: DayViewProps) {
               style={{ height: `${SLOT_HEIGHT_PX}px` }}
               onClick={() => {
                 if (!onSlotClick) return;
-                onSlotClick(nextStartForSlot(slot.time12));
+                onSlotClick(nextStartForSlot(slot.time12), dayOfWeek);
               }}
               onDragOver={(e) => {
                 if (!isDraggable || !draggingClass) return;
@@ -185,7 +192,9 @@ export default function DayView(props: DayViewProps) {
             const canDrag = isDraggable && !isCancelled;
             const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
             const top = (startMinutes - GRID_START_MIN) * minuteHeight;
-            const widthPct = 100 / c.columns;
+            const laneWidthPct = 100 / c.laneCount;
+            const widthPct = laneWidthPct / c.laneColumns;
+            const leftPct = c.laneIndex * laneWidthPct + c.laneOffset * widthPct;
             const isSelected = selectedTemplateIds?.includes(c.templateId ?? c.id) ?? false;
 
             return (
@@ -228,7 +237,7 @@ export default function DayView(props: DayViewProps) {
                   top: `${Math.max(0, top)}px`,
                   height: `${c.durationMin * minuteHeight}px`,
                   width: `calc(${widthPct}% - 6px)`,
-                  left: `calc(${c.column * widthPct}% + 3px)`,
+                  left: `calc(${leftPct}% + 3px)`,
                 }}
                 title={c.cancellationReason ?? c.level?.name ?? "Class"}
               >
