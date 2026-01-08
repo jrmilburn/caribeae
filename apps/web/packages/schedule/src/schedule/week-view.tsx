@@ -38,7 +38,7 @@ type WeekViewProps = {
   weekDates: Date[];
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onDayHeaderClick: (day: DayOfWeek) => void;
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   draggingId: string | null;
@@ -212,7 +212,7 @@ export default function WeekView(props: WeekViewProps) {
                     style={{ height: `${SLOT_HEIGHT_PX}px` }}
                     onClick={() => {
                       if (!onSlotClick) return;
-                      onSlotClick(getNextStartForSlot(dayIndex, slot.time12));
+                      onSlotClick(getNextStartForSlot(dayIndex, slot.time12), dayIndex);
                     }}
                     onDragOver={(e) => {
                       if (!isDraggable || !draggingClass) return;
