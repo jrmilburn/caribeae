@@ -47,6 +47,7 @@ export type ScheduleClass = {
   id: string;
   templateId: string;
   templateName?: string | null;
+  dayOfWeek: number; // 0-6 (Mon-Sun)
   startTime: Date;
   endTime: Date;
   capacity?: number | null;
@@ -66,23 +67,37 @@ export type NormalizedScheduleClass = ScheduleClass & {
   dayName: DayOfWeek;
 };
 
+export const DAY_OF_WEEK_NAMES: DayOfWeek[] = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+export const DAY_OF_WEEK_SHORT_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+export function dayOfWeekToName(dayOfWeek: number): DayOfWeek {
+  return DAY_OF_WEEK_NAMES[dayOfWeek] ?? "Monday";
+}
+
+export function dayOfWeekToShortLabel(dayOfWeek: number): string {
+  return DAY_OF_WEEK_SHORT_LABELS[dayOfWeek] ?? "Mon";
+}
+
 export function normalizeScheduleClass(ci: ScheduleClass): NormalizedScheduleClass {
   const start = ci.startTime instanceof Date ? ci.startTime : new Date(ci.startTime);
   const end = ci.endTime instanceof Date ? ci.endTime : new Date(ci.endTime);
   const durationMin = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60)));
 
-  const dayName = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ][start.getDay()] as DayOfWeek;
+  const dayOfWeek = ci.dayOfWeek ?? ci.template?.dayOfWeek ?? 0;
+  const dayName = dayOfWeekToName(dayOfWeek);
 
   return {
     ...ci,
+    dayOfWeek,
     startTime: start,
     endTime: end,
     durationMin,

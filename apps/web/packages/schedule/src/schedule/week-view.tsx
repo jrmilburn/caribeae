@@ -38,8 +38,8 @@ type WeekViewProps = {
   weekDates: Date[];
   classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
   onDayHeaderClick: (day: DayOfWeek) => void;
-  onSlotClick?: (date: Date) => void;
-  onMoveClass?: (templateId: string, nextStart: Date) => Promise<void> | void;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
+  onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -192,7 +192,7 @@ export default function WeekView(props: WeekViewProps) {
 
           {/* Day columns */}
           {DAYS_OF_WEEK.map((day, dayIndex) => {
-            const dayClasses = classes.filter((c) => c.dayName === day);
+            const dayClasses = classes.filter((c) => c.dayOfWeek === dayIndex);
             const isDraggable = Boolean(onMoveClass);
 
             return (
@@ -212,7 +212,7 @@ export default function WeekView(props: WeekViewProps) {
                     style={{ height: `${SLOT_HEIGHT_PX}px` }}
                     onClick={() => {
                       if (!onSlotClick) return;
-                      onSlotClick(getNextStartForSlot(dayIndex, slot.time12));
+                      onSlotClick(getNextStartForSlot(dayIndex, slot.time12), dayIndex);
                     }}
                     onDragOver={(e) => {
                       if (!isDraggable || !draggingClass) return;
@@ -234,7 +234,7 @@ export default function WeekView(props: WeekViewProps) {
                       // 🔥 critical cleanup here (onDragEnd may never fire)
                       finishDrag();
 
-                      await onMoveClass(templateId, getNextStartForSlot(dayIndex, slot.time12));
+                      await onMoveClass(templateId, getNextStartForSlot(dayIndex, slot.time12), dayIndex);
                     }}
                   />
                 ))}

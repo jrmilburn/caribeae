@@ -14,10 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import { dayOfWeekToName, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
-import { dayOfWeekFromDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
+import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
 
 type EnrolmentWithPlan = Enrolment & { plan: EnrolmentPlan; templateId: string };
@@ -72,10 +72,8 @@ export function ChangeEnrolmentDialog({
           ? enrolment.endDate
           : new Date(enrolment.endDate)
         : start;
-      const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
-        start.getDay()
-      ] as NormalizedScheduleClass["dayName"];
-      const dayOfWeek = dayOfWeekFromDate(start);
+      const dayOfWeek = dayOfWeekFromScheduleDate(start);
+      const dayName = dayOfWeekToName(dayOfWeek);
 
       map[id] = {
         id,
@@ -85,6 +83,7 @@ export function ChangeEnrolmentDialog({
         durationMin: 0,
         template: { dayOfWeek } as unknown as NormalizedScheduleClass["template"],
         levelId: enrolment.plan.levelId,
+        dayOfWeek,
         dayName,
       } as unknown as NormalizedScheduleClass;
     });

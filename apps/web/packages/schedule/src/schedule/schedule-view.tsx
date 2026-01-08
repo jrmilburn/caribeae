@@ -29,7 +29,7 @@ export type ScheduleViewProps = {
   levels: Level[];
   dataAdapter?: ScheduleDataAdapter;
   dataEndpoint?: string;
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (occurrence: NormalizedScheduleClass) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
@@ -156,7 +156,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
 
     const onMoveClass = React.useCallback(
-      async (templateId: string, nextStart: Date) => {
+      async (templateId: string, nextStart: Date, dayOfWeek: number) => {
         const existing = classes.find((c) => c.templateId === templateId);
         if (!existing) return;
 
@@ -165,6 +165,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
         const optimistic = normalizeScheduleClass({
           ...existing,
+          dayOfWeek,
           startTime: nextStart,
           endTime: nextEnd,
         });

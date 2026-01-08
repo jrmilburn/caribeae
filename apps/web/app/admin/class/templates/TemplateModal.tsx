@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import type { ClientTemplate } from "@/server/classTemplate/types";
+import { DAY_OF_WEEK_SHORT_LABELS } from "@/packages/schedule";
 
 import {
   Dialog,
@@ -51,6 +52,7 @@ type TemplateModalProps = {
   prefill?: {
     date?: Date;
     startMinutes?: number;
+    dayOfWeek?: number;
     levelId?: string;
     teacherId?: string;
   };
@@ -74,15 +76,12 @@ type FormState = {
   active: boolean;
 };
 
-const DAYS: Array<{ value: string; label: string }> = [
-  { value: "0", label: "Mon" },
-  { value: "1", label: "Tue" },
-  { value: "2", label: "Wed" },
-  { value: "3", label: "Thu" },
-  { value: "4", label: "Fri" },
-  { value: "5", label: "Sat" },
-  { value: "6", label: "Sun" },
-];
+const DAYS: Array<{ value: string; label: string }> = DAY_OF_WEEK_SHORT_LABELS.map(
+  (label, index) => ({
+    value: String(index),
+    label,
+  })
+);
 
 const CAPACITY_PRESETS = [6, 8, 10] as const;
 
@@ -180,7 +179,10 @@ export function TemplateModal({
       startDate: dateToInput(initialDate),
       endDate: "",
 
-      dayOfWeek: initialStart !== null || prefill?.date ? toTemplateDayOfWeek(initialDate) : "",
+      dayOfWeek:
+        initialStart !== null || prefill?.dayOfWeek !== undefined
+          ? String(prefill?.dayOfWeek ?? "")
+          : "",
       startTime: initialStart !== null ? minutesToTimeInput(initialStart) : "",
       endTime: "",
 
@@ -208,7 +210,7 @@ if (template) {
     typeof prefill?.startMinutes === "number" ? prefill.startMinutes : null;
 
   const prefillDay =
-    prefill?.date ? toTemplateDayOfWeek(prefill.date) : null;
+    typeof prefill?.dayOfWeek === "number" ? String(prefill.dayOfWeek) : null;
 
   setForm({
     name: template.name ?? "",
@@ -259,7 +261,10 @@ if (template) {
         teacherId: initialTeacher,
         startDate: dateToInput(initialDate),
         endDate: "",
-        dayOfWeek: initialStart !== null || prefill?.date ? toTemplateDayOfWeek(initialDate) : "",
+        dayOfWeek:
+          initialStart !== null || prefill?.dayOfWeek !== undefined
+            ? String(prefill?.dayOfWeek ?? "")
+            : "",
         startTime: initialStart !== null ? minutesToTimeInput(initialStart) : "",
         endTime: "",
         capacity: "",
@@ -944,11 +949,4 @@ function dateToInput(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function toTemplateDayOfWeek(date: Date): string {
-  // Template stores Monday=0 ... Sunday=6
-  const jsDay = date.getDay(); // 0 = Sunday
-  const mondayZero = jsDay === 0 ? 6 : jsDay - 1;
-  return String(mondayZero);
 }
