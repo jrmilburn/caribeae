@@ -24,7 +24,7 @@ type DayViewProps = {
       laneColumns: number;
     }
   >;
-  onSlotClick?: (date: Date) => void;
+  onSlotClick?: (date: Date, dayOfWeek : number) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   draggingId: string | null;
