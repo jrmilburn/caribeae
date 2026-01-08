@@ -36,7 +36,14 @@ type WeekViewProps = {
   DAYS_OF_WEEK: DayOfWeek[];
   TIME_SLOTS: TimeSlot[];
   weekDates: Date[];
-  classes: Array<NormalizedScheduleClass & { column: number; columns: number }>;
+  classes: Array<
+    NormalizedScheduleClass & {
+      laneIndex: number;
+      laneCount: number;
+      laneOffset: number;
+      laneColumns: number;
+    }
+  >;
   onDayHeaderClick: (day: DayOfWeek) => void;
   onSlotClick?: (date: Date) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
@@ -261,7 +268,9 @@ export default function WeekView(props: WeekViewProps) {
                   const canDrag = isDraggable && !isCancelled;
                   const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
                   const top = (startMinutes - GRID_START_MIN) * minuteHeight;
-                  const widthPct = 100 / c.columns;
+                  const laneWidthPct = 100 / c.laneCount;
+                  const widthPct = laneWidthPct / c.laneColumns;
+                  const leftPct = c.laneIndex * laneWidthPct + c.laneOffset * widthPct;
                   const isSelected = selectedTemplateIds?.includes(c.templateId ?? c.id) ?? false;
 
                   return (
@@ -295,7 +304,7 @@ export default function WeekView(props: WeekViewProps) {
                         top: `${Math.max(0, top)}px`,
                         height: `${c.durationMin * minuteHeight}px`,
                         width: `calc(${widthPct}% - 6px)`,
-                        left: `calc(${c.column * widthPct}% + 3px)`,
+                        left: `calc(${leftPct}% + 3px)`,
                       }}
                       title={c.cancellationReason ?? c.level?.name ?? "Class"}
                     >
