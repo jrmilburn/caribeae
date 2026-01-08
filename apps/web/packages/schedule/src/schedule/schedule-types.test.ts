@@ -1,6 +1,11 @@
 import assert from "node:assert";
 
-import { dayOfWeekToName, normalizeScheduleClass, type ScheduleClass } from "./schedule-types";
+import {
+  dayOfWeekToName,
+  dayOfWeekToShortLabel,
+  normalizeScheduleClass,
+  type ScheduleClass,
+} from "./schedule-types";
 
 function test(name: string, fn: () => void) {
   try {
@@ -27,4 +32,9 @@ test("normalizeScheduleClass uses dayOfWeek for dayName regardless of startTime 
 
   assert.strictEqual(normalized.dayOfWeek, 0);
   assert.strictEqual(normalized.dayName, dayOfWeekToName(0));
+});
+
+test("weekday labels stay aligned for Monday across schedule and modal", () => {
+  assert.strictEqual(dayOfWeekToName(0), "Monday");
+  assert.strictEqual(dayOfWeekToShortLabel(0), "Mon");
 });

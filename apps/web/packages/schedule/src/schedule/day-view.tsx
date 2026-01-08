@@ -146,7 +146,7 @@ export default function DayView(props: DayViewProps) {
               style={{ height: `${SLOT_HEIGHT_PX}px` }}
               onClick={() => {
                 if (!onSlotClick) return;
-                onSlotClick(nextStartForSlot(slot.time12));
+                onSlotClick(nextStartForSlot(slot.time12), dayOfWeek);
               }}
               onDragOver={(e) => {
                 if (!isDraggable || !draggingClass) return;

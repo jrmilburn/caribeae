@@ -219,14 +219,15 @@ export default function ScheduleWithTemplateModal({
   const [prefill, setPrefill] = useState<{
     date: Date;
     startMinutes: number;
+    dayOfWeek: number;
     levelId?: string;
     teacherId?: string;
   } | null>(null);
 
-  const handleSlotClick = (date: Date) => {
+  const handleSlotClick = (date: Date, dayOfWeek: number) => {
     const minutes = date.getHours() * 60 + date.getMinutes();
     setSelectedTemplate(null);
-    setPrefill({ date, startMinutes: minutes });
+    setPrefill({ date, startMinutes: minutes, dayOfWeek });
     setModalOpen(true);
   };
 
@@ -247,6 +248,7 @@ export default function ScheduleWithTemplateModal({
     setPrefill({
       date: occurrence.startTime,
       startMinutes: minutes,
+      dayOfWeek: occurrence.dayOfWeek,
       levelId: occurrence.levelId ?? undefined,
       teacherId: occurrence.teacherId ?? undefined,
     });
@@ -294,6 +296,7 @@ export default function ScheduleWithTemplateModal({
             ? {
                 date: prefill.date,
                 startMinutes: prefill.startMinutes,
+                dayOfWeek: prefill.dayOfWeek,
                 levelId: prefill.levelId,
                 teacherId: prefill.teacherId,
               }
