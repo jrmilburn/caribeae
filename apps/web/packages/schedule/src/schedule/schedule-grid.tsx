@@ -338,10 +338,16 @@ function buildTeacherColor(teacherId: string): TeacherColor {
   };
 }
 
-function buildTeacherColor(index: number): TeacherColor {
-  const hue = (index * 137.508) % 360;
-  return {
-    ...TEACHER_COLOR_CLASSES,
-    style: { ["--schedule-hue" as string]: hue } as CSSProperties,
-  };
+// Deterministic 32-bit hash (FNV-1a)
+export function hashString(input: string): number {
+  let hash = 0x811c9dc5; // 2166136261
+
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    // hash *= 16777619 (but using bit ops for 32-bit overflow behavior)
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  // Convert to signed 32-bit int
+  return hash | 0;
 }
