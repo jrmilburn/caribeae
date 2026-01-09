@@ -35,6 +35,21 @@ export type TemplateOccurrence = {
 
 export const SCHEDULE_TIME_ZONE = "Australia/Brisbane";
 
+const scheduleDateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getScheduleDateFormatter(timeZone: string) {
+  const cached = scheduleDateFormatterCache.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  scheduleDateFormatterCache.set(timeZone, formatter);
+  return formatter;
+}
+
 type TimeZoneDateParts = {
   year: number;
   month: number;
@@ -84,6 +99,10 @@ function getTimeZoneOffset(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): n
     parts.second
   );
   return asUTC - date.getTime();
+}
+
+export function scheduleDateKey(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): string {
+  return getScheduleDateFormatter(timeZone).format(date);
 }
 
 export function safeParseDateParam(value: DateParam): Date | null {
@@ -155,6 +174,33 @@ export function getLocalTimeInfo(date: Date, timeZone: string = SCHEDULE_TIME_ZO
   const dayOfWeek = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(); // 0=Sun
   const minutesSinceMidnight = parts.hour * 60 + parts.minute;
   return { parts, dayOfWeek, minutesSinceMidnight };
+}
+
+export function normalizeToScheduleMidnight(value: DateParam, timeZone: string = SCHEDULE_TIME_ZONE): Date {
+  return dateAtMinutesLocal(asDate(value), 0, timeZone);
+}
+
+export function enumerateScheduleDatesInclusive(
+  start: DateParam,
+  end: DateParam,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Date[] {
+  const startDate = normalizeToScheduleMidnight(start, timeZone);
+  const endDate = normalizeToScheduleMidnight(end, timeZone);
+  if (endDate < startDate) return [];
+
+  const dates: Date[] = [];
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
+export function scheduleDayOfWeek(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): number {
+  const { dayOfWeek } = getLocalTimeInfo(date, timeZone);
+  return (dayOfWeek + 6) % 7;
 }
 
 export function resolveTemplateDurationMinutes(template: TemplateWithTiming): number {
