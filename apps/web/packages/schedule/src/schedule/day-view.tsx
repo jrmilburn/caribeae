@@ -3,7 +3,8 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
+import { scheduleDateKey } from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -16,6 +17,7 @@ type DayViewProps = {
   dayName: DayOfWeek;
   dayDate: Date;
   dayOfWeek: number;
+  holidays: Map<string, Holiday[]>;
   classes: Array<
     NormalizedScheduleClass & {
       laneIndex: number;
@@ -46,6 +48,7 @@ export default function DayView(props: DayViewProps) {
     dayName,
     dayDate,
     dayOfWeek,
+    holidays,
     classes,
     onSlotClick,
     onClassClick,
@@ -114,6 +117,22 @@ export default function DayView(props: DayViewProps) {
         </div>
 
       </div>
+
+      {(() => {
+        const dayHolidays = holidays.get(scheduleDateKey(dayDate)) ?? [];
+        if (!dayHolidays.length) return null;
+        return (
+          <div className="border-b border-border bg-muted/60 px-4 py-2">
+            <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
+              {dayHolidays.map((holiday) => (
+                <div key={holiday.id} className="truncate">
+                  Holiday: {holiday.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <div
         className="grid relative border-r border-b"
