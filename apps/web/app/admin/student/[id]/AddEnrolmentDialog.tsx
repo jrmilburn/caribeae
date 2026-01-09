@@ -21,9 +21,12 @@ import {
 } from "@/components/ui/select";
 import {
   formatScheduleWeekdayTime,
+  scheduleDateAtMinutes,
   scheduleDateKey,
+  scheduleMinutesSinceMidnight,
   ScheduleView,
   type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
 } from "@/packages/schedule";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
@@ -141,7 +144,10 @@ export function AddEnrolmentDialog({
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
 
-  const onClassClick = (occurrence: NormalizedScheduleClass) => {
+  const onClassClick = (
+    occurrence: NormalizedScheduleClass,
+    context?: ScheduleClassClickContext
+  ) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -171,6 +177,10 @@ export function AddEnrolmentDialog({
       return;
     }
 
+    const alignedOccurrence =
+      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
+    const occurrenceDateKey = context?.columnDateKey ?? scheduleDateKey(occurrence.startTime);
+
     setSelectedTemplates((prev) => {
       const alreadySelected = Boolean(prev[occurrence.templateId]);
       if (alreadySelected) {
@@ -180,11 +190,10 @@ export function AddEnrolmentDialog({
       }
 
       if (planIsWeekly && Object.keys(prev).length >= 1) {
-        const occurrenceDate = scheduleDateKey(occurrence.startTime);
         if (!startDateTouched) {
-          setStartDate(occurrenceDate);
+          setStartDate(occurrenceDateKey);
         }
-        return { [occurrence.templateId]: occurrence };
+        return { [occurrence.templateId]: alignedOccurrence };
       }
 
       const count = Object.keys(prev).length;
@@ -194,16 +203,18 @@ export function AddEnrolmentDialog({
         return prev;
       }
 
-      const nextDayType = resolveSelectionDay({ ...prev, [occurrence.templateId]: occurrence });
+      const nextDayType = resolveSelectionDay({
+        ...prev,
+        [occurrence.templateId]: alignedOccurrence,
+      });
       if (nextDayType === "mixed") {
         toast.error("Select classes on the same day type for this enrolment.");
         return prev;
       }
 
-      const next = { ...prev, [occurrence.templateId]: occurrence };
-      const occurrenceDate = scheduleDateKey(occurrence.startTime);
+      const next = { ...prev, [occurrence.templateId]: alignedOccurrence };
       if (!startDateTouched) {
-        setStartDate(occurrenceDate);
+        setStartDate(occurrenceDateKey);
       }
       return next;
     });
@@ -375,4 +386,15 @@ export function AddEnrolmentDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
+  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
+  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
+  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
+  return {
+    ...occurrence,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
 }
