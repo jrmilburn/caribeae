@@ -1,7 +1,11 @@
 import { EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { enumerateDatesInclusive, normalizeToLocalMidnight, toTemplateDayOfWeek } from "@/lib/dateUtils";
+import {
+  enumerateScheduleDatesInclusive,
+  normalizeToScheduleMidnight,
+  scheduleDayOfWeek,
+} from "@/server/schedule/rangeUtils";
 import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import type { HolidayRange } from "./holidayUtils";
 
@@ -11,8 +15,8 @@ export async function recomputeHolidayEnrolments(ranges: HolidayRange[]) {
   if (!ranges.length) return;
 
   const normalized = ranges.map((range) => ({
-    startDate: normalizeToLocalMidnight(range.startDate),
-    endDate: normalizeToLocalMidnight(range.endDate),
+    startDate: normalizeToScheduleMidnight(range.startDate),
+    endDate: normalizeToScheduleMidnight(range.endDate),
   }));
 
   const minStart = normalized.reduce(
@@ -26,8 +30,8 @@ export async function recomputeHolidayEnrolments(ranges: HolidayRange[]) {
 
   const dayOfWeekSet = new Set<number>();
   normalized.forEach((range) => {
-    enumerateDatesInclusive(range.startDate, range.endDate).forEach((date) => {
-      dayOfWeekSet.add(toTemplateDayOfWeek(date));
+    enumerateScheduleDatesInclusive(range.startDate, range.endDate).forEach((date) => {
+      dayOfWeekSet.add(scheduleDayOfWeek(date));
     });
   });
 

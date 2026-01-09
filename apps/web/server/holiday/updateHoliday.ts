@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
-import { normalizeToLocalMidnight } from "@/lib/dateUtils";
+import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
 import { recomputeHolidayEnrolments } from "./recomputeHolidayEnrolments";
 
 const payloadSchema = z.object({
@@ -21,8 +21,8 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
   await requireAdmin();
 
   const payload = payloadSchema.parse(input);
-  const startDate = normalizeToLocalMidnight(payload.startDate);
-  const endDate = normalizeToLocalMidnight(payload.endDate);
+  const startDate = normalizeToScheduleMidnight(payload.startDate);
+  const endDate = normalizeToScheduleMidnight(payload.endDate);
 
   if (endDate < startDate) {
     throw new Error("End date must be on or after start date.");
