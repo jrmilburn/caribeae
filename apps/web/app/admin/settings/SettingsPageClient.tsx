@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { EnrolmentPlan, Holiday, Level, Teacher } from "@prisma/client";
 import { Settings } from "lucide-react";
 
@@ -39,6 +41,14 @@ const SECTIONS: Array<{
   },
 ];
 
+const SETTINGS_LINKS = [
+  { href: "/admin/communications", label: "Communications" },
+  { href: "/admin/reports/teacher-hours", label: "Teacher hours" },
+  { href: "/admin/payroll", label: "Payroll" },
+  { href: "/admin/billing", label: "Billing" },
+  { href: "/admin/reports/audit", label: "Reports" },
+];
+
 export function SettingsPageClient({
   levels,
   plans,
@@ -51,6 +61,8 @@ export function SettingsPageClient({
   holidays: Holiday[];
 }) {
   const [active, setActive] = React.useState<SectionId>("levels");
+  const pathname = usePathname();
+  const isSettingsPage = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/");
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -72,7 +84,8 @@ export function SettingsPageClient({
                 onClick={() => setActive(section.id)}
                 className={cn(
                   buttonVariants({
-                    variant: active === section.id ? "secondary" : "ghost",
+                    variant:
+                      isSettingsPage && active === section.id ? "secondary" : "ghost",
                     size: "sm",
                   }),
                   "w-full justify-start"
@@ -83,6 +96,28 @@ export function SettingsPageClient({
                 </div>
               </button>
             ))}
+            {SETTINGS_LINKS.map((link) => {
+              const isActive =
+                pathname === link.href || pathname.startsWith(`${link.href}/`);
+
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    buttonVariants({
+                      variant: isActive ? "secondary" : "ghost",
+                      size: "sm",
+                    }),
+                    "w-full justify-start"
+                  )}
+                >
+                  <div className="flex flex-col items-start text-left">
+                    <span className="text-sm font-medium">{link.label}</span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </Card>
       </aside>

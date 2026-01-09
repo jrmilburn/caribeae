@@ -12,12 +12,6 @@ import {
   Users,
   BookOpen,
   Inbox,        // ✅ better for Messages (inbox)
-  Megaphone,    // ✅ comms/broadcast
-  Receipt,      // ✅ billing/invoices
-  Coins,        // ✅ counter/cash
-  Banknote,     // ✅ payroll
-  Clock3,
-  BarChart3,    // ✅ reports/analytics
   Settings,
   Menu,
   ChevronDown,
@@ -61,14 +55,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Classes", href: "/admin/class", icon: BookOpen },
 
   { label: "Messages", href: "/admin/messages", icon: Inbox },
-  { label: "Communications", href: "/admin/communications", icon: Megaphone },
-
-  { label: "Billing", href: "/admin/billing", icon: Receipt },
-  { label: "Counter", href: "/admin/counter", icon: Coins },
-  { label: "Payroll", href: "/admin/payroll", icon: Banknote },
-
-  { label: "Teacher hours", href: "/admin/reports/teacher-hours", icon: Clock3 },
-  { label: "Reports", href: "/admin/reports/audit", icon: BarChart3 },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
@@ -363,6 +349,19 @@ function UserBlock() {
 
 
 function isActive(pathname: string, href: string) {
+  if (href === "/admin/settings") {
+    // Settings stays active for routes moved into the settings menu.
+    const settingsRoutes = [
+      "/admin/settings",
+      "/admin/communications",
+      "/admin/payroll",
+      "/admin/billing",
+      "/admin/reports",
+    ];
+    return settingsRoutes.some(
+      (route) => pathname === route || pathname.startsWith(route + "/")
+    );
+  }
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(href + "/");
 }
