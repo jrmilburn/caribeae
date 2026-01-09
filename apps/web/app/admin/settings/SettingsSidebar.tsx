@@ -12,7 +12,15 @@ import { cn } from "@/lib/utils";
 type SettingsSection = {
   id: string;
   label: string;
+  href: string;
 };
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: "levels", label: "Levels", href: "/admin/settings/levels" },
+  { id: "plans", label: "Enrolment plans", href: "/admin/settings/plans" },
+  { id: "teachers", label: "Teachers", href: "/admin/settings/teachers" },
+  { id: "holidays", label: "Holidays", href: "/admin/settings/holidays" },
+];
 
 const SETTINGS_LINKS = [
   { href: "/admin/communications", label: "Communications" },
@@ -24,17 +32,10 @@ const SETTINGS_LINKS = [
 
 type SettingsSidebarProps = {
   sections?: SettingsSection[];
-  activeSection?: string;
-  onSectionChange?: (id: string) => void;
 };
 
-export function SettingsSidebar({
-  sections = [],
-  activeSection,
-  onSectionChange,
-}: SettingsSidebarProps) {
+export function SettingsSidebar({ sections = SETTINGS_SECTIONS }: SettingsSidebarProps) {
   const pathname = usePathname();
-  const isSettingsPage = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/");
 
   return (
     <Card className=" border-l-0! border-t-0! h-full py-0! shadow-none">
@@ -47,25 +48,28 @@ export function SettingsSidebar({
         </div>
       </div>
       <div className="space-y-2">
-        {sections.map((section) => (
-          <button
-            key={section.id}
-            type="button"
-            onClick={() => onSectionChange?.(section.id)}
-            className={cn(
-              buttonVariants({
-                variant:
-                  isSettingsPage && activeSection === section.id ? "secondary" : "ghost",
-                size: "sm",
-              }),
-              "w-full justify-start"
-            )}
-          >
-            <div className="flex flex-col items-start text-left">
-              <span className="text-sm font-medium">{section.label}</span>
-            </div>
-          </button>
-        ))}
+        {sections.map((section) => {
+          const isActive =
+            pathname === section.href || pathname.startsWith(`${section.href}/`);
+
+          return (
+            <Link
+              key={section.id}
+              href={section.href}
+              className={cn(
+                buttonVariants({
+                  variant: isActive ? "secondary" : "ghost",
+                  size: "sm",
+                }),
+                "w-full justify-start"
+              )}
+            >
+              <div className="flex flex-col items-start text-left">
+                <span className="text-sm font-medium">{section.label}</span>
+              </div>
+            </Link>
+          );
+        })}
         {SETTINGS_LINKS.map((link) => {
           const isActive =
             pathname === link.href || pathname.startsWith(`${link.href}/`);
