@@ -60,6 +60,14 @@ export type ScheduleClass = {
   cancellationReason?: string | null;
 };
 
+export type Holiday = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  note?: string | null;
+};
+
 export type NormalizedScheduleClass = ScheduleClass & {
   startTime: Date;
   endTime: Date;

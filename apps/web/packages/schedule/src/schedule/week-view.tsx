@@ -3,7 +3,8 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
+import { dateKey } from "@/lib/dateUtils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -36,6 +37,7 @@ type WeekViewProps = {
   DAYS_OF_WEEK: DayOfWeek[];
   TIME_SLOTS: TimeSlot[];
   weekDates: Date[];
+  holidays: Map<string, Holiday[]>;
   classes: Array<
     NormalizedScheduleClass & {
       laneIndex: number;
@@ -67,6 +69,7 @@ export default function WeekView(props: WeekViewProps) {
     DAYS_OF_WEEK,
     TIME_SLOTS,
     weekDates,
+    holidays,
     classes,
     onDayHeaderClick,
     onSlotClick,
@@ -164,6 +167,33 @@ export default function WeekView(props: WeekViewProps) {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* All-day holiday row */}
+        <div
+          className="grid border-b border-r border-border bg-muted/60 sticky top-[60px] z-30 min-h-[36px]"
+          style={{ gridTemplateColumns: "minmax(32px,1fr) repeat(7, minmax(64px,2fr))" }}
+        >
+          <div className="border-r border-border" />
+          {weekDates.map((date) => {
+            const dayHolidays = holidays.get(dateKey(date)) ?? [];
+            return (
+              <div
+                key={`holiday-${dateKey(date)}`}
+                className="border-l border-border px-2 py-1 flex flex-col justify-center"
+              >
+                {dayHolidays.length ? (
+                  <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
+                    {dayHolidays.map((holiday) => (
+                      <div key={holiday.id} className="truncate">
+                        Holiday: {holiday.name}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
 
         {/* Grid */}

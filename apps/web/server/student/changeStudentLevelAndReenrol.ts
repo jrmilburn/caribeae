@@ -22,7 +22,7 @@ import {
 import { validateSelection } from "@/server/enrolment/validateSelection";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
-import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
+import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 
 type ChangeStudentLevelInput = {
@@ -287,6 +287,7 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
         include: { plan: true, template: true },
       });
       await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
+      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
       enrolments.push(enrolment);
     }
 

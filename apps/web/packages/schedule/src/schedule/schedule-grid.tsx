@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
-import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
 import { dayOfWeekToName } from "./schedule-types";
 import WeekView from "./week-view";
 import DayView from "./day-view";
@@ -16,6 +16,7 @@ export type ScheduleGridProps = {
   loading: boolean;
   classes: NormalizedScheduleClass[];
   weekDates: Date[];
+  holidays: Map<string, Holiday[]>;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (c: NormalizedScheduleClass) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
@@ -44,6 +45,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     loading,
     classes,
     weekDates,
+    holidays,
     onSlotClick,
     onClassClick,
     onMoveClass,
@@ -83,6 +85,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           TIME_SLOTS={TIME_SLOTS}
           weekDates={weekDates}
           classes={normalized}
+          holidays={holidays}
           onDayHeaderClick={(day) => {
             const idx = dayToIndex(day);
             setSelectedDay(idx);
@@ -103,6 +106,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
           dayOfWeek={selectedDay}
           classes={normalized.filter((c) => c.dayOfWeek === selectedDay)}
+          holidays={holidays}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
           onMoveClass={onMoveClass}
