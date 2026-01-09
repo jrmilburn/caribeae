@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { EnrolmentPlan, Level, Teacher } from "@prisma/client";
+import type { EnrolmentPlan, Holiday, Level, Teacher } from "@prisma/client";
 import { Settings } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
@@ -11,10 +11,11 @@ import { cn } from "@/lib/utils";
 import { EnrolmentPlansSection } from "./EnrolmentPlansSection";
 import { LevelsSection } from "./LevelsSection";
 import { TeachersSection } from "./TeachersSection";
+import { HolidaysSection } from "./HolidaysSection";
 
 type PlanWithLevel = EnrolmentPlan & { level: Level };
 
-type SectionId = "levels" | "plans" | "teachers";
+type SectionId = "levels" | "plans" | "teachers" | "holidays";
 
 const SECTIONS: Array<{
   id: SectionId;
@@ -32,16 +33,22 @@ const SECTIONS: Array<{
     id: "teachers",
     label: "Teachers",
   },
+  {
+    id: "holidays",
+    label: "Holidays",
+  },
 ];
 
 export function SettingsPageClient({
   levels,
   plans,
   teachers,
+  holidays,
 }: {
   levels: Level[];
   plans: PlanWithLevel[];
   teachers: Teacher[];
+  holidays: Holiday[];
 }) {
   const [active, setActive] = React.useState<SectionId>("levels");
 
@@ -84,6 +91,7 @@ export function SettingsPageClient({
         {active === "levels" && <LevelsSection levels={levels} />}
         {active === "plans" && <EnrolmentPlansSection plans={plans} levels={levels} />}
         {active === "teachers" && <TeachersSection teachers={teachers} />}
+        {active === "holidays" && <HolidaysSection holidays={holidays} />}
       </div>
     </div>
   );
