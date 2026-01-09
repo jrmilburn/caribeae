@@ -17,9 +17,11 @@
  *   getEnrolmentBillingStatus, ensuring all surfaces share the same selector.
  */
 
-import { isAfter } from "date-fns";
+import { addDays, isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
+import { normalizeToLocalMidnight } from "@/lib/dateUtils";
+import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
 import {
   buildOccurrenceSchedule,
   consumeOccurrencesForCredits,
@@ -101,6 +103,15 @@ function nextOccurrenceOnOrAfter(start: Date, templateDayOfWeek: number | null |
     cursor = addDaysUtc(cursor, 1);
   }
   return cursor;
+}
+
+function nextOccurrenceOnOrAfterLocal(start: Date, templateDayOfWeek: number | null | undefined) {
+  if (templateDayOfWeek == null) return null;
+  const target = ((templateDayOfWeek % 7) + 7) % 7; // 0 = Monday
+  const normalizedStart = normalizeToLocalMidnight(start);
+  const startDay = (normalizedStart.getDay() + 6) % 7;
+  const delta = (target - startDay + 7) % 7;
+  return addDays(normalizedStart, delta);
 }
 
 async function updateCachedCreditBalance(
@@ -244,6 +255,57 @@ function resolveNextWeeklyDueDate(enrolment: EnrolmentWithPlanTemplate, paidThro
   return next;
 }
 
+function resolveNextWeeklyDueDateLocal(enrolment: EnrolmentWithPlanTemplate, paidThrough: Date | null) {
+  if (!enrolment.template || !paidThrough) return null;
+  const start = addDays(normalizeToLocalMidnight(paidThrough), 1);
+  const next = nextOccurrenceOnOrAfterLocal(start, enrolment.template.dayOfWeek);
+  if (!next) return null;
+  if (enrolment.endDate && isAfter(next, normalizeToLocalMidnight(enrolment.endDate))) return null;
+  return next;
+}
+
+async function applyHolidayAdjustmentsForWeeklyPlan(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate,
+  snapshot: EnrolmentBillingSnapshot
+): Promise<EnrolmentBillingSnapshot> {
+  if (!enrolment.template || enrolment.plan?.billingType !== BillingType.PER_WEEK) return snapshot;
+  if (!snapshot.paidThroughDate) return snapshot;
+  if (enrolment.template.dayOfWeek == null) return snapshot;
+
+  const baseStart = normalizeToLocalMidnight(enrolment.startDate);
+  const baseEnd = normalizeToLocalMidnight(snapshot.paidThroughDate);
+  if (baseEnd < baseStart) return snapshot;
+
+  const holidays = await tx.holiday.findMany({
+    where: {
+      startDate: { lte: baseEnd },
+      endDate: { gte: baseStart },
+    },
+    select: { startDate: true, endDate: true },
+  });
+
+  if (!holidays.length) return snapshot;
+
+  const holidayCount = countHolidayOccurrences({
+    startDate: baseStart,
+    endDate: baseEnd,
+    templateDayOfWeek: enrolment.template.dayOfWeek,
+    holidays,
+  });
+
+  if (!holidayCount) return snapshot;
+
+  const paidThrough = addDays(baseEnd, holidayCount * 7);
+  const nextDue = resolveNextWeeklyDueDateLocal(enrolment, paidThrough);
+
+  return {
+    ...snapshot,
+    paidThroughDate: paidThrough,
+    nextPaymentDueDate: nextDue,
+  };
+}
+
 async function computeCreditPaidThroughInternal(
   tx: Prisma.TransactionClient,
   enrolment: EnrolmentWithPlanTemplate,
@@ -355,7 +417,7 @@ async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: Enrolment
   });
 }
 
-export async function getEnrolmentBillingStatus(
+export async function recomputeEnrolmentComputedFields(
   enrolmentId: string,
   options?: { asOfDate?: Date; client?: PrismaClientOrTx }
 ): Promise<EnrolmentBillingSnapshot> {
@@ -370,10 +432,20 @@ export async function getEnrolmentBillingStatus(
       throw new Error("Enrolment not found");
     }
 
-    const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+    let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+    if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+      snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
+    }
     await persistSnapshot(tx, snapshot);
     return snapshot;
   });
+}
+
+export async function getEnrolmentBillingStatus(
+  enrolmentId: string,
+  options?: { asOfDate?: Date; client?: PrismaClientOrTx }
+): Promise<EnrolmentBillingSnapshot> {
+  return recomputeEnrolmentComputedFields(enrolmentId, options);
 }
 
 export async function getBillingStatusForEnrolments(
@@ -391,7 +463,10 @@ export async function getBillingStatusForEnrolments(
 
     const map = new Map<string, EnrolmentBillingSnapshot>();
     for (const enrolment of enrolments) {
-      const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+      let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
+      }
       await persistSnapshot(tx, snapshot);
       map.set(enrolment.id, snapshot);
     }
@@ -515,7 +590,10 @@ export async function getFamilyEnrolmentBillingStatus(
     const map = new Map<string, EnrolmentBillingSnapshot>();
     const asOf = normalizeDate(new Date());
     for (const enrolment of enrolments) {
-      const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+      let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
+      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
+      }
       await persistSnapshot(tx, snapshot);
       map.set(enrolment.id, snapshot);
     }
@@ -537,7 +615,10 @@ export async function refreshBillingForOpenEnrolments(options?: { client?: Prism
     });
 
     for (const enrolment of enrolments) {
-      const snapshot = await computeBillingSnapshot(tx, enrolment, today);
+      let snapshot = await computeBillingSnapshot(tx, enrolment, today);
+      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
+      }
       await persistSnapshot(tx, snapshot);
     }
   });

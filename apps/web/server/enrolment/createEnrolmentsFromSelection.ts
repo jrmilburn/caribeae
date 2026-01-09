@@ -19,6 +19,7 @@ import {
 import { validateSelection } from "./validateSelection";
 import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
+import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 
 /**
  * Findings + Proposed Fix
@@ -214,6 +215,7 @@ export async function createEnrolmentsFromSelection(
         },
       });
       await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
+      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
       enrolments.push(enrolment);
     }
     return enrolments;

@@ -7,13 +7,14 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
 
 import ScheduleGrid from "./schedule-grid";
-import type { NormalizedScheduleClass } from "./schedule-types";
+import type { Holiday, NormalizedScheduleClass } from "./schedule-types";
 import { normalizeScheduleClass } from "./schedule-types";
 import {
   createApiScheduleDataAdapter,
   type ScheduleDataAdapter,
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
+import { dateKey, enumerateDatesInclusive, normalizeToLocalMidnight } from "@/lib/dateUtils";
 
 export type ScheduleViewHandle = {
   /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
@@ -67,6 +68,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     );
     const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
     const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
+    const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
 
     const [error, setError] = useState<string | null>(null);
@@ -122,6 +124,45 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       };
     }, [adapter, weekStart, displayWeekEnd, levelFilter]);
 
+    React.useEffect(() => {
+      let cancelled = false;
+      async function loadHolidays() {
+        try {
+          const params = new URLSearchParams({
+            from: format(weekStart, "yyyy-MM-dd"),
+            to: format(displayWeekEnd, "yyyy-MM-dd"),
+          });
+          const response = await fetch(`/api/admin/holidays?${params.toString()}`, {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (!response.ok) {
+            throw new Error("Unable to load holidays");
+          }
+          const payload = (await response.json()) as { holidays?: Holiday[] };
+          const normalized = Array.isArray(payload.holidays)
+            ? payload.holidays.map((holiday) => ({
+                ...holiday,
+                startDate: normalizeToLocalMidnight(holiday.startDate),
+                endDate: normalizeToLocalMidnight(holiday.endDate),
+              }))
+            : [];
+          if (!cancelled) {
+            setHolidays(normalized);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(err instanceof Error ? err.message : "Unable to load holidays");
+          }
+        }
+      }
+      void loadHolidays();
+      return () => {
+        cancelled = true;
+      };
+    }, [weekStart, displayWeekEnd]);
+
     // Background refresh (does NOT flip `loading`, so the grid stays mounted)
     const softRefresh = React.useCallback(() => {
       void (async () => {
@@ -153,6 +194,19 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
         return true;
       });
     }, [classes, levelFilter, teacherFilter]);
+
+    const holidayIndex = useMemo(() => {
+      const index = new Map<string, Holiday[]>();
+      holidays.forEach((holiday) => {
+        enumerateDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
+          const key = dateKey(date);
+          const existing = index.get(key) ?? [];
+          existing.push(holiday);
+          index.set(key, existing);
+        });
+      });
+      return index;
+    }, [holidays]);
 
 
     const onMoveClass = React.useCallback(
@@ -251,6 +305,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             loading={loading}
             classes={filteredClasses}
             weekDates={weekDates}
+            holidays={holidayIndex}
             onSlotClick={onSlotClick}
             onClassClick={onClassClick}
             onMoveClass={allowTemplateMoves ? onMoveClass : undefined}
