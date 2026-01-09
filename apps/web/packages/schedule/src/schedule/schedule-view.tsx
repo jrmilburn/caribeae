@@ -14,8 +14,11 @@ import {
   type ScheduleDataAdapter,
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
-import { enumerateDatesInclusive, normalizeToLocalMidnight } from "@/lib/dateUtils";
-import { scheduleDateKey } from "./schedule-date-utils";
+import {
+  enumerateScheduleDatesInclusive,
+  normalizeToScheduleMidnight,
+  scheduleDateKey,
+} from "./schedule-date-utils";
 
 export type ScheduleViewHandle = {
   /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
@@ -130,8 +133,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       async function loadHolidays() {
         try {
           const params = new URLSearchParams({
-            from: format(weekStart, "yyyy-MM-dd"),
-            to: format(displayWeekEnd, "yyyy-MM-dd"),
+            from: scheduleDateKey(weekStart),
+            to: scheduleDateKey(displayWeekEnd),
           });
           const response = await fetch(`/api/admin/holidays?${params.toString()}`, {
             method: "GET",
@@ -145,8 +148,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           const normalized = Array.isArray(payload.holidays)
             ? payload.holidays.map((holiday) => ({
                 ...holiday,
-                startDate: normalizeToLocalMidnight(holiday.startDate),
-                endDate: normalizeToLocalMidnight(holiday.endDate),
+                startDate: normalizeToScheduleMidnight(holiday.startDate),
+                endDate: normalizeToScheduleMidnight(holiday.endDate),
               }))
             : [];
           if (!cancelled) {
@@ -199,7 +202,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     const holidayIndex = useMemo(() => {
       const index = new Map<string, Holiday[]>();
       holidays.forEach((holiday) => {
-        enumerateDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
+        enumerateScheduleDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
           const key = scheduleDateKey(date);
           const existing = index.get(key) ?? [];
           existing.push(holiday);
