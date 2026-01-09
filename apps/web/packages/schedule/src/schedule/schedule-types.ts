@@ -75,6 +75,12 @@ export type NormalizedScheduleClass = ScheduleClass & {
   dayName: DayOfWeek;
 };
 
+export type ScheduleClassClickContext = {
+  columnDate: Date;
+  columnDateKey: string;
+  columnIndex: number;
+};
+
 export const DAY_OF_WEEK_NAMES: DayOfWeek[] = [
   "Monday",
   "Tuesday",

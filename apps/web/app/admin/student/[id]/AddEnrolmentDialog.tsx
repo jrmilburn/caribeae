@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 
@@ -20,7 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import {
+  formatScheduleWeekdayTime,
+  scheduleDateAtMinutes,
+  scheduleDateKey,
+  scheduleMinutesSinceMidnight,
+  ScheduleView,
+  type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
+} from "@/packages/schedule";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
@@ -48,6 +55,7 @@ export function AddEnrolmentDialog({
   );
   const [planId, setPlanId] = React.useState<string>("");
   const [startDate, setStartDate] = React.useState<string>("");
+  const [startDateTouched, setStartDateTouched] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -55,13 +63,14 @@ export function AddEnrolmentDialog({
       setSelectedTemplates({});
       setPlanId("");
       setStartDate("");
+      setStartDateTouched(false);
       setSaving(false);
     }
   }, [open]);
 
   React.useEffect(() => {
     if (open && !startDate) {
-      setStartDate(format(new Date(), "yyyy-MM-dd"));
+      setStartDate(scheduleDateKey(new Date()));
     }
   }, [open, startDate]);
 
@@ -102,14 +111,13 @@ export function AddEnrolmentDialog({
     const sortedDates = selectedTemplateIds
       .map((id) => selectedTemplates[id]?.startTime)
       .filter(Boolean)
-      .map((date) => format(date as Date, "yyyy-MM-dd"))
+      .map((date) => scheduleDateKey(date as Date))
       .sort();
     if (!sortedDates.length) return;
-    setStartDate((prev) => {
-      if (!prev) return sortedDates[0];
-      return prev > sortedDates[0] ? sortedDates[0] : prev;
-    });
-  }, [selectedTemplateIds, selectedTemplates]);
+    if (!startDateTouched) {
+      setStartDate(sortedDates[0]);
+    }
+  }, [selectedTemplateIds, selectedTemplates, startDateTouched]);
 
   const selectedPlan = React.useMemo(
     () => availablePlans.find((p) => p.id === planId) ?? null,
@@ -136,7 +144,10 @@ export function AddEnrolmentDialog({
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
 
-  const onClassClick = (occurrence: NormalizedScheduleClass) => {
+  const onClassClick = (
+    occurrence: NormalizedScheduleClass,
+    context?: ScheduleClassClickContext
+  ) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -166,6 +177,10 @@ export function AddEnrolmentDialog({
       return;
     }
 
+    const alignedOccurrence =
+      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
+    const occurrenceDateKey = context?.columnDateKey ?? scheduleDateKey(occurrence.startTime);
+
     setSelectedTemplates((prev) => {
       const alreadySelected = Boolean(prev[occurrence.templateId]);
       if (alreadySelected) {
@@ -175,12 +190,10 @@ export function AddEnrolmentDialog({
       }
 
       if (planIsWeekly && Object.keys(prev).length >= 1) {
-        const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
-        setStartDate((prevStart) => {
-          if (!prevStart) return occurrenceDate;
-          return occurrenceDate < prevStart ? occurrenceDate : prevStart;
-        });
-        return { [occurrence.templateId]: occurrence };
+        if (!startDateTouched) {
+          setStartDate(occurrenceDateKey);
+        }
+        return { [occurrence.templateId]: alignedOccurrence };
       }
 
       const count = Object.keys(prev).length;
@@ -190,18 +203,19 @@ export function AddEnrolmentDialog({
         return prev;
       }
 
-      const nextDayType = resolveSelectionDay({ ...prev, [occurrence.templateId]: occurrence });
+      const nextDayType = resolveSelectionDay({
+        ...prev,
+        [occurrence.templateId]: alignedOccurrence,
+      });
       if (nextDayType === "mixed") {
         toast.error("Select classes on the same day type for this enrolment.");
         return prev;
       }
 
-      const next = { ...prev, [occurrence.templateId]: occurrence };
-      const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
-      setStartDate((prevStart) => {
-        if (!prevStart) return occurrenceDate;
-        return occurrenceDate < prevStart ? occurrenceDate : prevStart;
-      });
+      const next = { ...prev, [occurrence.templateId]: alignedOccurrence };
+      if (!startDateTouched) {
+        setStartDate(occurrenceDateKey);
+      }
       return next;
     });
   };
@@ -292,7 +306,10 @@ export function AddEnrolmentDialog({
                 type="date"
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDateTouched(true);
+                  setStartDate(e.target.value);
+                }}
                 placeholder="YYYY-MM-DD"
               />
               <p className="text-xs text-muted-foreground">
@@ -345,7 +362,7 @@ export function AddEnrolmentDialog({
                     return (
                       <span key={id} className="rounded border bg-background px-2 py-1 text-xs">
                         {entry?.template?.name ?? entry?.level?.name ?? "Class"} ·{" "}
-                        {entry ? format(entry.startTime, "EEE h:mm a") : ""}
+                        {entry ? formatScheduleWeekdayTime(entry.startTime) : ""}
                       </span>
                     );
                   })}
@@ -369,4 +386,15 @@ export function AddEnrolmentDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
+  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
+  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
+  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
+  return {
+    ...occurrence,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
 }

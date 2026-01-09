@@ -3,8 +3,13 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
-import { dateKey } from "@/lib/dateUtils";
+import type {
+  DayOfWeek,
+  Holiday,
+  NormalizedScheduleClass,
+  ScheduleClassClickContext,
+} from "./schedule-types";
+import { dayOfWeekToColumnIndex, scheduleDateKey } from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -27,7 +32,7 @@ type DayViewProps = {
     }
   >;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
-  onClassClick?: (c: NormalizedScheduleClass) => void;
+  onClassClick?: (c: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -119,7 +124,7 @@ export default function DayView(props: DayViewProps) {
       </div>
 
       {(() => {
-        const dayHolidays = holidays.get(dateKey(dayDate)) ?? [];
+        const dayHolidays = holidays.get(scheduleDateKey(dayDate)) ?? [];
         if (!dayHolidays.length) return null;
         return (
           <div className="border-b border-border bg-muted/60 px-4 py-2">
@@ -244,7 +249,11 @@ export default function DayView(props: DayViewProps) {
                 // If cards accept drops, you'll "drop onto a card" and it can snap back.
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClassClick?.(c);
+                  onClassClick?.(c, {
+                    columnDate: dayDate,
+                    columnDateKey: scheduleDateKey(dayDate),
+                    columnIndex: dayOfWeekToColumnIndex(dayOfWeek),
+                  });
                 }}
                 className={cn(
                   "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",
