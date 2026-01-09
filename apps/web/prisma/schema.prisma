@@ -393,6 +393,21 @@ model EnrolmentPlan {
   enrolments Enrolment[]
 }
 
+model Holiday {
+  id String @id @default(cuid())
+
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startDate])
+  @@index([endDate])
+}
+
 model Level {
   id String @id @default(cuid())
 
