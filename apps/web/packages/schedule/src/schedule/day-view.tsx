@@ -264,7 +264,7 @@ export default function DayView(props: DayViewProps) {
                 title={c.cancellationReason ?? c.level?.name ?? "Class"}
               >
                 <div className="flex flex-col gap-1 overflow-hidden leading-tight text-xs">
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex flex-col items-center gap-2 text-[11px]">
                     <div className={cn("font-medium truncate", isCancelled ? "text-destructive" : colors.text)}>
                       {c.level?.name ?? "Class"}
                     </div>
