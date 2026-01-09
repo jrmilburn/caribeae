@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { dayOfWeekToName, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import { dayOfWeekToName, scheduleDateKey, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
 import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
@@ -53,7 +53,8 @@ export function ChangeEnrolmentDialog({
 
   React.useEffect(() => {
     if (open) {
-      setStartDate(format(enrolment.startDate, "yyyy-MM-dd"));
+      const start = enrolment.startDate instanceof Date ? enrolment.startDate : new Date(enrolment.startDate);
+      setStartDate(scheduleDateKey(start));
       setSaving(false);
     }
   }, [enrolment.startDate, open]);

@@ -1,8 +1,7 @@
-import { dayOfWeekToName, type NormalizedScheduleClass } from "@/packages/schedule";
+import { dayOfWeekToName, SCHEDULE_TIME_ZONE, type NormalizedScheduleClass } from "@/packages/schedule";
 
 export const SATURDAY_INDEX = 5;
 export type SelectionDay = "saturday" | "weekday" | "mixed" | null;
-const SCHEDULE_TIME_ZONE = "Australia/Brisbane";
 
 export function dayOfWeekFromScheduleDate(date: Date) {
   const formatter = new Intl.DateTimeFormat("en-AU", {
