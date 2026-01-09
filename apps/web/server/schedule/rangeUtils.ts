@@ -1,8 +1,6 @@
 import { addDays, addMinutes, format, getISODay, isValid, parse, parseISO } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
-import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
-
 export type DateParam = Date | string | null | undefined;
 
 export type NormalizedDateRange = {
@@ -116,14 +114,25 @@ export function normalizeDateRange(params: {
   const baseFrom = params.from ?? params.defaultFrom ?? new Date();
   const baseTo = params.to ?? params.defaultTo ?? baseFrom;
 
-  const normalizedFrom = dateAtMinutesLocal(normalizeLocalDate(baseFrom), 0);
-  const normalizedTo = dateAtMinutesLocal(normalizeLocalDate(baseTo), (24 * 60) - 1);
+  const normalizedFrom = dateAtMinutesLocal(asDate(baseFrom), 0);
+  const normalizedTo = dateAtMinutesLocal(asDate(baseTo), (24 * 60) - 1);
 
   if (normalizedTo.getTime() < normalizedFrom.getTime()) {
     throw new Error("Range end must be on or after range start");
   }
 
   return { from: normalizedFrom, to: normalizedTo };
+}
+
+function asDate(value: DateParam): Date {
+  if (!value) return new Date();
+  const parsed = value instanceof Date ? value : parseISO(value);
+  if (!isValid(parsed)) {
+    const fallback = value instanceof Date ? value : parse(value, "yyyy-MM-dd", new Date());
+    if (isValid(fallback)) return fallback;
+    throw new Error("Invalid date");
+  }
+  return parsed;
 }
 
 export function dateAtMinutesLocal(day: Date, minutes: number, timeZone: string = SCHEDULE_TIME_ZONE): Date {
