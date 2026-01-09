@@ -7,14 +7,22 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
 
 import ScheduleGrid from "./schedule-grid";
-import type { Holiday, NormalizedScheduleClass } from "./schedule-types";
+import type {
+  Holiday,
+  NormalizedScheduleClass,
+  ScheduleClassClickContext,
+} from "./schedule-types";
 import { normalizeScheduleClass } from "./schedule-types";
 import {
   createApiScheduleDataAdapter,
   type ScheduleDataAdapter,
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
-import { dateKey, enumerateDatesInclusive, normalizeToLocalMidnight } from "@/lib/dateUtils";
+import {
+  enumerateScheduleDatesInclusive,
+  normalizeToScheduleMidnight,
+  scheduleDateKey,
+} from "./schedule-date-utils";
 
 export type ScheduleViewHandle = {
   /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
@@ -31,7 +39,7 @@ export type ScheduleViewProps = {
   dataAdapter?: ScheduleDataAdapter;
   dataEndpoint?: string;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
-  onClassClick?: (occurrence: NormalizedScheduleClass) => void;
+  onClassClick?: (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
   allowTemplateMoves?: boolean;
@@ -129,8 +137,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       async function loadHolidays() {
         try {
           const params = new URLSearchParams({
-            from: format(weekStart, "yyyy-MM-dd"),
-            to: format(displayWeekEnd, "yyyy-MM-dd"),
+            from: scheduleDateKey(weekStart),
+            to: scheduleDateKey(displayWeekEnd),
           });
           const response = await fetch(`/api/admin/holidays?${params.toString()}`, {
             method: "GET",
@@ -144,8 +152,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           const normalized = Array.isArray(payload.holidays)
             ? payload.holidays.map((holiday) => ({
                 ...holiday,
-                startDate: normalizeToLocalMidnight(holiday.startDate),
-                endDate: normalizeToLocalMidnight(holiday.endDate),
+                startDate: normalizeToScheduleMidnight(holiday.startDate),
+                endDate: normalizeToScheduleMidnight(holiday.endDate),
               }))
             : [];
           if (!cancelled) {
@@ -198,8 +206,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     const holidayIndex = useMemo(() => {
       const index = new Map<string, Holiday[]>();
       holidays.forEach((holiday) => {
-        enumerateDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
-          const key = dateKey(date);
+        enumerateScheduleDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
+          const key = scheduleDateKey(date);
           const existing = index.get(key) ?? [];
           existing.push(holiday);
           index.set(key, existing);
@@ -209,7 +217,10 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     }, [holidays]);
 
     const visibleClasses = useMemo(
-      () => filteredClasses.filter((occurrence) => !holidayIndex.has(dateKey(occurrence.startTime))),
+      () =>
+        filteredClasses.filter(
+          (occurrence) => !holidayIndex.has(scheduleDateKey(occurrence.startTime))
+        ),
       [filteredClasses, holidayIndex]
     );
 

@@ -1,8 +1,6 @@
 import { addDays, addMinutes, format, getISODay, isValid, parse, parseISO } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
-import { normalizeLocalDate } from "@/server/timesheet/normalizeLocalDate";
-
 export type DateParam = Date | string | null | undefined;
 
 export type NormalizedDateRange = {
@@ -36,6 +34,21 @@ export type TemplateOccurrence = {
 };
 
 export const SCHEDULE_TIME_ZONE = "Australia/Brisbane";
+
+const scheduleDateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getScheduleDateFormatter(timeZone: string) {
+  const cached = scheduleDateFormatterCache.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  scheduleDateFormatterCache.set(timeZone, formatter);
+  return formatter;
+}
 
 type TimeZoneDateParts = {
   year: number;
@@ -88,6 +101,10 @@ function getTimeZoneOffset(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): n
   return asUTC - date.getTime();
 }
 
+export function scheduleDateKey(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): string {
+  return getScheduleDateFormatter(timeZone).format(date);
+}
+
 export function safeParseDateParam(value: DateParam): Date | null {
   if (!value) return null;
 
@@ -116,14 +133,33 @@ export function normalizeDateRange(params: {
   const baseFrom = params.from ?? params.defaultFrom ?? new Date();
   const baseTo = params.to ?? params.defaultTo ?? baseFrom;
 
-  const normalizedFrom = dateAtMinutesLocal(normalizeLocalDate(baseFrom), 0);
-  const normalizedTo = dateAtMinutesLocal(normalizeLocalDate(baseTo), (24 * 60) - 1);
+  const normalizedFrom = dateAtMinutesLocal(asDate(baseFrom), 0);
+  const normalizedTo = dateAtMinutesLocal(asDate(baseTo), (24 * 60) - 1);
 
   if (normalizedTo.getTime() < normalizedFrom.getTime()) {
     throw new Error("Range end must be on or after range start");
   }
 
   return { from: normalizedFrom, to: normalizedTo };
+}
+
+function asDate(value: DateParam): Date {
+  if (!value) return new Date();
+  if (value instanceof Date) return value;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = parse(value, "yyyy-MM-dd", new Date());
+    if (isValid(parsed)) return dateAtMinutesLocal(parsed, 0);
+    throw new Error("Invalid date");
+  }
+
+  const parsed = parseISO(value);
+  if (!isValid(parsed)) {
+    const fallback = parse(value, "yyyy-MM-dd", new Date());
+    if (isValid(fallback)) return dateAtMinutesLocal(fallback, 0);
+    throw new Error("Invalid date");
+  }
+  return parsed;
 }
 
 export function dateAtMinutesLocal(day: Date, minutes: number, timeZone: string = SCHEDULE_TIME_ZONE): Date {
@@ -138,6 +174,33 @@ export function getLocalTimeInfo(date: Date, timeZone: string = SCHEDULE_TIME_ZO
   const dayOfWeek = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay(); // 0=Sun
   const minutesSinceMidnight = parts.hour * 60 + parts.minute;
   return { parts, dayOfWeek, minutesSinceMidnight };
+}
+
+export function normalizeToScheduleMidnight(value: DateParam, timeZone: string = SCHEDULE_TIME_ZONE): Date {
+  return dateAtMinutesLocal(asDate(value), 0, timeZone);
+}
+
+export function enumerateScheduleDatesInclusive(
+  start: DateParam,
+  end: DateParam,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Date[] {
+  const startDate = normalizeToScheduleMidnight(start, timeZone);
+  const endDate = normalizeToScheduleMidnight(end, timeZone);
+  if (endDate < startDate) return [];
+
+  const dates: Date[] = [];
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    dates.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
+export function scheduleDayOfWeek(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): number {
+  const { dayOfWeek } = getLocalTimeInfo(date, timeZone);
+  return (dayOfWeek + 6) % 7;
 }
 
 export function resolveTemplateDurationMinutes(template: TemplateWithTiming): number {

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { EnrolmentPlan, Holiday, Level, Teacher } from "@prisma/client";
 
 import { EnrolmentPlansSection } from "./EnrolmentPlansSection";
@@ -35,6 +37,14 @@ const SECTIONS: Array<{
   },
 ];
 
+const SETTINGS_LINKS = [
+  { href: "/admin/communications", label: "Communications" },
+  { href: "/admin/reports/teacher-hours", label: "Teacher hours" },
+  { href: "/admin/payroll", label: "Payroll" },
+  { href: "/admin/billing", label: "Billing" },
+  { href: "/admin/reports/audit", label: "Reports" },
+];
+
 export function SettingsPageClient({
   levels,
   plans,
@@ -47,6 +57,8 @@ export function SettingsPageClient({
   holidays: Holiday[];
 }) {
   const [active, setActive] = React.useState<SectionId>("levels");
+  const pathname = usePathname();
+  const isSettingsPage = pathname === "/admin/settings" || pathname.startsWith("/admin/settings/");
 
   return (
     <div className="flex h-full flex-col lg:flex-row">

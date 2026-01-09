@@ -22,11 +22,9 @@ import { addDays, isAfter } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
 import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
-import {
-  buildOccurrenceSchedule,
-  consumeOccurrencesForCredits,
-  resolveOccurrenceHorizon,
-} from "./occurrenceWalker";
+import { resolveOccurrenceHorizon } from "./occurrenceWalker";
+import { calculatePaidThroughDate, listScheduledOccurrences } from "./paidThroughDate";
+import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
 
 import {
   BillingType,
@@ -198,6 +196,16 @@ async function ensureConsumptionEvents(
   });
   const cancelledSet = new Set(cancellations.map((c) => dateKey(c.date)));
 
+  const holidayStart = normalizeToScheduleMidnight(enrolment.startDate);
+  const holidayEnd = normalizeToScheduleMidnight(windowEnd);
+  const holidays = await tx.holiday.findMany({
+    where: {
+      startDate: { lte: holidayEnd },
+      endDate: { gte: holidayStart },
+    },
+    select: { startDate: true, endDate: true },
+  });
+
   const existing = await tx.enrolmentCreditEvent.findMany({
     where: {
       enrolmentId: enrolment.id,
@@ -208,16 +216,21 @@ async function ensureConsumptionEvents(
   });
   const existingSet = new Set(existing.map((e) => dateKey(e.occurredOn)));
 
-  let occurrence = nextOccurrenceOnOrAfter(normalizeDate(enrolment.startDate), enrolment.template.dayOfWeek);
-  const toCreate: Date[] = [];
+  const chargeable = listScheduledOccurrences({
+    startDate: enrolment.startDate,
+    endDate: windowEnd,
+    classTemplate: {
+      dayOfWeek: enrolment.template.dayOfWeek ?? null,
+      startTime: enrolment.template.startTime ?? null,
+    },
+    holidays,
+    cancellations: cancellations.map((c) => c.date),
+  });
 
-  while (occurrence && !isAfter(occurrence, windowEnd)) {
+  const toCreate = chargeable.filter((occurrence) => {
     const key = dateKey(occurrence);
-    if (!cancelledSet.has(key) && !existingSet.has(key)) {
-      toCreate.push(occurrence);
-    }
-    occurrence = addDaysUtc(occurrence, 7);
-  }
+    return !cancelledSet.has(key) && !existingSet.has(key);
+  });
 
   if (toCreate.length === 0) return;
 
@@ -273,8 +286,8 @@ async function applyHolidayAdjustmentsForWeeklyPlan(
   if (!snapshot.paidThroughDate) return snapshot;
   if (enrolment.template.dayOfWeek == null) return snapshot;
 
-  const baseStart = normalizeToLocalMidnight(enrolment.startDate);
-  const baseEnd = normalizeToLocalMidnight(snapshot.paidThroughDate);
+  const baseStart = normalizeToScheduleMidnight(enrolment.startDate);
+  const baseEnd = normalizeToScheduleMidnight(snapshot.paidThroughDate);
   if (baseEnd < baseStart) return snapshot;
 
   const holidays = await tx.holiday.findMany({
@@ -338,32 +351,35 @@ async function computeCreditPaidThroughInternal(
     select: { templateId: true, date: true },
   });
 
-  const occurrences = buildOccurrenceSchedule({
-    startDate: startWindow,
-    endDate: endWindow,
-    templates: [
-      {
-        templateId: enrolment.templateId,
-        dayOfWeek: enrolment.template.dayOfWeek ?? null,
-        startDate: enrolment.template.startDate,
-        endDate: enrolment.template.endDate,
-      },
-    ],
-    cancellations,
-    occurrencesNeeded,
-    sessionsPerWeek: cadence,
-    horizon,
+  const holidayStart = normalizeToScheduleMidnight(startWindow);
+  const holidayEnd = normalizeToScheduleMidnight(horizon);
+  const holidays = await tx.holiday.findMany({
+    where: {
+      startDate: { lte: holidayEnd },
+      endDate: { gte: holidayStart },
+    },
+    select: { startDate: true, endDate: true },
   });
 
-  const walk = consumeOccurrencesForCredits({ occurrences, credits: balance });
+  const calculation = calculatePaidThroughDate({
+    startDate: startWindow,
+    endDate: horizon,
+    creditsToCover: balance,
+    classTemplate: {
+      dayOfWeek: enrolment.template.dayOfWeek ?? null,
+      startTime: enrolment.template.startTime ?? null,
+    },
+    holidays,
+    cancellations: cancellations.map((c) => c.date),
+  });
 
   return {
     enrolmentId: enrolment.id,
     billingType: enrolment.plan?.billingType ?? null,
-    paidThroughDate: walk.paidThrough,
-    nextPaymentDueDate: walk.nextDue,
-    remainingCredits: walk.remaining,
-    coveredOccurrences: walk.covered,
+    paidThroughDate: calculation.paidThroughDate,
+    nextPaymentDueDate: calculation.nextDueDate,
+    remainingCredits: calculation.remainingCredits,
+    coveredOccurrences: calculation.coveredOccurrences,
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
   };
 }
