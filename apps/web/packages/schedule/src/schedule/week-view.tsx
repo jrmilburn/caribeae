@@ -4,7 +4,7 @@ import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
-import { dateKey } from "@/lib/dateUtils";
+import { scheduleDateKey } from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -176,10 +176,10 @@ export default function WeekView(props: WeekViewProps) {
         >
           <div className="border-r border-border" />
           {weekDates.map((date) => {
-            const dayHolidays = holidays.get(dateKey(date)) ?? [];
+            const dayHolidays = holidays.get(scheduleDateKey(date)) ?? [];
             return (
               <div
-                key={`holiday-${dateKey(date)}`}
+                key={`holiday-${scheduleDateKey(date)}`}
                 className="border-l border-border px-2 py-1 flex flex-col justify-center"
               >
                 {dayHolidays.length ? (

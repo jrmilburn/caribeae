@@ -14,7 +14,8 @@ import {
   type ScheduleDataAdapter,
 } from "./schedule-data-adapter";
 import type { Level } from "@prisma/client";
-import { dateKey, enumerateDatesInclusive, normalizeToLocalMidnight } from "@/lib/dateUtils";
+import { enumerateDatesInclusive, normalizeToLocalMidnight } from "@/lib/dateUtils";
+import { scheduleDateKey } from "./schedule-date-utils";
 
 export type ScheduleViewHandle = {
   /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
@@ -199,7 +200,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       const index = new Map<string, Holiday[]>();
       holidays.forEach((holiday) => {
         enumerateDatesInclusive(holiday.startDate, holiday.endDate).forEach((date) => {
-          const key = dateKey(date);
+          const key = scheduleDateKey(date);
           const existing = index.get(key) ?? [];
           existing.push(holiday);
           index.set(key, existing);
@@ -209,7 +210,10 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     }, [holidays]);
 
     const visibleClasses = useMemo(
-      () => filteredClasses.filter((occurrence) => !holidayIndex.has(dateKey(occurrence.startTime))),
+      () =>
+        filteredClasses.filter(
+          (occurrence) => !holidayIndex.has(scheduleDateKey(occurrence.startTime))
+        ),
       [filteredClasses, holidayIndex]
     );
 

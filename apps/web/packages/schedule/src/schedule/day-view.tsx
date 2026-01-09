@@ -4,7 +4,7 @@ import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DayOfWeek, Holiday, NormalizedScheduleClass } from "./schedule-types";
-import { dateKey } from "@/lib/dateUtils";
+import { scheduleDateKey } from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -119,7 +119,7 @@ export default function DayView(props: DayViewProps) {
       </div>
 
       {(() => {
-        const dayHolidays = holidays.get(dateKey(dayDate)) ?? [];
+        const dayHolidays = holidays.get(scheduleDateKey(dayDate)) ?? [];
         if (!dayHolidays.length) return null;
         return (
           <div className="border-b border-border bg-muted/60 px-4 py-2">
