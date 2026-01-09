@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import { scheduleDateKey, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
@@ -61,7 +61,7 @@ export function AddEnrolmentDialog({
 
   React.useEffect(() => {
     if (open && !startDate) {
-      setStartDate(format(new Date(), "yyyy-MM-dd"));
+      setStartDate(scheduleDateKey(new Date()));
     }
   }, [open, startDate]);
 
@@ -102,7 +102,7 @@ export function AddEnrolmentDialog({
     const sortedDates = selectedTemplateIds
       .map((id) => selectedTemplates[id]?.startTime)
       .filter(Boolean)
-      .map((date) => format(date as Date, "yyyy-MM-dd"))
+      .map((date) => scheduleDateKey(date as Date))
       .sort();
     if (!sortedDates.length) return;
     setStartDate((prev) => {
@@ -175,7 +175,7 @@ export function AddEnrolmentDialog({
       }
 
       if (planIsWeekly && Object.keys(prev).length >= 1) {
-        const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
+        const occurrenceDate = scheduleDateKey(occurrence.startTime);
         setStartDate((prevStart) => {
           if (!prevStart) return occurrenceDate;
           return occurrenceDate < prevStart ? occurrenceDate : prevStart;
@@ -197,7 +197,7 @@ export function AddEnrolmentDialog({
       }
 
       const next = { ...prev, [occurrence.templateId]: occurrence };
-      const occurrenceDate = format(occurrence.startTime, "yyyy-MM-dd");
+      const occurrenceDate = scheduleDateKey(occurrence.startTime);
       setStartDate((prevStart) => {
         if (!prevStart) return occurrenceDate;
         return occurrenceDate < prevStart ? occurrenceDate : prevStart;
