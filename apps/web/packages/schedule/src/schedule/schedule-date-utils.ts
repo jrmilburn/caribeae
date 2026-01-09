@@ -93,8 +93,8 @@ export function enumerateScheduleDatesInclusive(start: Date | string, end: Date 
   return dates;
 }
 
-export function scheduleDateKey(date: Date): string {
-  return scheduleDateFormatter.format(date);
+export function scheduleDateKey(date: Date | string): string {
+  return scheduleDateFormatter.format(asDate(date));
 }
 
 const scheduleDateTimeFormatter = new Intl.DateTimeFormat("en-AU", {
