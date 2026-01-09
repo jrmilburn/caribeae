@@ -60,7 +60,11 @@ function getTimeZoneOffset(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): n
   return asUTC - date.getTime();
 }
 
-function scheduleDateAtMinutes(date: Date, minutes: number, timeZone: string = SCHEDULE_TIME_ZONE): Date {
+export function scheduleDateAtMinutes(
+  date: Date,
+  minutes: number,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Date {
   const parts = getTimeZoneDateParts(date, timeZone);
   const utcTimestamp = Date.UTC(parts.year, parts.month - 1, parts.day, 0, minutes, 0, 0);
   const offset = getTimeZoneOffset(new Date(utcTimestamp), timeZone);
@@ -79,6 +83,14 @@ export function normalizeToScheduleMidnight(value: Date | string): Date {
   return scheduleDateAtMinutes(asDate(value), 0);
 }
 
+export function scheduleMinutesSinceMidnight(
+  value: Date | string,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): number {
+  const parts = getTimeZoneDateParts(asDate(value), timeZone);
+  return parts.hour * 60 + parts.minute;
+}
+
 export function enumerateScheduleDatesInclusive(start: Date | string, end: Date | string): Date[] {
   const startDate = normalizeToScheduleMidnight(start);
   const endDate = normalizeToScheduleMidnight(end);
@@ -95,6 +107,49 @@ export function enumerateScheduleDatesInclusive(start: Date | string, end: Date 
 
 export function scheduleDateKey(date: Date | string): string {
   return scheduleDateFormatter.format(asDate(date));
+}
+
+export type DayOfWeekConvention = "monday-0" | "sunday-0" | "monday-1";
+
+export function dayOfWeekToColumnIndex(
+  dayOfWeek: number,
+  options?: {
+    convention?: DayOfWeekConvention;
+    weekStartsOnMonday?: boolean;
+  }
+): number {
+  if (!Number.isFinite(dayOfWeek)) return 0;
+  const convention = options?.convention ?? "monday-0";
+  let mondayIndex: number;
+
+  if (convention === "sunday-0") {
+    mondayIndex = (dayOfWeek + 6) % 7;
+  } else if (convention === "monday-1") {
+    mondayIndex = dayOfWeek === 7 ? 6 : dayOfWeek - 1;
+  } else {
+    mondayIndex = ((dayOfWeek % 7) + 7) % 7;
+  }
+
+  if (options?.weekStartsOnMonday === false) {
+    return (mondayIndex + 1) % 7;
+  }
+  return mondayIndex;
+}
+
+export function columnDateKeyForDay(
+  weekDates: Date[],
+  dayOfWeek: number,
+  options?: {
+    convention?: DayOfWeekConvention;
+    weekStartsOnMonday?: boolean;
+  }
+): string {
+  if (!weekDates.length) {
+    throw new Error("weekDates is required");
+  }
+  const index = dayOfWeekToColumnIndex(dayOfWeek, options);
+  const date = weekDates[index] ?? weekDates[0];
+  return scheduleDateKey(date);
 }
 
 const scheduleDateTimeFormatter = new Intl.DateTimeFormat("en-AU", {

@@ -7,7 +7,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, format, startOfWeek } from "date-fns";
 
 import ScheduleGrid from "./schedule-grid";
-import type { Holiday, NormalizedScheduleClass } from "./schedule-types";
+import type {
+  Holiday,
+  NormalizedScheduleClass,
+  ScheduleClassClickContext,
+} from "./schedule-types";
 import { normalizeScheduleClass } from "./schedule-types";
 import {
   createApiScheduleDataAdapter,
@@ -35,7 +39,7 @@ export type ScheduleViewProps = {
   dataAdapter?: ScheduleDataAdapter;
   dataEndpoint?: string;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
-  onClassClick?: (occurrence: NormalizedScheduleClass) => void;
+  onClassClick?: (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
   allowTemplateMoves?: boolean;
