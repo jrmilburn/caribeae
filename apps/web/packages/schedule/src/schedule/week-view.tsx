@@ -50,7 +50,9 @@ type WeekViewProps = {
   onClassClick?: (c: NormalizedScheduleClass) => void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
-  getTeacherColor: (teacherId?: string | null) => { bg: string; border: string; text: string };
+  getTeacherColor: (
+    teacherId?: string | null
+  ) => { bg: string; border: string; text: string; style?: React.CSSProperties };
   selectedTemplateIds?: string[];
 };
 
@@ -301,6 +303,7 @@ export default function WeekView(props: WeekViewProps) {
                         isSelected && "ring-2 ring-primary/60 border-primary"
                       )}
                       style={{
+                        ...colors.style,
                         top: `${Math.max(0, top)}px`,
                         height: `${c.durationMin * minuteHeight}px`,
                         width: `calc(${widthPct}% - 6px)`,

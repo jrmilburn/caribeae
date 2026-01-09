@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
 import { dayOfWeekToName } from "./schedule-types";
@@ -46,12 +47,12 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     onSlotClick,
     onClassClick,
     onMoveClass,
-  viewMode,
-  setViewMode,
-  selectedDay,
-  setSelectedDay,
-  levels,
-  selectedTemplateIds,
+    viewMode,
+    setViewMode,
+    selectedDay,
+    setSelectedDay,
+    levels,
+    selectedTemplateIds,
   } = props;
 
   const levelLookup = useMemo(() => new Map(levels.map((l) => [l.id, l])), [levels]);
@@ -63,15 +64,19 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     [classes, levelLookup]
   );
   const normalized = useMemo(() => attachLayout(classesWithLevels), [classesWithLevels]);
+  const teacherColorMap = useMemo(() => createTeacherColorMap(classesWithLevels), [classesWithLevels]);
+  const getTeacherColor = useMemo(
+    () => (teacherId?: string | null) => teacherColorMap.get(teacherId ?? "") ?? DEFAULT_TEACHER_COLOR,
+    [teacherColorMap]
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const selectedDayName = dayOfWeekToName(selectedDay);
 
-  if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />
+  if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-
       {viewMode === "week" ? (
         <WeekView
           DAYS_OF_WEEK={DAYS_OF_WEEK}
@@ -285,24 +290,38 @@ function buildDayLanes(dayInstances: NormalizedScheduleClass[], orderedTeacherId
   return { laneByTeacherId, laneCount: Math.max(laneCount, 1), unassignedLane };
 }
 
-function getTeacherColor(teacherId?: string | null) {
-  const colors = [
-    { bg: "bg-purple-100 dark:bg-purple-900", border: "border-purple-300 dark:border-purple-700", text: "text-purple-700 dark:text-purple-300" },
-    { bg: "bg-green-100 dark:bg-green-900", border: "border-green-300 dark:border-green-700", text: "text-green-700 dark:text-green-300" },
-    { bg: "bg-orange-100 dark:bg-orange-900", border: "border-orange-300 dark:border-orange-700", text: "text-orange-700 dark:text-orange-300" },
-    { bg: "bg-blue-100 dark:bg-blue-900", border: "border-blue-300 dark:border-blue-700", text: "text-blue-700 dark:text-blue-300" },
-  ] as const;
+type TeacherColor = {
+  bg: string;
+  border: string;
+  text: string;
+  style?: CSSProperties;
+};
 
-  if (!teacherId) return colors[0];
-  const idx = Math.abs(hashString(teacherId)) % colors.length;
-  return colors[idx];
+const DEFAULT_TEACHER_COLOR: TeacherColor = {
+  bg: "bg-muted/40",
+  border: "border-muted-foreground/30",
+  text: "text-muted-foreground",
+};
+
+const TEACHER_COLOR_CLASSES = {
+  bg: "bg-[hsl(var(--schedule-hue)_70%_92%)] dark:bg-[hsl(var(--schedule-hue)_40%_22%)]",
+  border: "border-[hsl(var(--schedule-hue)_60%_80%)] dark:border-[hsl(var(--schedule-hue)_35%_40%)]",
+  text: "text-[hsl(var(--schedule-hue)_45%_30%)] dark:text-[hsl(var(--schedule-hue)_65%_70%)]",
+} as const;
+
+function createTeacherColorMap(instances: NormalizedScheduleClass[]) {
+  const { orderedTeacherIds } = buildTeacherLanes(instances);
+  const map = new Map<string, TeacherColor>();
+  orderedTeacherIds.forEach((teacherId, index) => {
+    map.set(teacherId, buildTeacherColor(index));
+  });
+  return map;
 }
 
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash << 5) - hash + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash;
+function buildTeacherColor(index: number): TeacherColor {
+  const hue = (index * 137.508) % 360;
+  return {
+    ...TEACHER_COLOR_CLASSES,
+    style: { ["--schedule-hue" as string]: hue } as CSSProperties,
+  };
 }
