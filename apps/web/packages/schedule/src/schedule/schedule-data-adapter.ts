@@ -1,10 +1,11 @@
-import { addDays, format, setHours, setMinutes } from "date-fns";
+import { addDays, setHours, setMinutes } from "date-fns";
 import {
   type ScheduleClass,
   normalizeScheduleClass,
   type Teacher,
   type Level,
 } from "./schedule-types";
+import { scheduleDateKey } from "./schedule-date-utils";
 
 export type FetchClassesParams = {
   from: Date;
@@ -44,8 +45,8 @@ export function createApiScheduleDataAdapter(
   return {
     async fetchClasses({ from, to, levelId }) {
       const params = new URLSearchParams({
-        from: format(from, "yyyy-MM-dd"),
-        to: format(to, "yyyy-MM-dd"),
+        from: scheduleDateKey(from),
+        to: scheduleDateKey(to),
       });
       if (levelId) {
         params.set("levelId", levelId);
