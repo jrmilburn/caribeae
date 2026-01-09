@@ -321,12 +321,21 @@ const TEACHER_COLOR_CLASSES = {
 } as const;
 
 function createTeacherColorMap(instances: NormalizedScheduleClass[]) {
-  const { orderedTeacherIds } = buildTeacherLanes(instances);
   const map = new Map<string, TeacherColor>();
-  orderedTeacherIds.forEach((teacherId, index) => {
-    map.set(teacherId, buildTeacherColor(index));
-  });
+  for (const inst of instances) {
+    const teacherId = inst.teacherId ?? inst.teacher?.id ?? null;
+    if (!teacherId || map.has(teacherId)) continue;
+    map.set(teacherId, buildTeacherColor(teacherId));
+  }
   return map;
+}
+
+function buildTeacherColor(teacherId: string): TeacherColor {
+  const hue = Math.abs(hashString(teacherId)) % 360;
+  return {
+    ...TEACHER_COLOR_CLASSES,
+    style: { ["--schedule-hue" as string]: hue } as CSSProperties,
+  };
 }
 
 function buildTeacherColor(index: number): TeacherColor {
