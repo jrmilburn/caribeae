@@ -208,6 +208,11 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       return index;
     }, [holidays]);
 
+    const visibleClasses = useMemo(
+      () => filteredClasses.filter((occurrence) => !holidayIndex.has(dateKey(occurrence.startTime))),
+      [filteredClasses, holidayIndex]
+    );
+
 
     const onMoveClass = React.useCallback(
       async (templateId: string, nextStart: Date, dayOfWeek: number) => {
@@ -303,7 +308,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
         <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
           <ScheduleGrid
             loading={loading}
-            classes={filteredClasses}
+            classes={visibleClasses}
             weekDates={weekDates}
             holidays={holidayIndex}
             onSlotClick={onSlotClick}
