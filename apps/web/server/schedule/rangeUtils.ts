@@ -126,10 +126,18 @@ export function normalizeDateRange(params: {
 
 function asDate(value: DateParam): Date {
   if (!value) return new Date();
-  const parsed = value instanceof Date ? value : parseISO(value);
+  if (value instanceof Date) return value;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = parse(value, "yyyy-MM-dd", new Date());
+    if (isValid(parsed)) return dateAtMinutesLocal(parsed, 0);
+    throw new Error("Invalid date");
+  }
+
+  const parsed = parseISO(value);
   if (!isValid(parsed)) {
-    const fallback = value instanceof Date ? value : parse(value, "yyyy-MM-dd", new Date());
-    if (isValid(fallback)) return fallback;
+    const fallback = parse(value, "yyyy-MM-dd", new Date());
+    if (isValid(fallback)) return dateAtMinutesLocal(fallback, 0);
     throw new Error("Invalid date");
   }
   return parsed;
