@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { SettingsSidebar } from "./SettingsSidebar";
 
 const SETTINGS_SHELL_ROUTES = [
+  "/admin/settings",
   "/admin/communications",
   "/admin/payroll",
   "/admin/billing",
