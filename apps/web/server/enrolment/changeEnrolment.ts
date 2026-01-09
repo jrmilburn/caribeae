@@ -9,7 +9,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizePlan, normalizeStartDate } from "@/server/enrolment/planRules";
 import { validateSelection } from "@/server/enrolment/validateSelection";
-import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
+import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 
@@ -238,7 +238,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
     // Refresh billing snapshots for touched enrolments
     const toRefresh = updated.map((e) => e.id);
     for (const id of toRefresh) {
-      await getEnrolmentBillingStatus(id, { client: tx });
+      await recomputeEnrolmentComputedFields(id, { client: tx });
     }
 
     return {

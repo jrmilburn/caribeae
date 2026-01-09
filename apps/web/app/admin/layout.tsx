@@ -2,6 +2,7 @@
 import { AppNavbar } from "@/components/navbar/navbar";
 import { AppFooter } from "./footer";
 import { Suspense } from "react";
+import { SettingsShell } from "./settings/SettingsShell";
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,7 +10,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     <AppNavbar>
       <div className="max-h-screen h-screen flex flex-col">
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <SettingsShell>{children}</SettingsShell>
         </main>
         <AppFooter />
       </div>

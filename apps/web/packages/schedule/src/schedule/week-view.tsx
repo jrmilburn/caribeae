@@ -3,7 +3,18 @@
 import * as React from "react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import type {
+  DayOfWeek,
+  Holiday,
+  NormalizedScheduleClass,
+  ScheduleClassClickContext,
+} from "./schedule-types";
+import {
+  SCHEDULE_TIME_ZONE,
+  dayOfWeekToColumnIndex,
+  scheduleDateKey,
+  scheduleMinutesSinceMidnight,
+} from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -36,6 +47,7 @@ type WeekViewProps = {
   DAYS_OF_WEEK: DayOfWeek[];
   TIME_SLOTS: TimeSlot[];
   weekDates: Date[];
+  holidays: Map<string, Holiday[]>;
   classes: Array<
     NormalizedScheduleClass & {
       laneIndex: number;
@@ -47,7 +59,7 @@ type WeekViewProps = {
   onDayHeaderClick: (day: DayOfWeek) => void;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
-  onClassClick?: (c: NormalizedScheduleClass) => void;
+  onClassClick?: (c: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   draggingId: string | null;
   setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
   getTeacherColor: (
@@ -67,6 +79,7 @@ export default function WeekView(props: WeekViewProps) {
     DAYS_OF_WEEK,
     TIME_SLOTS,
     weekDates,
+    holidays,
     classes,
     onDayHeaderClick,
     onSlotClick,
@@ -166,6 +179,33 @@ export default function WeekView(props: WeekViewProps) {
           ))}
         </div>
 
+        {/* All-day holiday row */}
+        <div
+          className="grid border-b border-r border-border bg-muted/60 sticky top-[60px] z-30 min-h-[36px]"
+          style={{ gridTemplateColumns: "minmax(32px,1fr) repeat(7, minmax(64px,2fr))" }}
+        >
+          <div className="border-r border-border" />
+          {weekDates.map((date) => {
+            const dayHolidays = holidays.get(scheduleDateKey(date)) ?? [];
+            return (
+              <div
+                key={`holiday-${scheduleDateKey(date)}`}
+                className="border-l border-border px-2 py-1 flex flex-col justify-center"
+              >
+                {dayHolidays.length ? (
+                  <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
+                    {dayHolidays.map((holiday) => (
+                      <div key={holiday.id} className="truncate">
+                        Holiday: {holiday.name}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
         {/* Grid */}
         <div
           className="grid relative border-r border-b"
@@ -201,7 +241,9 @@ export default function WeekView(props: WeekViewProps) {
 
           {/* Day columns */}
           {DAYS_OF_WEEK.map((day, dayIndex) => {
-            const dayClasses = classes.filter((c) => c.dayOfWeek === dayIndex);
+            const dayClasses = classes.filter(
+              (c) => dayOfWeekToColumnIndex(c.dayOfWeek) === dayIndex
+            );
             const isDraggable = Boolean(onMoveClass);
 
             return (
@@ -274,6 +316,19 @@ export default function WeekView(props: WeekViewProps) {
                   const widthPct = laneWidthPct / c.laneColumns;
                   const leftPct = c.laneIndex * laneWidthPct + c.laneOffset * widthPct;
                   const isSelected = selectedTemplateIds?.includes(c.templateId ?? c.id) ?? false;
+                  const headerDateKey = scheduleDateKey(weekDates[dayIndex]);
+                  const derivedDateKey = scheduleDateKey(c.startTime);
+                  if (headerDateKey !== derivedDateKey) {
+                    console.warn("[schedule] column date mismatch", {
+                      templateId: c.templateId ?? c.id,
+                      dayOfWeek: c.dayOfWeek,
+                      colIdx: dayIndex,
+                      headerDateKey,
+                      derivedDateKey,
+                      tz: SCHEDULE_TIME_ZONE,
+                      startMinutes: scheduleMinutesSinceMidnight(c.startTime),
+                    });
+                  }
 
                   return (
                     <div
@@ -292,7 +347,11 @@ export default function WeekView(props: WeekViewProps) {
                       onDragEnd={canDrag ? () => finishDrag() : undefined}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onClassClick?.(c);
+                        onClassClick?.(c, {
+                          columnDate: weekDates[dayIndex],
+                          columnDateKey: headerDateKey,
+                          columnIndex: dayIndex,
+                        });
                       }}
                       className={cn(
                         "absolute rounded p-2 pr-3 z-30 group overflow-hidden border",

@@ -60,11 +60,25 @@ export type ScheduleClass = {
   cancellationReason?: string | null;
 };
 
+export type Holiday = {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  note?: string | null;
+};
+
 export type NormalizedScheduleClass = ScheduleClass & {
   startTime: Date;
   endTime: Date;
   durationMin: number;
   dayName: DayOfWeek;
+};
+
+export type ScheduleClassClickContext = {
+  columnDate: Date;
+  columnDateKey: string;
+  columnIndex: number;
 };
 
 export const DAY_OF_WEEK_NAMES: DayOfWeek[] = [

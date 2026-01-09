@@ -3,12 +3,18 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
-import type { DayOfWeek, NormalizedScheduleClass } from "./schedule-types";
+import type {
+  DayOfWeek,
+  Holiday,
+  NormalizedScheduleClass,
+  ScheduleClassClickContext,
+} from "./schedule-types";
 import { dayOfWeekToName } from "./schedule-types";
 import WeekView from "./week-view";
 import DayView from "./day-view";
 
 import ScheduleGridSkeleton from "./Loading";
+import { dayOfWeekToColumnIndex } from "./schedule-date-utils";
 
 import type { Level } from "@prisma/client";
 
@@ -16,8 +22,9 @@ export type ScheduleGridProps = {
   loading: boolean;
   classes: NormalizedScheduleClass[];
   weekDates: Date[];
+  holidays: Map<string, Holiday[]>;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
-  onClassClick?: (c: NormalizedScheduleClass) => void;
+  onClassClick?: (c: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   onMoveClass?: (templateId: string, nextStart: Date, dayOfWeek: number) => Promise<void> | void;
   viewMode: "week" | "day";
   setViewMode: React.Dispatch<React.SetStateAction<"week" | "day">>;
@@ -44,6 +51,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     loading,
     classes,
     weekDates,
+    holidays,
     onSlotClick,
     onClassClick,
     onMoveClass,
@@ -83,6 +91,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           TIME_SLOTS={TIME_SLOTS}
           weekDates={weekDates}
           classes={normalized}
+          holidays={holidays}
           onDayHeaderClick={(day) => {
             const idx = dayToIndex(day);
             setSelectedDay(idx);
@@ -102,7 +111,8 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           dayName={selectedDayName as DayOfWeek}
           dayDate={weekDates[dayToIndex(selectedDayName as DayOfWeek)] ?? weekDates[0]}
           dayOfWeek={selectedDay}
-          classes={normalized.filter((c) => c.dayOfWeek === selectedDay)}
+          classes={normalized.filter((c) => dayOfWeekToColumnIndex(c.dayOfWeek) === selectedDay)}
+          holidays={holidays}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
           onMoveClass={onMoveClass}
@@ -160,8 +170,9 @@ function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedSch
   const { orderedTeacherIds } = buildTeacherLanes(instances);
   const byDay = new Map<number, NormalizedScheduleClass[]>();
   for (const inst of instances) {
-    if (!byDay.has(inst.dayOfWeek)) byDay.set(inst.dayOfWeek, []);
-    byDay.get(inst.dayOfWeek)!.push(inst);
+    const dayIndex = dayOfWeekToColumnIndex(inst.dayOfWeek);
+    if (!byDay.has(dayIndex)) byDay.set(dayIndex, []);
+    byDay.get(dayIndex)!.push(inst);
   }
 
   const layoutMap = new Map<string, { laneOffset: number; laneColumns: number }>();
@@ -226,7 +237,7 @@ function attachLayout(instances: NormalizedScheduleClass[]): Array<NormalizedSch
 
   return instances.map((inst) => {
     const teacherKey = inst.teacherId ?? inst.teacher?.id ?? null;
-    const dayMeta = laneMetaByDay.get(inst.dayOfWeek);
+    const dayMeta = laneMetaByDay.get(dayOfWeekToColumnIndex(inst.dayOfWeek));
     const laneByTeacherId = dayMeta?.laneByTeacherId;
     const laneCount = dayMeta?.laneCount ?? 1;
     const unassignedLane = dayMeta?.unassignedLane ?? null;
@@ -327,11 +338,10 @@ function buildTeacherColor(teacherId: string): TeacherColor {
   };
 }
 
-function hashString(input: string): number {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash << 5) - hash + input.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash;
+function buildTeacherColor(index: number): TeacherColor {
+  const hue = (index * 137.508) % 360;
+  return {
+    ...TEACHER_COLOR_CLASSES,
+    style: { ["--schedule-hue" as string]: hue } as CSSProperties,
+  };
 }
