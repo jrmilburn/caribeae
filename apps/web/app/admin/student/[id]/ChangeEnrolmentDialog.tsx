@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format } from "date-fns";
 import type { Enrolment, EnrolmentPlan, Level } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,7 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { dayOfWeekToName, scheduleDateKey, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import {
+  dayOfWeekToName,
+  formatScheduleWeekdayTime,
+  scheduleDateKey,
+  ScheduleView,
+  type NormalizedScheduleClass,
+} from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
 import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
@@ -262,7 +267,7 @@ export function ChangeEnrolmentDialog({
                     return (
                       <span key={id} className="rounded border bg-background px-2 py-1 text-xs">
                         {entry?.template?.name ?? "Class"} ·{" "}
-                        {entry ? format(entry.startTime, "EEE h:mm a") : ""}
+                        {entry ? formatScheduleWeekdayTime(entry.startTime) : ""}
                       </span>
                     );
                   })}

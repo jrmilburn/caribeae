@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 
@@ -20,7 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { scheduleDateKey, ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import {
+  formatScheduleWeekdayTime,
+  scheduleDateKey,
+  ScheduleView,
+  type NormalizedScheduleClass,
+} from "@/packages/schedule";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
@@ -48,6 +52,7 @@ export function AddEnrolmentDialog({
   );
   const [planId, setPlanId] = React.useState<string>("");
   const [startDate, setStartDate] = React.useState<string>("");
+  const [startDateTouched, setStartDateTouched] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -55,6 +60,7 @@ export function AddEnrolmentDialog({
       setSelectedTemplates({});
       setPlanId("");
       setStartDate("");
+      setStartDateTouched(false);
       setSaving(false);
     }
   }, [open]);
@@ -105,11 +111,10 @@ export function AddEnrolmentDialog({
       .map((date) => scheduleDateKey(date as Date))
       .sort();
     if (!sortedDates.length) return;
-    setStartDate((prev) => {
-      if (!prev) return sortedDates[0];
-      return prev > sortedDates[0] ? sortedDates[0] : prev;
-    });
-  }, [selectedTemplateIds, selectedTemplates]);
+    if (!startDateTouched) {
+      setStartDate(sortedDates[0]);
+    }
+  }, [selectedTemplateIds, selectedTemplates, startDateTouched]);
 
   const selectedPlan = React.useMemo(
     () => availablePlans.find((p) => p.id === planId) ?? null,
@@ -176,10 +181,9 @@ export function AddEnrolmentDialog({
 
       if (planIsWeekly && Object.keys(prev).length >= 1) {
         const occurrenceDate = scheduleDateKey(occurrence.startTime);
-        setStartDate((prevStart) => {
-          if (!prevStart) return occurrenceDate;
-          return occurrenceDate < prevStart ? occurrenceDate : prevStart;
-        });
+        if (!startDateTouched) {
+          setStartDate(occurrenceDate);
+        }
         return { [occurrence.templateId]: occurrence };
       }
 
@@ -198,10 +202,9 @@ export function AddEnrolmentDialog({
 
       const next = { ...prev, [occurrence.templateId]: occurrence };
       const occurrenceDate = scheduleDateKey(occurrence.startTime);
-      setStartDate((prevStart) => {
-        if (!prevStart) return occurrenceDate;
-        return occurrenceDate < prevStart ? occurrenceDate : prevStart;
-      });
+      if (!startDateTouched) {
+        setStartDate(occurrenceDate);
+      }
       return next;
     });
   };
@@ -292,7 +295,10 @@ export function AddEnrolmentDialog({
                 type="date"
                 className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDateTouched(true);
+                  setStartDate(e.target.value);
+                }}
                 placeholder="YYYY-MM-DD"
               />
               <p className="text-xs text-muted-foreground">
@@ -345,7 +351,7 @@ export function AddEnrolmentDialog({
                     return (
                       <span key={id} className="rounded border bg-background px-2 py-1 text-xs">
                         {entry?.template?.name ?? entry?.level?.name ?? "Class"} ·{" "}
-                        {entry ? format(entry.startTime, "EEE h:mm a") : ""}
+                        {entry ? formatScheduleWeekdayTime(entry.startTime) : ""}
                       </span>
                     );
                   })}

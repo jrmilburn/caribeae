@@ -96,3 +96,15 @@ export function enumerateScheduleDatesInclusive(start: Date | string, end: Date 
 export function scheduleDateKey(date: Date): string {
   return scheduleDateFormatter.format(date);
 }
+
+const scheduleDateTimeFormatter = new Intl.DateTimeFormat("en-AU", {
+  timeZone: SCHEDULE_TIME_ZONE,
+  weekday: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+export function formatScheduleWeekdayTime(date: Date): string {
+  return scheduleDateTimeFormatter.format(date);
+}
