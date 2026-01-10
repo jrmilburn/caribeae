@@ -240,7 +240,7 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium">{outbound ? "You" : "Family"}</div>
+                      <div className="text-xs font-medium">{outbound ? "You" : activeConversation.family?.name}</div>
                       <div className="flex items-center gap-2">
                         {m.status ? (
                           <Badge variant="outline" className="text-[10px] uppercase">
