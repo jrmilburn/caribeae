@@ -228,7 +228,7 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
           ) : messages.length === 0 ? (
             <div className="text-sm text-muted-foreground">No messages yet.</div>
           ) : (
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+            <div className="mx-auto flex w-full flex-col gap-3">
               {messages.map((m) => {
                 const outbound = m.direction === "OUTBOUND";
                 return (
