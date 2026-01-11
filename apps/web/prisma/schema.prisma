@@ -33,6 +33,7 @@ model User {
   payRuns              PayRun[]                     @relation("PayRunCreator")
   payrollAdjustments   PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
   studentLevelChanges  StudentLevelChange[]         @relation("StudentLevelChangeCreator")
+  accountOpeningStates AccountOpeningState[]        @relation("AccountOpeningStateCreator")
 }
 
 model Family {
@@ -61,6 +62,25 @@ model Family {
   payments      Payment[]
   conversations Conversation[]
   messages      Message[]
+  accountOpeningState AccountOpeningState?
+}
+
+model AccountOpeningState {
+  id String @id @default(cuid())
+
+  familyId String @unique
+  family   Family @relation(fields: [familyId], references: [id])
+
+  effectiveDate DateTime
+
+  createdById String
+  createdBy   User   @relation("AccountOpeningStateCreator", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  notes     String?
+  batchId   String?
+
+  openingBalanceCents Int
 }
 
 model Student {
