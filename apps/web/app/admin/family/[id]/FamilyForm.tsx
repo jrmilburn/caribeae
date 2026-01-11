@@ -26,6 +26,7 @@ import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import type getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import type { getHolidays } from "@/server/holiday/getHolidays";
 import { createStudent } from "@/server/student/createStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
@@ -85,6 +86,7 @@ type FamilyFormProps = {
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
+  holidays: Awaited<ReturnType<typeof getHolidays>>;
 };
 
 export default function FamilyForm({
@@ -96,6 +98,7 @@ export default function FamilyForm({
   enrolmentPlans,
   classTemplates,
   openingState,
+  holidays,
 }: FamilyFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState("overview");
@@ -210,6 +213,7 @@ export default function FamilyForm({
             enrolmentPlans={enrolmentPlans}
             classTemplates={classTemplates}
             openingState={openingState}
+            holidays={holidays}
           />
         </div>
       </div>
@@ -249,6 +253,7 @@ type FamilyTabsProps = {
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
+  holidays: Awaited<ReturnType<typeof getHolidays>>;
 };
 
 function FamilyTabs({
@@ -267,6 +272,7 @@ function FamilyTabs({
   enrolmentPlans,
   classTemplates,
   openingState,
+  holidays,
 }: FamilyTabsProps) {
   return (
     <Card className="border-none shadow-none">
@@ -320,6 +326,7 @@ function FamilyTabs({
                 enrolmentPlans={enrolmentPlans}
                 classTemplates={classTemplates}
                 openingState={openingState}
+                holidays={holidays}
               />
             </TabsContent>
           ) : null}

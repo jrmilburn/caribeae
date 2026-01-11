@@ -16,6 +16,7 @@ import { normalizeStartDate } from "@/server/enrolment/planRules";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
+import { calculatePaidThroughDate } from "@/server/billing/paidThroughDate";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
@@ -24,6 +25,7 @@ const studentTransitionSchema = z.object({
   startDate: z.coerce.date(),
   paidThroughDate: z.coerce.date().optional().nullable(),
   credits: z.number().int().optional().nullable(),
+  lessonsRemaining: z.number().int().optional().nullable(),
 });
 
 const transitionFamilySchema = z.object({
@@ -74,9 +76,10 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     const planIds = payload.students.map((student) => student.planId);
     const templateIds = payload.students.map((student) => student.classTemplateId);
 
-    const [plans, templates] = await Promise.all([
+    const [plans, templates, holidays] = await Promise.all([
       tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
       tx.classTemplate.findMany({ where: { id: { in: templateIds } } }),
+      tx.holiday.findMany({ select: { startDate: true, endDate: true } }),
     ]);
 
     const planMap = new Map(plans.map((plan) => [plan.id, plan]));
@@ -95,10 +98,32 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       assertPlanMatchesTemplate(plan, template);
 
       const normalizedStart = normalizeStartDate(selection.startDate);
-      const paidThrough = selection.paidThroughDate ? normalizeStartDate(selection.paidThroughDate) : normalizedStart;
+      let paidThrough = selection.paidThroughDate ? normalizeStartDate(selection.paidThroughDate) : null;
 
-      if (plan.billingType === BillingType.PER_WEEK && paidThrough < normalizedStart) {
-        throw new Error("Paid-through date cannot be before the start date.");
+      if (plan.billingType === BillingType.PER_WEEK) {
+        if (!paidThrough) {
+          const lessonsRemaining = selection.lessonsRemaining ?? null;
+          if (!lessonsRemaining || lessonsRemaining <= 0) {
+            throw new Error("Enter remaining lessons or an override paid-through date.");
+          }
+          if (template.dayOfWeek == null) {
+            throw new Error("Selected class template must have a scheduled day.");
+          }
+          const computed = calculatePaidThroughDate({
+            startDate: normalizedStart,
+            creditsToCover: lessonsRemaining,
+            classTemplate: { dayOfWeek: template.dayOfWeek ?? null },
+            holidays,
+          }).paidThroughDate;
+          if (!computed) {
+            throw new Error("Unable to calculate paid-through date.");
+          }
+          paidThrough = computed;
+        }
+
+        if (paidThrough < normalizedStart) {
+          throw new Error("Paid-through date cannot be before the start date.");
+        }
       }
 
       const enrolment = await tx.enrolment.create({
