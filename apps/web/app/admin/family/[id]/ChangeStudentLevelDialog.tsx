@@ -22,8 +22,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScheduleView, type NormalizedScheduleClass, type ScheduleClassClickContext } from "@/packages/schedule";
-import { scheduleDateAtMinutes, scheduleMinutesSinceMidnight } from "@/packages/schedule/schedule-date-utils";
+import {
+  ScheduleView,
+  type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
+  scheduleDateAtMinutes,
+  scheduleMinutesSinceMidnight,
+} from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeStudentLevelAndReenrol } from "@/server/student/changeStudentLevelAndReenrol";
 import { getTemplatesForLevelAndDate } from "@/server/classTemplate/getTemplatesForLevelAndDate";
