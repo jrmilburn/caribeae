@@ -315,6 +315,14 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     const openingState = enrolment.student.family?.accountOpeningState;
     if (!openingState) return true;
     if (enrolment.invoices.length > 0) return true;
+    if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+      const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate;
+      return !paidThrough || paidThrough < today;
+    }
+    if (enrolment.plan?.billingType === BillingType.PER_CLASS) {
+      const creditsRemaining = enrolment.creditsBalanceCached ?? enrolment.creditsRemaining;
+      return creditsRemaining == null || creditsRemaining <= 0;
+    }
     return enrolment.createdAt > openingState.createdAt;
   });
 
