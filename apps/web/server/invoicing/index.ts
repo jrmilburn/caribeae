@@ -287,13 +287,38 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
         },
       ],
     },
-    ...enrolmentWithPlanInclude,
+    include: {
+      ...enrolmentWithPlanInclude.include,
+      student: {
+        select: {
+          familyId: true,
+          family: {
+            select: {
+              accountOpeningState: {
+                select: { createdAt: true },
+              },
+            },
+          },
+        },
+      },
+      invoices: {
+        select: { id: true },
+        take: 1,
+      },
+    },
     take: params.maxToProcess ?? 200,
   });
 
   let created = 0;
 
-  for (const enrolment of candidates) {
+  const eligible = candidates.filter((enrolment) => {
+    const openingState = enrolment.student.family?.accountOpeningState;
+    if (!openingState) return true;
+    if (enrolment.invoices.length > 0) return true;
+    return enrolment.createdAt > openingState.createdAt;
+  });
+
+  for (const enrolment of eligible) {
     const result = await issueNextInvoiceForEnrolment(enrolment.id, {
       prismaClient: prisma,
       enrolment,
@@ -302,7 +327,7 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     if (result?.created) created += 1;
   }
 
-  return { processed: candidates.length, created };
+  return { processed: eligible.length, created };
 }
 
 export async function maybeRunInvoicingSweep() {
