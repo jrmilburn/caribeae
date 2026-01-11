@@ -45,6 +45,7 @@ import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
+import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
 import { recordFamilyPayment } from "@/server/billing/recordFamilyPayment";
 import { undoPayment } from "@/server/billing/undoPayment";
 import { Loader2, MoreHorizontal } from "lucide-react";
@@ -54,6 +55,7 @@ type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 type Props = {
   family: FamilyWithStudentsAndInvoices;
   billing: BillingData;
+  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
   paymentSheetOpen?: boolean;
   onPaymentSheetChange?: (open: boolean) => void;
 };
@@ -97,7 +99,13 @@ type InvoiceAllocationItem = {
   amountCents: number;
 };
 
-export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPaymentSheetChange }: Props) {
+export default function FamilyInvoices({
+  family,
+  billing,
+  openingState,
+  paymentSheetOpen,
+  onPaymentSheetChange,
+}: Props) {
   const latestPaidThrough = family.students
     .flatMap((s) => s.enrolments ?? [])
     .map((e) => e.paidThroughDate)
@@ -109,11 +117,49 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
 
   const router = useRouter();
 
+  const paidThroughByEnrolmentId = React.useMemo(() => {
+    const map = new Map<string, Date>();
+    family.students.forEach((student) => {
+      student.enrolments?.forEach((enrolment) => {
+        if (!enrolment.paidThroughDate) return;
+        map.set(enrolment.id, enrolment.paidThroughDate);
+      });
+    });
+    return map;
+  }, [family.students]);
+
+  const openingPaidInvoiceIds = React.useMemo(() => {
+    if (!openingState) return new Set<string>();
+    const covered = new Set<string>();
+    for (const invoice of family.invoices) {
+      if (invoice.status !== "OVERDUE") continue;
+      if (!invoice.enrolmentId || !invoice.coverageEnd) continue;
+      const paidThrough = paidThroughByEnrolmentId.get(invoice.enrolmentId);
+      if (!paidThrough) continue;
+      if (paidThrough.getTime() >= invoice.coverageEnd.getTime()) {
+        covered.add(invoice.id);
+      }
+    }
+    return covered;
+  }, [family.invoices, openingState, paidThroughByEnrolmentId]);
+
+  const getDisplayStatus = React.useCallback(
+    (invoice: { id: string; status: string }) => {
+      if (invoice.status === "OVERDUE" && openingPaidInvoiceIds.has(invoice.id)) {
+        return "PAID";
+      }
+      return invoice.status;
+    },
+    [openingPaidInvoiceIds]
+  );
+
   // --- Open invoices (for payment allocation sheet + summary) ---
-  const openInvoices = billing.openInvoices.map((invoice) => ({
-    ...invoice,
-    balanceCents: getInvoiceBalanceCents(invoice),
-  }));
+  const openInvoices = billing.openInvoices
+    .filter((invoice) => !openingPaidInvoiceIds.has(invoice.id))
+    .map((invoice) => ({
+      ...invoice,
+      balanceCents: getInvoiceBalanceCents(invoice),
+    }));
 
   const totalOwingCents = openInvoices.reduce((sum, inv) => sum + inv.balanceCents, 0);
 
@@ -166,26 +212,30 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
     return all.sort((a, b) => {
       const aBal = getInvoiceBalanceCents(a);
       const bBal = getInvoiceBalanceCents(b);
+      const aStatus = getDisplayStatus(a);
+      const bStatus = getDisplayStatus(b);
 
       // open first
-      if (aBal > 0 && bBal === 0) return -1;
-      if (bBal > 0 && aBal === 0) return 1;
+      const aIsOpen = aBal > 0 && aStatus !== "PAID";
+      const bIsOpen = bBal > 0 && bStatus !== "PAID";
+      if (aIsOpen && !bIsOpen) return -1;
+      if (bIsOpen && !aIsOpen) return 1;
 
       // overdue first within open
-      if (a.status === "OVERDUE" && b.status !== "OVERDUE") return -1;
-      if (b.status === "OVERDUE" && a.status !== "OVERDUE") return 1;
+      if (aStatus === "OVERDUE" && bStatus !== "OVERDUE") return -1;
+      if (bStatus === "OVERDUE" && aStatus !== "OVERDUE") return 1;
 
       // due date asc for open invoices
       const adue = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
       const bdue = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
-      if (aBal > 0 && bBal > 0 && adue !== bdue) return adue - bdue;
+      if (aIsOpen && bIsOpen && adue !== bdue) return adue - bdue;
 
       // otherwise issued desc
       const aiss = a.issuedAt ? new Date(a.issuedAt).getTime() : 0;
       const biss = b.issuedAt ? new Date(b.issuedAt).getTime() : 0;
       return biss - aiss;
     });
-  }, [family.invoices]);
+  }, [family.invoices, getDisplayStatus]);
 
   const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
   const [isUndoing, startUndo] = React.useTransition();
@@ -289,6 +339,9 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
               <Accordion type="multiple" className="divide-y">
                 {invoicesSorted.map((invoice) => {
                   const balanceCents = getInvoiceBalanceCents(invoice);
+                  const displayStatus = getDisplayStatus(invoice);
+                  const displayPaidCents = displayStatus === "PAID" ? invoice.amountCents : invoice.amountPaidCents;
+                  const displayBalanceCents = displayStatus === "PAID" ? 0 : balanceCents;
                   const allocations = allocationsByInvoiceId.get(invoice.id) ?? [];
 
                   const coverageLabel =
@@ -304,13 +357,13 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
                         <div className="flex w-full flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-start gap-3">
                             <span
-                              className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", statusDotClass(invoice.status))}
+                              className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", statusDotClass(displayStatus))}
                               aria-hidden
                             />
                             <div className="space-y-1 text-left">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-semibold">Invoice {invoice.id}</span>
-                                <Badge variant={invoiceVariant(invoice.status)}>{invoice.status}</Badge>
+                                <Badge variant={invoiceVariant(displayStatus)}>{displayStatus}</Badge>
                                 <span className="text-xs text-muted-foreground">
                                   Issued {formatDate(invoice.issuedAt)}
                                 </span>
@@ -343,13 +396,18 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
                             <div>
                               <div className="text-[11px] text-muted-foreground">Paid</div>
                               <div className="text-sm">
-                                {formatCurrencyFromCents(invoice.amountPaidCents)}
+                                {formatCurrencyFromCents(displayPaidCents)}
                               </div>
                             </div>
                             <div>
                               <div className="text-[11px] text-muted-foreground">Balance</div>
-                              <div className={cn("text-sm font-semibold", balanceCents > 0 && "text-foreground")}>
-                                {formatCurrencyFromCents(balanceCents)}
+                              <div
+                                className={cn(
+                                  "text-sm font-semibold",
+                                  displayBalanceCents > 0 && displayStatus !== "PAID" && "text-foreground"
+                                )}
+                              >
+                                {formatCurrencyFromCents(displayBalanceCents)}
                               </div>
                             </div>
                           </div>
