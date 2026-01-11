@@ -258,8 +258,9 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
                     Set student level first.
                   </div>
                 ) : (
-                  <div className="flex-1">
+                  <div className="flex-1 min-h-0">
                     <ScheduleView
+                      key={effectiveLevelId ?? "no-level"}
                       levels={levels}
                       onClassClick={onClassClick}
                       allowTemplateMoves={false}

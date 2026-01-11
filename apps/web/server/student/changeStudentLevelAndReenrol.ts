@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addDays, differenceInCalendarDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
 import {
   BillingType,
   EnrolmentStatus,
@@ -24,6 +24,7 @@ import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility
 import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
+import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -50,46 +51,72 @@ type InvoiceWithCoverage = Prisma.InvoiceGetPayload<{
   };
 }>;
 
-function computeWeeklyCredit(params: {
+async function computeWeeklyCredit(params: {
   enrolment: EnrolmentWithRelations;
-  snapshot: Awaited<ReturnType<typeof getEnrolmentBillingStatus>>;
   effectiveDate: Date;
   invoice?: InvoiceWithCoverage | null;
+  client: Prisma.TransactionClient;
 }) {
-  const paidThrough = params.snapshot.paidThroughDate ?? params.enrolment.paidThroughDate ?? null;
-  if (!paidThrough || !params.enrolment.plan) return 0;
+  if (!params.enrolment.plan || !params.enrolment.template || !params.invoice) return 0;
+  const coverageStart = params.invoice.coverageStart ? startOfDay(params.invoice.coverageStart) : null;
+  const coverageEnd = params.invoice.coverageEnd ? startOfDay(params.invoice.coverageEnd) : null;
+  if (!coverageStart || !coverageEnd) return 0;
 
-  const alignedPaidThrough = startOfDay(paidThrough);
   const boundary = startOfDay(params.effectiveDate);
-  if (!isAfter(alignedPaidThrough, boundary)) return 0;
+  if (isBefore(coverageEnd, boundary)) return 0;
 
-  const coverageStart = params.invoice?.coverageStart
-    ? startOfDay(params.invoice.coverageStart)
-    : startOfDay(params.enrolment.startDate);
-  const coverageEnd = params.invoice?.coverageEnd
-    ? startOfDay(params.invoice.coverageEnd)
-    : alignedPaidThrough;
+  const holidays = await params.client.holiday.findMany({
+    where: {
+      startDate: { lte: coverageEnd },
+      endDate: { gte: coverageStart },
+    },
+    orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
+  });
 
-  if (!isAfter(coverageEnd, boundary)) return 0;
-  const remainingDays = differenceInCalendarDays(coverageEnd, boundary);
-  const totalDays = Math.max(differenceInCalendarDays(coverageEnd, coverageStart), 1);
-  if (remainingDays <= 0 || totalDays <= 0) return 0;
+  const cancellations = await params.client.classCancellation.findMany({
+    where: {
+      templateId: params.enrolment.template.id,
+      date: { gte: coverageStart, lte: coverageEnd },
+    },
+    select: { date: true },
+  });
+
+  const occurrences = listScheduledOccurrences({
+    startDate: coverageStart,
+    endDate: coverageEnd,
+    classTemplate: { dayOfWeek: params.enrolment.template.dayOfWeek },
+    holidays,
+    cancellations: cancellations.map((c) => c.date),
+  });
+
+  const totalLessons = occurrences.length;
+  if (totalLessons <= 0) return 0;
+
+  const lessonsCompleted = occurrences.filter((date) => isBefore(date, boundary)).length;
+  const remainingLessons = Math.max(totalLessons - lessonsCompleted, 0);
+  if (remainingLessons <= 0) return 0;
 
   const paidBasis = Math.max(params.invoice?.amountPaidCents ?? params.invoice?.amountCents ?? 0, 0);
   if (paidBasis <= 0) return 0;
 
-  return Math.floor((paidBasis / totalDays) * remainingDays);
+  return Math.round((paidBasis / totalLessons) * remainingLessons);
 }
 
-function computeCreditForEnrolment(params: {
+async function computeCreditForEnrolment(params: {
   enrolment: EnrolmentWithRelations;
   snapshot: Awaited<ReturnType<typeof getEnrolmentBillingStatus>>;
   effectiveDate: Date;
   invoice?: InvoiceWithCoverage | null;
+  client: Prisma.TransactionClient;
 }) {
   if (!params.enrolment.plan) return 0;
   if (params.enrolment.plan.billingType === BillingType.PER_WEEK) {
-    return computeWeeklyCredit(params);
+    return computeWeeklyCredit({
+      enrolment: params.enrolment,
+      effectiveDate: params.effectiveDate,
+      invoice: params.invoice,
+      client: params.client,
+    });
   }
 
   const remainingCredits = params.snapshot.remainingCredits ?? params.enrolment.creditsRemaining ?? 0;
@@ -221,11 +248,12 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
     for (const enrolment of existingEnrolments) {
       const snapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: effectiveDate });
       const invoice = invoiceByEnrolment.get(enrolment.id) ?? null;
-      totalCreditCents += computeCreditForEnrolment({
+      totalCreditCents += await computeCreditForEnrolment({
         enrolment,
         snapshot,
         effectiveDate,
         invoice,
+        client: tx,
       });
     }
 
