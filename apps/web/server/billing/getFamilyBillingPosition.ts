@@ -55,6 +55,12 @@ function evaluateEntitlement(params: {
   }
 
   if (params.billingType === BillingType.PER_CLASS) {
+    const paidThrough = params.paidThroughDate ? startOfDay(params.paidThroughDate) : null;
+    if (paidThrough && !isAfter(today, paidThrough)) {
+      const daysAhead = differenceInCalendarDays(paidThrough, today);
+      if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };
+      return { status: "AHEAD" as EntitlementStatus };
+    }
     const credits = params.creditsRemaining ?? 0;
     if (credits <= 0) return { status: "OVERDUE" as EntitlementStatus };
     if (credits <= Math.max(params.thresholdCredits, 1)) return { status: "DUE_SOON" as EntitlementStatus };
