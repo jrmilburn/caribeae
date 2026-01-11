@@ -448,7 +448,7 @@ export function FamilyTransitionWizard({
                         />
                         <p className="text-xs text-muted-foreground">Enter remaining prepaid class credits.</p>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );
