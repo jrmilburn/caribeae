@@ -8,7 +8,6 @@ import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosit
 import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
 import getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
-import { getHolidays } from "@/server/holiday/getHolidays";
 
 type PageProps = {
   params: { id: string };
@@ -23,7 +22,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   const search = await searchParams;
 
   await maybeRunInvoicingSweep();
-  const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition, classTemplates, openingState, holidays] =
+  const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition, classTemplates, openingState] =
     await Promise.all([
       getFamily(id),
       getLevels(),
@@ -33,7 +32,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       getFamilyBillingPosition(id),
       getClassTemplates(),
       getAccountOpeningState(id),
-      getHolidays(),
     ]);
 
   const enrolContext =
@@ -57,7 +55,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       enrolmentPlans={enrolmentPlans}
       classTemplates={classTemplates}
       openingState={openingState}
-      holidays={holidays}
     />
   );
 }

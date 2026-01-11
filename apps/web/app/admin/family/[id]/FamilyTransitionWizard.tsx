@@ -16,10 +16,8 @@ import { formatCurrencyFromCents, dollarsToCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { dayOfWeekToName } from "@/packages/schedule";
 import { transitionFamily } from "@/server/family/transitionFamily";
-import { calculatePaidThroughDate } from "@/server/billing/paidThroughDate";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
-import type { HolidayRange } from "@/server/holiday/holidayUtils";
 
 const STEPS = ["Select students", "Set plans", "Opening balance", "Review"] as const;
 
@@ -35,8 +33,6 @@ type StudentDraft = {
   startDate: string;
   paidThroughDate: string;
   credits: number;
-  lessonsRemaining: number;
-  paidThroughManual: boolean;
 };
 
 type FamilyTransitionWizardProps = {
@@ -44,7 +40,6 @@ type FamilyTransitionWizardProps = {
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: ClassTemplateOption[];
   openingState: { id: string; createdAt: string | Date } | null;
-  holidays: HolidayRange[];
 };
 
 export function FamilyTransitionWizard({
@@ -52,7 +47,6 @@ export function FamilyTransitionWizard({
   enrolmentPlans,
   classTemplates,
   openingState,
-  holidays,
 }: FamilyTransitionWizardProps) {
   const router = useRouter();
   const sortedPlans = React.useMemo(
@@ -88,8 +82,6 @@ export function FamilyTransitionWizard({
       startDate: defaultDate,
       paidThroughDate: defaultDate,
       credits: 0,
-      lessonsRemaining: 4,
-      paidThroughManual: false,
     }))
   );
 
@@ -107,64 +99,22 @@ export function FamilyTransitionWizard({
     () => new Map(sortedTemplates.map((template) => [template.id, template])),
     [sortedTemplates]
   );
-  const holidayRanges = React.useMemo(
-    () =>
-      holidays.map((holiday) => ({
-        startDate: new Date(holiday.startDate),
-        endDate: new Date(holiday.endDate),
-      })),
-    [holidays]
-  );
-  const computePaidThrough = React.useCallback(
-    (draft: StudentDraft) => {
-      const template = templateById.get(draft.classTemplateId);
-      if (!template || typeof template.dayOfWeek !== "number") return "";
-      const lessonsRemaining = draft.lessonsRemaining;
-      if (!Number.isFinite(lessonsRemaining) || lessonsRemaining <= 0) return "";
-      const startDate = draft.startDate ? new Date(draft.startDate) : null;
-      if (!startDate || Number.isNaN(startDate.getTime())) return "";
-      const result = calculatePaidThroughDate({
-        startDate,
-        creditsToCover: lessonsRemaining,
-        classTemplate: { dayOfWeek: template.dayOfWeek ?? null },
-        holidays: holidayRanges,
-      });
-      return result.paidThroughDate ? result.paidThroughDate.toISOString().slice(0, 10) : "";
-    },
-    [holidayRanges, templateById]
-  );
 
   React.useEffect(() => {
     setStudents((prev) =>
-      prev.map((student) => {
-        const next = {
-          ...student,
-          planId: student.planId || defaultPlanId,
-          classTemplateId: student.classTemplateId || defaultTemplateId,
-        };
-        if (!next.paidThroughManual) {
-          const computed = computePaidThrough(next);
-          if (computed) {
-            next.paidThroughDate = computed;
-          }
-        }
-        return next;
-      })
+      prev.map((student) => ({
+        ...student,
+        planId: student.planId || defaultPlanId,
+        classTemplateId: student.classTemplateId || defaultTemplateId,
+      }))
     );
-  }, [computePaidThrough, defaultPlanId, defaultTemplateId]);
+  }, [defaultPlanId, defaultTemplateId]);
 
   const updateStudent = (studentId: string, updates: Partial<StudentDraft>) => {
     setStudents((prev) =>
       prev.map((student) => {
         if (student.studentId !== studentId) return student;
         const next = { ...student, ...updates };
-        const plan = planById.get(next.planId);
-        if (plan?.billingType === "PER_WEEK" && !next.paidThroughManual) {
-          const computed = computePaidThrough(next);
-          if (computed) {
-            next.paidThroughDate = computed;
-          }
-        }
         return next;
       })
     );
@@ -178,11 +128,8 @@ export function FamilyTransitionWizard({
         if (!student.planId || !student.classTemplateId || !student.startDate) return false;
         const plan = planById.get(student.planId);
         if (!plan) return false;
-        if (plan.billingType === "PER_WEEK") {
-          const lessonsRemaining = student.lessonsRemaining;
-          return Boolean(student.paidThroughDate) || (Number.isFinite(lessonsRemaining) && lessonsRemaining > 0);
-        }
-        return Number.isFinite(student.credits);
+        if (!student.paidThroughDate) return false;
+        return plan.billingType === "PER_CLASS" ? Number.isFinite(student.credits) : true;
       });
     }
     return true;
@@ -218,7 +165,6 @@ export function FamilyTransitionWizard({
           startDate: new Date(student.startDate),
           paidThroughDate: student.paidThroughDate ? new Date(student.paidThroughDate) : undefined,
           credits: student.credits,
-          lessonsRemaining: student.lessonsRemaining,
         })),
       });
       toast.success("Family transitioned successfully.");
@@ -361,8 +307,6 @@ export function FamilyTransitionWizard({
                             planId: value,
                             paidThroughDate: plan?.billingType === "PER_WEEK" ? student.startDate : "",
                             credits: plan?.billingType === "PER_CLASS" ? student.credits : 0,
-                            lessonsRemaining: plan?.billingType === "PER_WEEK" ? student.lessonsRemaining : 0,
-                            paidThroughManual: false,
                           });
                         }}
                       >
@@ -388,71 +332,24 @@ export function FamilyTransitionWizard({
                         onChange={(e) =>
                           updateStudent(student.studentId, {
                             startDate: e.target.value,
-                            paidThroughDate:
-                              billingType === "PER_WEEK" ? e.target.value : student.paidThroughDate,
+                            paidThroughDate: student.paidThroughDate ? student.paidThroughDate : e.target.value,
                           })
                         }
                       />
                     </div>
 
-                    {billingType === "PER_WEEK" ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <Label>Lessons remaining</Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={Number.isFinite(student.lessonsRemaining) ? student.lessonsRemaining : 0}
-                            onChange={(e) => {
-                              const nextValue = e.target.value === "" ? 0 : Number(e.target.value);
-                              updateStudent(student.studentId, {
-                                lessonsRemaining: Number.isNaN(nextValue) ? 0 : nextValue,
-                                paidThroughManual: false,
-                              });
-                            }}
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            We will calculate the paid-through date from the remaining lessons.
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label>Paid through date (override)</Label>
-                          <Input
-                            type="date"
-                            value={student.paidThroughDate}
-                            onChange={(e) =>
-                              updateStudent(student.studentId, {
-                                paidThroughDate: e.target.value,
-                                paidThroughManual: true,
-                              })
-                            }
-                          />
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>
-                              Paid through: {computePaidThrough(student) || "Enter lessons remaining"}
-                            </span>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                const computed = computePaidThrough(student);
-                                updateStudent(student.studentId, {
-                                  paidThroughDate: computed,
-                                  paidThroughManual: false,
-                                });
-                              }}
-                            >
-                              Use calculated
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Invoices will start after {student.paidThroughDate || computePaidThrough(student) || "—"}.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
+                    <div className="space-y-1">
+                      <Label>Paid through date</Label>
+                      <Input
+                        type="date"
+                        value={student.paidThroughDate}
+                        onChange={(e) => updateStudent(student.studentId, { paidThroughDate: e.target.value })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Invoices will start after {student.paidThroughDate || "—"}.
+                      </p>
+                    </div>
+                    {billingType === "PER_CLASS" ? (
                       <div className="space-y-1">
                         <Label>Credits on hand</Label>
                         <Input
@@ -526,9 +423,8 @@ export function FamilyTransitionWizard({
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {plan?.name} · Start {student.startDate}
-                        {plan?.billingType === "PER_WEEK"
-                          ? ` · Lessons remaining ${student.lessonsRemaining} · Paid through ${student.paidThroughDate || computePaidThrough(student) || student.startDate}`
-                          : ` · Credits ${student.credits}`}
+                        {student.paidThroughDate ? ` · Paid through ${student.paidThroughDate}` : ""}
+                        {plan?.billingType === "PER_CLASS" ? ` · Credits ${student.credits}` : ""}
                       </span>
                     </div>
                   );

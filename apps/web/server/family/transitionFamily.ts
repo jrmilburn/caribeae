@@ -1,31 +1,21 @@
 "use server";
 
 import { z } from "zod";
-import {
-  BillingType,
-  EnrolmentCreditEventType,
-  EnrolmentStatus,
-  InvoiceLineItemKind,
-  InvoiceStatus,
-} from "@prisma/client";
+import { BillingType, EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate } from "@/server/enrolment/planRules";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
-import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
-import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
-import { calculatePaidThroughDate } from "@/server/billing/paidThroughDate";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
   planId: z.string().min(1),
   classTemplateId: z.string().min(1),
   startDate: z.coerce.date(),
-  paidThroughDate: z.coerce.date().optional().nullable(),
+  paidThroughDate: z.coerce.date(),
   credits: z.number().int().optional().nullable(),
-  lessonsRemaining: z.number().int().optional().nullable(),
 });
 
 const transitionFamilySchema = z.object({
@@ -76,10 +66,9 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     const planIds = payload.students.map((student) => student.planId);
     const templateIds = payload.students.map((student) => student.classTemplateId);
 
-    const [plans, templates, holidays] = await Promise.all([
+    const [plans, templates] = await Promise.all([
       tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
       tx.classTemplate.findMany({ where: { id: { in: templateIds } } }),
-      tx.holiday.findMany({ select: { startDate: true, endDate: true } }),
     ]);
 
     const planMap = new Map(plans.map((plan) => [plan.id, plan]));
@@ -98,33 +87,7 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       assertPlanMatchesTemplate(plan, template);
 
       const normalizedStart = normalizeStartDate(selection.startDate);
-      let paidThrough = selection.paidThroughDate ? normalizeStartDate(selection.paidThroughDate) : null;
-
-      if (plan.billingType === BillingType.PER_WEEK) {
-        if (!paidThrough) {
-          const lessonsRemaining = selection.lessonsRemaining ?? null;
-          if (!lessonsRemaining || lessonsRemaining <= 0) {
-            throw new Error("Enter remaining lessons or an override paid-through date.");
-          }
-          if (template.dayOfWeek == null) {
-            throw new Error("Selected class template must have a scheduled day.");
-          }
-          const computed = calculatePaidThroughDate({
-            startDate: normalizedStart,
-            creditsToCover: lessonsRemaining,
-            classTemplate: { dayOfWeek: template.dayOfWeek ?? null },
-            holidays,
-          }).paidThroughDate;
-          if (!computed) {
-            throw new Error("Unable to calculate paid-through date.");
-          }
-          paidThrough = computed;
-        }
-
-        if (paidThrough < normalizedStart) {
-          throw new Error("Paid-through date cannot be before the start date.");
-        }
-      }
+      const paidThrough = normalizeStartDate(selection.paidThroughDate);
 
       const enrolment = await tx.enrolment.create({
         data: {
@@ -133,7 +96,7 @@ export async function transitionFamily(input: TransitionFamilyInput) {
           templateId: template.id,
           startDate: normalizedStart,
           status: EnrolmentStatus.ACTIVE,
-          paidThroughDate: plan.billingType === BillingType.PER_WEEK ? paidThrough : null,
+          paidThroughDate: paidThrough,
         },
       });
 
@@ -154,36 +117,7 @@ export async function transitionFamily(input: TransitionFamilyInput) {
           });
         }
       }
-
-      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
       enrolmentIds.push(enrolment.id);
-    }
-
-    if (payload.openingBalanceCents > 0) {
-      await createInvoiceWithLineItems({
-        familyId: payload.familyId,
-        status: InvoiceStatus.SENT,
-        lineItems: [
-          {
-            kind: InvoiceLineItemKind.ADJUSTMENT,
-            description: "Opening balance",
-            amountCents: payload.openingBalanceCents,
-          },
-        ],
-        skipAuth: true,
-        client: tx,
-      });
-    }
-
-    if (payload.openingBalanceCents < 0) {
-      await createPaymentAndAllocate({
-        familyId: payload.familyId,
-        amountCents: Math.abs(payload.openingBalanceCents),
-        note: "Opening credit",
-        skipAuth: true,
-        client: tx,
-        idempotencyKey: `account-opening-${payload.familyId}`,
-      });
     }
 
     const openingState = await tx.accountOpeningState.create({
