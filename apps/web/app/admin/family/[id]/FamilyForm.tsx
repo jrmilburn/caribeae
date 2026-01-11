@@ -320,6 +320,7 @@ function FamilyTabs({
                 family={family}
                 enrolmentPlans={enrolmentPlans}
                 classTemplates={classTemplates}
+                levels={levels}
                 openingState={openingState}
               />
             </TabsContent>

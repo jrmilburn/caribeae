@@ -8,6 +8,7 @@ import type { ClassTemplate, EnrolmentPlan, Level, Teacher } from "@prisma/clien
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +16,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCurrencyFromCents, dollarsToCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { dayOfWeekToName } from "@/packages/schedule";
+import {
+  scheduleDateAtMinutes,
+  scheduleMinutesSinceMidnight,
+  ScheduleView,
+  type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
+} from "@/packages/schedule";
 import { transitionFamily } from "@/server/family/transitionFamily";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
@@ -39,6 +47,7 @@ type FamilyTransitionWizardProps = {
   family: FamilyWithStudentsAndInvoices;
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: ClassTemplateOption[];
+  levels: Level[];
   openingState: { id: string; createdAt: string | Date } | null;
 };
 
@@ -46,6 +55,7 @@ export function FamilyTransitionWizard({
   family,
   enrolmentPlans,
   classTemplates,
+  levels,
   openingState,
 }: FamilyTransitionWizardProps) {
   const router = useRouter();
@@ -72,6 +82,8 @@ export function FamilyTransitionWizard({
   const [notes, setNotes] = React.useState("");
   const [openingBalance, setOpeningBalance] = React.useState("0.00");
   const [submitting, setSubmitting] = React.useState(false);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [scheduleStudentId, setScheduleStudentId] = React.useState<string | null>(null);
 
   const [students, setStudents] = React.useState<StudentDraft[]>(() =>
     family.students.map((student) => ({
@@ -99,16 +111,34 @@ export function FamilyTransitionWizard({
     () => new Map(sortedTemplates.map((template) => [template.id, template])),
     [sortedTemplates]
   );
+  const studentById = React.useMemo(
+    () => new Map(family.students.map((student) => [student.id, student])),
+    [family.students]
+  );
+  const plansByLevel = React.useMemo(() => {
+    const map = new Map<string, EnrolmentPlan[]>();
+    sortedPlans.forEach((plan) => {
+      const list = map.get(plan.levelId) ?? [];
+      list.push(plan);
+      map.set(plan.levelId, list);
+    });
+    return map;
+  }, [sortedPlans]);
 
   React.useEffect(() => {
     setStudents((prev) =>
-      prev.map((student) => ({
-        ...student,
-        planId: student.planId || defaultPlanId,
-        classTemplateId: student.classTemplateId || defaultTemplateId,
-      }))
+      prev.map((student) => {
+        const levelId = studentById.get(student.studentId)?.levelId ?? null;
+        const availablePlans = levelId ? plansByLevel.get(levelId) ?? [] : [];
+        const planId = availablePlans.find((plan) => plan.id === student.planId)?.id ?? availablePlans[0]?.id ?? "";
+        return {
+          ...student,
+          planId,
+          classTemplateId: student.classTemplateId || defaultTemplateId,
+        };
+      })
     );
-  }, [defaultPlanId, defaultTemplateId]);
+  }, [defaultPlanId, defaultTemplateId, plansByLevel, studentById]);
 
   const updateStudent = (studentId: string, updates: Partial<StudentDraft>) => {
     setStudents((prev) =>
@@ -168,6 +198,7 @@ export function FamilyTransitionWizard({
         })),
       });
       toast.success("Family transitioned successfully.");
+      setWizardOpen(false);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to transition family.");
@@ -176,40 +207,86 @@ export function FamilyTransitionWizard({
     }
   };
 
-  return (
-    <Card className="border-l-0 border-r-0 shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">Family transition</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Move a paper-billed family into the digital workflow in under two minutes.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {sortedPlans.length === 0 || sortedTemplates.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            Add at least one enrolment plan and class template before running this transition.
-          </div>
-        ) : null}
-        {hasExisting ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            This family already has a transition recorded on {openingDate?.toDateString() ?? "an earlier date"}. Enable
-            force to override.
-          </div>
-        ) : null}
+  const scheduleStudent = scheduleStudentId ? studentById.get(scheduleStudentId) ?? null : null;
+  const scheduleDraft = scheduleStudentId
+    ? students.find((student) => student.studentId === scheduleStudentId) ?? null
+    : null;
+  const schedulePlan = scheduleDraft ? planById.get(scheduleDraft.planId) ?? null : null;
+  const scheduleBlocked = !scheduleStudent?.levelId;
+  const scheduleSelectedIds = scheduleDraft?.classTemplateId ? [scheduleDraft.classTemplateId] : [];
 
-        <div className="flex flex-wrap gap-2">
-          {STEPS.map((label, index) => (
-            <div
-              key={label}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs",
-                index === step ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground"
-              )}
-            >
-              {index + 1}. {label}
+  const onScheduleClassClick = (
+    occurrence: NormalizedScheduleClass,
+    context?: ScheduleClassClickContext
+  ) => {
+    if (!scheduleDraft || !scheduleStudentId) return;
+    const studentLevelId = scheduleStudent?.levelId ?? null;
+    if (!studentLevelId) {
+      toast.error("Set the student's level first.");
+      return;
+    }
+    if (occurrence.levelId && occurrence.levelId !== studentLevelId) {
+      toast.error("Select classes that match the student's level.");
+      return;
+    }
+    if (schedulePlan?.levelId && occurrence.levelId && occurrence.levelId !== schedulePlan.levelId) {
+      toast.error("Select classes that match the enrolment plan level.");
+      return;
+    }
+
+    const alignedOccurrence =
+      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
+    updateStudent(scheduleStudentId, { classTemplateId: alignedOccurrence.templateId });
+    setScheduleStudentId(null);
+  };
+
+  return (
+    <>
+      <Card className="border-l-0 border-r-0 shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">Family transition</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Move a paper-billed family into the digital workflow in under two minutes.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {hasExisting ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              This family already has a transition recorded on {openingDate?.toDateString() ?? "an earlier date"}. Enable
+              force to override.
             </div>
-          ))}
-        </div>
+          ) : null}
+          <Button onClick={() => setWizardOpen(true)} disabled={!setupReady}>
+            Open transition wizard
+          </Button>
+          {sortedPlans.length === 0 || sortedTemplates.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Add at least one enrolment plan and class template before running this transition.
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1100px]">
+          <DialogHeader>
+            <DialogTitle>Transition family</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              {STEPS.map((label, index) => (
+                <div
+                  key={label}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs",
+                    index === step ? "border-primary bg-primary/10 text-primary" : "border-muted text-muted-foreground"
+                  )}
+                >
+                  {index + 1}. {label}
+                </div>
+              ))}
+            </div>
 
         {step === 0 ? (
           <div className="space-y-4">
@@ -257,6 +334,11 @@ export function FamilyTransitionWizard({
               const plan = planById.get(student.planId);
               const template = templateById.get(student.classTemplateId);
               const billingType = plan?.billingType ?? null;
+              const studentInfo = studentById.get(student.studentId);
+              const studentLevelId = studentInfo?.levelId ?? null;
+              const availablePlans = studentLevelId
+                ? plansByLevel.get(studentLevelId) ?? []
+                : [];
 
               return (
                 <div key={student.studentId} className="rounded-lg border p-4 space-y-3">
@@ -270,31 +352,28 @@ export function FamilyTransitionWizard({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label>Class template</Label>
-                      <Select
-                        value={student.classTemplateId}
-                        onValueChange={(value) => updateStudent(student.studentId, { classTemplateId: value })}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="justify-start"
+                        onClick={() => setScheduleStudentId(student.studentId)}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a class" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortedTemplates.map((option) => {
-                            const dayLabel =
-                              typeof option.dayOfWeek === "number" ? dayOfWeekToName(option.dayOfWeek) : "Unscheduled";
-                            return (
-                              <SelectItem key={option.id} value={option.id}>
-                                {option.name ?? option.level.name} · {dayLabel}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                        {template
+                          ? `${template.name ?? template.level.name ?? "Class"} · ${
+                              typeof template.dayOfWeek === "number" ? dayOfWeekToName(template.dayOfWeek) : "Unscheduled"
+                            }`
+                          : "Select class on schedule"}
+                      </Button>
                       {template ? (
                         <p className="text-xs text-muted-foreground">
                           Level: {template.level.name}
                           {template.teacher?.name ? ` · ${template.teacher.name}` : ""}
                         </p>
-                      ) : null}
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Choose a class from the schedule view.
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -314,7 +393,7 @@ export function FamilyTransitionWizard({
                           <SelectValue placeholder="Select plan" />
                         </SelectTrigger>
                         <SelectContent>
-                          {sortedPlans.map((plan) => (
+                          {availablePlans.map((plan) => (
                             <SelectItem key={plan.id} value={plan.id}>
                               {plan.name} · {formatCurrencyFromCents(plan.priceCents)} ·
                               {plan.billingType === "PER_WEEK" ? "Weekly" : "Per class"}
@@ -322,6 +401,12 @@ export function FamilyTransitionWizard({
                           ))}
                         </SelectContent>
                       </Select>
+                      {studentLevelId && availablePlans.length === 0 ? (
+                        <p className="text-xs text-destructive">No enrolment plans exist for this student level.</p>
+                      ) : null}
+                      {!studentLevelId ? (
+                        <p className="text-xs text-destructive">Set the student level to choose a plan.</p>
+                      ) : null}
                     </div>
 
                     <div className="space-y-1">
@@ -349,7 +434,7 @@ export function FamilyTransitionWizard({
                         Invoices will start after {student.paidThroughDate || "—"}.
                       </p>
                     </div>
-                    {billingType === "PER_CLASS" && (
+                    {billingType === "PER_CLASS" ? (
                       <div className="space-y-1">
                         <Label>Credits on hand</Label>
                         <Input
@@ -442,27 +527,77 @@ export function FamilyTransitionWizard({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button type="button" variant="outline" onClick={() => setStep((prev) => Math.max(prev - 1, 0))}>
-            Back
-          </Button>
-          <div className="flex gap-2">
-            {step < STEPS.length - 1 ? (
-              <Button type="button" onClick={() => setStep((prev) => prev + 1)} disabled={!canContinue}>
-                Continue
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button type="button" variant="outline" onClick={() => setStep((prev) => Math.max(prev - 1, 0))}>
+                Back
               </Button>
+              <div className="flex gap-2">
+                {step < STEPS.length - 1 ? (
+                  <Button type="button" onClick={() => setStep((prev) => prev + 1)} disabled={!canContinue}>
+                    Continue
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!setupReady || submitting || (!force && hasExisting)}
+                  >
+                    {submitting ? "Submitting…" : "Submit transition"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(scheduleStudentId)}
+        onOpenChange={(open) => {
+          if (!open) setScheduleStudentId(null);
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+          <DialogHeader>
+            <DialogTitle>Select class template</DialogTitle>
+          </DialogHeader>
+          <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
+            <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+              <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
+                {scheduleStudent?.name ?? "Select class"}
+              </div>
+              {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+            </div>
+            {scheduleBlocked ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Set student level first.
+              </div>
             ) : (
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!setupReady || submitting || (!force && hasExisting)}
-              >
-                {submitting ? "Submitting…" : "Submit transition"}
-              </Button>
+              <div className="flex-1 min-h-0">
+                <ScheduleView
+                  levels={levels}
+                  onClassClick={onScheduleClassClick}
+                  allowTemplateMoves={false}
+                  defaultViewMode="week"
+                  selectedTemplateIds={scheduleSelectedIds}
+                  filters={{ levelId: scheduleStudent?.levelId ?? null, teacherId: null }}
+                />
+              </div>
             )}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </DialogContent>
+      </Dialog>
+    </>
   );
+}
+
+function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
+  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
+  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
+  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
+  return {
+    ...occurrence,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
 }
