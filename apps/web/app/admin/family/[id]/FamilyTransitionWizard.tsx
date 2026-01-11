@@ -349,7 +349,7 @@ export function FamilyTransitionWizard({
                         Invoices will start after {student.paidThroughDate || "—"}.
                       </p>
                     </div>
-                    {billingType === "PER_CLASS" ? (
+                    {billingType === "PER_CLASS" && (
                       <div className="space-y-1">
                         <Label>Credits on hand</Label>
                         <Input
