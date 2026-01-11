@@ -294,6 +294,7 @@ function FamilyTabs({
                 family={family}
                 billing={billing}
                 billingPosition={billingPosition}
+                openingState={openingState}
                 paymentSheetOpen={paymentSheetOpen}
                 onPaymentSheetChange={onPaymentSheetChange}
               />
@@ -366,12 +367,14 @@ function BillingTab({
   family,
   billing,
   billingPosition,
+  openingState,
   paymentSheetOpen,
   onPaymentSheetChange,
 }: {
   family: FamilyWithStudentsAndInvoices;
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
   billingPosition: FamilyBillingPosition;
+  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
   paymentSheetOpen: boolean;
   onPaymentSheetChange: (open: boolean) => void;
 }) {
@@ -393,6 +396,7 @@ function BillingTab({
       <FamilyInvoices
         family={family}
         billing={billing}
+        openingState={openingState}
         paymentSheetOpen={paymentSheetOpen}
         onPaymentSheetChange={onPaymentSheetChange}
       />

@@ -193,7 +193,7 @@ export function FamilyTransitionWizard({
           planId: student.planId,
           classTemplateId: student.classTemplateId,
           startDate: new Date(student.startDate),
-          paidThroughDate: student.paidThroughDate ? new Date(student.paidThroughDate) : undefined,
+          paidThroughDate: new Date(student.paidThroughDate) || new Date(student.startDate),
           credits: student.credits,
         })),
       });
