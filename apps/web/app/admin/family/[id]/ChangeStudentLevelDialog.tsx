@@ -22,7 +22,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ScheduleView, type NormalizedScheduleClass } from "@/packages/schedule";
+import {
+  ScheduleView,
+  type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
+  scheduleDateAtMinutes,
+  scheduleMinutesSinceMidnight,
+} from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeStudentLevelAndReenrol } from "@/server/student/changeStudentLevelAndReenrol";
 import { getTemplatesForLevelAndDate } from "@/server/classTemplate/getTemplatesForLevelAndDate";
@@ -132,7 +138,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
     setEffectiveDate(today);
   }, [levels, open, student.levelId, today]);
 
-  const onClassClick = (occurrence: NormalizedScheduleClass) => {
+  const onClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     if (!effectiveLevelId) {
       toast.error("Set student level first.");
       return;
@@ -141,6 +147,9 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
       toast.error("Select classes that match the new level.");
       return;
     }
+
+    const alignedOccurrence =
+      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
 
     setSelectedTemplates((prev) => {
       const alreadySelected = Boolean(prev[occurrence.templateId]);
@@ -156,7 +165,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
         return prev;
       }
 
-      return { ...prev, [occurrence.templateId]: occurrence };
+      return { ...prev, [occurrence.templateId]: alignedOccurrence };
     });
   };
 
@@ -415,4 +424,15 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
       </DialogContent>
     </Dialog>
   );
+}
+
+function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
+  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
+  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
+  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
+  return {
+    ...occurrence,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
 }
