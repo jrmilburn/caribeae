@@ -1,0 +1,202 @@
+"use server";
+
+import { z } from "zod";
+import {
+  BillingType,
+  EnrolmentCreditEventType,
+  EnrolmentStatus,
+  InvoiceLineItemKind,
+  InvoiceStatus,
+} from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
+import { normalizeStartDate } from "@/server/enrolment/planRules";
+import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
+import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
+import { calculatePaidThroughDate } from "@/server/billing/paidThroughDate";
+
+const studentTransitionSchema = z.object({
+  studentId: z.string().min(1),
+  planId: z.string().min(1),
+  classTemplateId: z.string().min(1),
+  startDate: z.coerce.date(),
+  paidThroughDate: z.coerce.date().optional().nullable(),
+  credits: z.number().int().optional().nullable(),
+  lessonsRemaining: z.number().int().optional().nullable(),
+});
+
+const transitionFamilySchema = z.object({
+  familyId: z.string().min(1),
+  effectiveDate: z.coerce.date().optional(),
+  openingBalanceCents: z.number().int(),
+  notes: z.string().trim().max(2000).optional(),
+  batchId: z.string().trim().max(200).optional(),
+  force: z.boolean().optional(),
+  students: z.array(studentTransitionSchema).nonempty(),
+});
+
+export type TransitionFamilyInput = z.infer<typeof transitionFamilySchema>;
+
+export async function transitionFamily(input: TransitionFamilyInput) {
+  const user = await getOrCreateUser();
+  await requireAdmin();
+
+  const payload = transitionFamilySchema.parse(input);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.accountOpeningState.findUnique({
+      where: { familyId: payload.familyId },
+    });
+
+    if (existing) {
+      if (!payload.force) {
+        throw new Error("Family has already been transitioned.");
+      }
+      return { openingState: existing, enrolmentIds: [] as string[] };
+    }
+
+    const family = await tx.family.findUnique({ where: { id: payload.familyId } });
+    if (!family) {
+      throw new Error("Family not found.");
+    }
+
+    const studentIds = payload.students.map((student) => student.studentId);
+    const students = await tx.student.findMany({
+      where: { id: { in: studentIds }, familyId: payload.familyId },
+      select: { id: true },
+    });
+
+    if (students.length !== studentIds.length) {
+      throw new Error("Selected students do not belong to this family.");
+    }
+
+    const planIds = payload.students.map((student) => student.planId);
+    const templateIds = payload.students.map((student) => student.classTemplateId);
+
+    const [plans, templates, holidays] = await Promise.all([
+      tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
+      tx.classTemplate.findMany({ where: { id: { in: templateIds } } }),
+      tx.holiday.findMany({ select: { startDate: true, endDate: true } }),
+    ]);
+
+    const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+    const templateMap = new Map(templates.map((template) => [template.id, template]));
+
+    const enrolmentIds: string[] = [];
+
+    for (const selection of payload.students) {
+      const plan = planMap.get(selection.planId);
+      const template = templateMap.get(selection.classTemplateId);
+
+      if (!plan || !template) {
+        throw new Error("Missing enrolment plan or class template.");
+      }
+
+      assertPlanMatchesTemplate(plan, template);
+
+      const normalizedStart = normalizeStartDate(selection.startDate);
+      let paidThrough = selection.paidThroughDate ? normalizeStartDate(selection.paidThroughDate) : null;
+
+      if (plan.billingType === BillingType.PER_WEEK) {
+        if (!paidThrough) {
+          const lessonsRemaining = selection.lessonsRemaining ?? null;
+          if (!lessonsRemaining || lessonsRemaining <= 0) {
+            throw new Error("Enter remaining lessons or an override paid-through date.");
+          }
+          if (template.dayOfWeek == null) {
+            throw new Error("Selected class template must have a scheduled day.");
+          }
+          const computed = calculatePaidThroughDate({
+            startDate: normalizedStart,
+            creditsToCover: lessonsRemaining,
+            classTemplate: { dayOfWeek: template.dayOfWeek ?? null },
+            holidays,
+          }).paidThroughDate;
+          if (!computed) {
+            throw new Error("Unable to calculate paid-through date.");
+          }
+          paidThrough = computed;
+        }
+
+        if (paidThrough < normalizedStart) {
+          throw new Error("Paid-through date cannot be before the start date.");
+        }
+      }
+
+      const enrolment = await tx.enrolment.create({
+        data: {
+          studentId: selection.studentId,
+          planId: plan.id,
+          templateId: template.id,
+          startDate: normalizedStart,
+          status: EnrolmentStatus.ACTIVE,
+          paidThroughDate: plan.billingType === BillingType.PER_WEEK ? paidThrough : null,
+        },
+      });
+
+      if (plan.billingType === BillingType.PER_CLASS) {
+        const credits = selection.credits ?? 0;
+        if (credits < 0) {
+          throw new Error("Credits must be zero or positive.");
+        }
+        if (credits > 0) {
+          await tx.enrolmentCreditEvent.create({
+            data: {
+              enrolmentId: enrolment.id,
+              type: EnrolmentCreditEventType.MANUAL_ADJUST,
+              creditsDelta: credits,
+              occurredOn: normalizedStart,
+              note: "Opening credits",
+            },
+          });
+        }
+      }
+
+      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+      enrolmentIds.push(enrolment.id);
+    }
+
+    if (payload.openingBalanceCents > 0) {
+      await createInvoiceWithLineItems({
+        familyId: payload.familyId,
+        status: InvoiceStatus.SENT,
+        lineItems: [
+          {
+            kind: InvoiceLineItemKind.ADJUSTMENT,
+            description: "Opening balance",
+            amountCents: payload.openingBalanceCents,
+          },
+        ],
+        skipAuth: true,
+        client: tx,
+      });
+    }
+
+    if (payload.openingBalanceCents < 0) {
+      await createPaymentAndAllocate({
+        familyId: payload.familyId,
+        amountCents: Math.abs(payload.openingBalanceCents),
+        note: "Opening credit",
+        skipAuth: true,
+        client: tx,
+        idempotencyKey: `account-opening-${payload.familyId}`,
+      });
+    }
+
+    const openingState = await tx.accountOpeningState.create({
+      data: {
+        familyId: payload.familyId,
+        effectiveDate: normalizeStartDate(payload.effectiveDate ?? new Date()),
+        createdById: user.id,
+        openingBalanceCents: payload.openingBalanceCents,
+        notes: payload.notes?.trim() || null,
+        batchId: payload.batchId?.trim() || null,
+      },
+    });
+
+    return { openingState, enrolmentIds };
+  });
+}

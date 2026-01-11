@@ -18,11 +18,15 @@ import StudentDetails from "./StudentDetails";
 import FamilyInvoices from "./FamilyInvoices";
 import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 import { StudentModal } from "./StudentModal";
+import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
 
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
+import type getClassTemplates from "@/server/classTemplate/getClassTemplates";
+import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import type { getHolidays } from "@/server/holiday/getHolidays";
 import { createStudent } from "@/server/student/createStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
@@ -80,6 +84,9 @@ type FamilyFormProps = {
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
   billingPosition: FamilyBillingPosition;
   enrolmentPlans: EnrolmentPlan[];
+  classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
+  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
+  holidays: Awaited<ReturnType<typeof getHolidays>>;
 };
 
 export default function FamilyForm({
@@ -89,6 +96,9 @@ export default function FamilyForm({
   billing,
   billingPosition,
   enrolmentPlans,
+  classTemplates,
+  openingState,
+  holidays,
 }: FamilyFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState("overview");
@@ -193,17 +203,20 @@ export default function FamilyForm({
             onTabChange={handleTabChange}
             family={family}
             billing={billing}
-          billingPosition={billingPosition}
-          enrolContext={enrolContext}
-          levels={levels}
-          onAddStudent={handleAddStudent}
-          onEditStudent={handleEditStudent}
-          paymentSheetOpen={paymentSheetOpen}
-          onPaymentSheetChange={setPaymentSheetOpen}
-          enrolmentPlans={enrolmentPlans}
-        />
+            billingPosition={billingPosition}
+            enrolContext={enrolContext}
+            levels={levels}
+            onAddStudent={handleAddStudent}
+            onEditStudent={handleEditStudent}
+            paymentSheetOpen={paymentSheetOpen}
+            onPaymentSheetChange={setPaymentSheetOpen}
+            enrolmentPlans={enrolmentPlans}
+            classTemplates={classTemplates}
+            openingState={openingState}
+            holidays={holidays}
+          />
+        </div>
       </div>
-    </div>
 
       <FamilyActionSheet open={familySheetOpen} onOpenChange={setFamilySheetOpen}>
         <FamilyDetails family={family} layout="plain" onSaved={() => setFamilySheetOpen(false)} />
@@ -238,6 +251,9 @@ type FamilyTabsProps = {
   paymentSheetOpen: boolean;
   onPaymentSheetChange: (open: boolean) => void;
   enrolmentPlans: EnrolmentPlan[];
+  classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
+  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
+  holidays: Awaited<ReturnType<typeof getHolidays>>;
 };
 
 function FamilyTabs({
@@ -254,6 +270,9 @@ function FamilyTabs({
   paymentSheetOpen,
   onPaymentSheetChange,
   enrolmentPlans,
+  classTemplates,
+  openingState,
+  holidays,
 }: FamilyTabsProps) {
   return (
     <Card className="border-none shadow-none">
@@ -267,6 +286,7 @@ function FamilyTabs({
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="billing">Billing</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="transition">Transition</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
 
@@ -295,6 +315,18 @@ function FamilyTabs({
                 onAddStudent={onAddStudent}
                 onEditStudent={onEditStudent}
                 enrolmentPlans={enrolmentPlans}
+              />
+            </TabsContent>
+          ) : null}
+
+          {visitedTabs.has("transition") ? (
+            <TabsContent value="transition" className="pt-4">
+              <FamilyTransitionWizard
+                family={family}
+                enrolmentPlans={enrolmentPlans}
+                classTemplates={classTemplates}
+                openingState={openingState}
+                holidays={holidays}
               />
             </TabsContent>
           ) : null}
