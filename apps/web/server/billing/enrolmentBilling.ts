@@ -379,8 +379,8 @@ async function computeCreditPaidThroughInternal(
     select: { templateId: true, date: true },
   });
 
-  const holidayStart = normalizeToScheduleMidnight(startWindow);
-  const holidayEnd = normalizeToScheduleMidnight(horizon);
+  const holidayStart = brisbaneStartOfDay(startWindow);
+  const holidayEnd = brisbaneStartOfDay(horizon);
   const holidays = await tx.holiday.findMany({
     where: {
       startDate: { lte: holidayEnd },
