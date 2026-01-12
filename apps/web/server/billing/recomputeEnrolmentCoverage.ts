@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { PrismaClient } from "@prisma/client";
 import { BillingType, EnrolmentStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import {
   computeCoverageEndDay,
