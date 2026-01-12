@@ -234,8 +234,8 @@ async function ensureConsumptionEvents(
     cancelledByTemplate.set(cancellation.templateId, set);
   }
 
-  const holidayStart = normalizeToScheduleMidnight(enrolment.startDate);
-  const holidayEnd = normalizeToScheduleMidnight(windowEnd);
+  const holidayStart = brisbaneStartOfDay(enrolment.startDate);
+  const holidayEnd = brisbaneStartOfDay(windowEnd);
   const holidays = await tx.holiday.findMany({
     where: {
       startDate: { lte: holidayEnd },
