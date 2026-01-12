@@ -7,6 +7,7 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { cn } from "@/lib/utils";
 import { dayLabel } from "../../class/[id]/utils/time";
+import { BRISBANE_TIME_ZONE } from "@/server/dates/brisbaneDay";
 
 type Props = {
   billing: FamilyBillingPosition;
@@ -14,7 +15,12 @@ type Props = {
 
 function formatDate(value?: Date | null) {
   if (!value) return "—";
-  return format(value, "d MMM yyyy");
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: BRISBANE_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(value);
 }
 
 function formatTimeRange(start?: number | null, end?: number | null) {
