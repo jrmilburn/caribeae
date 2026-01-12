@@ -12,8 +12,10 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
+import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -131,11 +133,35 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
 
     if (plan.billingType === BillingType.PER_WEEK) {
       const coverageEnd = invoice.coverageEnd ? normalizeDate(invoice.coverageEnd) : null;
+      const coverageStart = invoice.coverageStart ? normalizeDate(invoice.coverageStart) : null;
       if (!coverageEnd) {
         throw new Error("Weekly invoices must include a coverage end date.");
       }
-      updates.paidThroughDate = coverageEnd;
-      updates.paidThroughDateComputed = coverageEnd;
+      let adjustedCoverageEnd = coverageEnd;
+      if (coverageStart && enrolment.template?.dayOfWeek != null) {
+        const baseStart = normalizeToScheduleMidnight(coverageStart);
+        const baseEnd = normalizeToScheduleMidnight(coverageEnd);
+        const holidays = await tx.holiday.findMany({
+          where: {
+            startDate: { lte: baseEnd },
+            endDate: { gte: baseStart },
+          },
+          select: { startDate: true, endDate: true },
+        });
+        if (holidays.length) {
+          const holidayCount = countHolidayOccurrences({
+            startDate: baseStart,
+            endDate: baseEnd,
+            templateDayOfWeek: enrolment.template.dayOfWeek,
+            holidays,
+          });
+          if (holidayCount > 0) {
+            adjustedCoverageEnd = normalizeDate(addWeeks(baseEnd, holidayCount));
+          }
+        }
+      }
+      updates.paidThroughDate = adjustedCoverageEnd;
+      updates.paidThroughDateComputed = adjustedCoverageEnd;
     } else {
       const creditsDelta = resolveCreditsPurchased(invoice, plan);
       if (creditsDelta > 0) {
