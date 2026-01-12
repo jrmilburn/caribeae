@@ -74,8 +74,8 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: Holi
     const startDate = asDate(enrolment.startDate) ?? today;
     const endDate = asDate(enrolment.endDate);
     const assignedTemplates = (enrolment.assignedClasses ?? [])
-      .map((template) => ({ dayOfWeek: template.dayOfWeek }))
-      .filter((template): template is { dayOfWeek: number } => template.dayOfWeek != null);
+      .map((template : any) => ({ dayOfWeek: template.dayOfWeek }))
+      .filter((template : any): template is { dayOfWeek: number } => template.dayOfWeek != null);
 
     if (assignedTemplates.length === 0) {
       return { nextPaidThrough: paidThrough };
