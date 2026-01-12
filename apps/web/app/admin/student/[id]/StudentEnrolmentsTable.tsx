@@ -68,16 +68,6 @@ export function StudentEnrolmentsTable({
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
 
-  const planSiblingsById = React.useMemo(() => {
-    return enrolments.reduce<Record<string, EnrolmentRow[]>>((acc, enrolment) => {
-      if (enrolment.planId) {
-        acc[enrolment.planId] = acc[enrolment.planId] ?? [];
-        acc[enrolment.planId].push(enrolment);
-      }
-      return acc;
-    }, {});
-  }, [enrolments]);
-
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
   }
@@ -114,23 +104,46 @@ export function StudentEnrolmentsTable({
           </TableHeader>
           <TableBody>
             {enrolments.map((enrolment) => {
-              const template = enrolment.template;
-              const classLabel =
-                template?.name ?? template?.level?.name ?? "Class template";
-
-              const day =
-                typeof template?.dayOfWeek === "number" ? dayLabel(template.dayOfWeek) : "—";
-              const timeRange = formatTimeRange(template?.startTime, template?.endTime);
+              const assignments = enrolment.classAssignments?.length
+                ? enrolment.classAssignments.map((assignment) => assignment.template)
+                : enrolment.template
+                  ? [enrolment.template]
+                  : [];
+              const classLabels = assignments.length
+                ? assignments.map((template) => template?.name ?? template?.level?.name ?? "Class template")
+                : ["—"];
+              const scheduleLabels = assignments.length
+                ? assignments.map((template) => {
+                    const day =
+                      typeof template?.dayOfWeek === "number" ? dayLabel(template.dayOfWeek) : "—";
+                    const timeRange = formatTimeRange(template?.startTime, template?.endTime);
+                    return `${day}${timeRange !== "—" ? ` · ${timeRange}` : ""}`;
+                  })
+                : ["—"];
 
               return (
                 <TableRow key={enrolment.id}>
                   <TableCell className="font-medium">
-                    <Link href={`/admin/class/${enrolment.templateId}`} className="underline">
-                      {classLabel}
-                    </Link>
+                    <div className="space-y-1">
+                      {assignments.length
+                        ? assignments.map((template, index) => (
+                            <Link
+                              key={template?.id ?? index}
+                              href={`/admin/class/${template?.id ?? enrolment.templateId}`}
+                              className="block underline"
+                            >
+                              {classLabels[index]}
+                            </Link>
+                          ))
+                        : "—"}
+                    </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {day} {timeRange !== "—" ? `· ${timeRange}` : ""}
+                    <div className="space-y-1">
+                      {scheduleLabels.map((label, index) => (
+                        <div key={`${enrolment.id}-schedule-${index}`}>{label}</div>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell>{enrolment.status}</TableCell>
                   <TableCell>{fmtDate(enrolment.startDate)}</TableCell>
@@ -182,8 +195,8 @@ export function StudentEnrolmentsTable({
           levels={levels}
           studentLevelId={studentLevelId}
           initialTemplateIds={
-            editing.planId && planSiblingsById[editing.planId]
-              ? planSiblingsById[editing.planId].map((e) => e.templateId)
+            editing.classAssignments?.length
+              ? editing.classAssignments.map((assignment) => assignment.templateId)
               : [editing.templateId]
           }
           onChanged={() => {

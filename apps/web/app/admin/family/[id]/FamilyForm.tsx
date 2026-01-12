@@ -42,6 +42,12 @@ export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
             endDate: true;
             paidThroughDate: true;
             status: true;
+            classAssignments: {
+              select: {
+                templateId: true;
+                template: { select: { id: true; name: true; dayOfWeek: true; startTime: true; endTime: true } };
+              };
+            };
           };
         };
         levelChanges: {

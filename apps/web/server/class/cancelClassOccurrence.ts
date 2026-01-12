@@ -54,12 +54,19 @@ export async function cancelClassOccurrence({ templateId, dateKey, reason }: Can
 
     const enrolments = await tx.enrolment.findMany({
       where: {
-        templateId,
         status: EnrolmentStatus.ACTIVE,
         startDate: { lte: date },
         OR: [{ endDate: null }, { endDate: { gte: date } }],
+        AND: [
+          {
+            OR: [
+              { templateId },
+              { classAssignments: { some: { templateId } } },
+            ],
+          },
+        ],
       },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: true },
     });
 
     const existingAdjustments = await tx.enrolmentAdjustment.findMany({

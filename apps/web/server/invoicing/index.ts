@@ -70,6 +70,9 @@ export async function createInitialInvoiceForEnrolment(
     });
     if (!enrolment) throw new Error("Enrolment not found");
     if (!enrolment.plan) throw new Error("Enrolment plan missing");
+    if (!enrolment.isBillingPrimary) {
+      throw new Error("Secondary enrolments cannot be billed directly.");
+    }
     if (!enrolment.template) {
       throw new Error("Class template missing for enrolment.");
     }
@@ -177,6 +180,9 @@ export async function issueNextInvoiceForEnrolment(
 
     if (!enrolment) throw new Error("Enrolment not found");
     if (!enrolment.plan) throw new Error("Enrolment plan missing");
+    if (!enrolment.isBillingPrimary) {
+      throw new Error("Secondary enrolments cannot be billed directly.");
+    }
     if (!enrolment.template) {
       throw new Error("Class template missing for enrolment.");
     }
@@ -265,6 +271,7 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
       status: "ACTIVE",
       startDate: { lte: today },
       planId: { not: null },
+      isBillingPrimary: true,
       OR: [
         { endDate: null }, { endDate: { gte: today } },
         {

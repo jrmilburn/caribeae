@@ -21,6 +21,16 @@ export async function getStudent(id: string) {
               teacher: true,
             },
           },
+          classAssignments: {
+            include: {
+              template: {
+                include: {
+                  level: true,
+                  teacher: true,
+                },
+              },
+            },
+          },
           plan: true,
         },
       },

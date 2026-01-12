@@ -19,8 +19,9 @@ export function validateSelection(params: {
   }
 
   if (params.plan.billingType === BillingType.PER_WEEK) {
-    if (uniqueIds.length > 1) {
-      return { ok: false, message: "Weekly plans only need one anchor class (or none)." };
+    const { maxCount } = getSelectionRequirement(params.plan);
+    if (uniqueIds.length > maxCount) {
+      return { ok: false, message: `Select up to ${maxCount} classes for this weekly plan.` };
     }
 
     const mismatchedLevel = params.templates.find((t) => t.levelId !== params.plan.levelId);

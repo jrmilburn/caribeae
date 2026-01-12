@@ -3,6 +3,7 @@ import { BillingType, EnrolmentPlan } from "@prisma/client";
 
 export type SelectionRequirement = {
   requiredCount: number;
+  maxCount: number;
   helper: string;
 };
 
@@ -24,9 +25,13 @@ export function normalizePlan(plan: EnrolmentPlan): NormalizedPlan {
 
 export function getSelectionRequirement(plan: EnrolmentPlan): SelectionRequirement {
   if (plan.billingType === BillingType.PER_WEEK) {
+    const normalized = normalizePlan(plan);
     return {
       requiredCount: 0,
-      helper: "Weekly plans cover any class at this level. Selecting a class is optional.",
+      maxCount: Math.max(1, normalized.sessionsPerWeek),
+      helper: normalized.sessionsPerWeek > 1
+        ? `Weekly plans cover up to ${normalized.sessionsPerWeek} classes per week. Select up to ${normalized.sessionsPerWeek} classes (optional).`
+        : "Weekly plans cover any class at this level. Selecting a class is optional.",
     };
   }
 
@@ -34,6 +39,7 @@ export function getSelectionRequirement(plan: EnrolmentPlan): SelectionRequireme
   const requiredCount = Math.max(1, normalized.sessionsPerWeek);
   return {
     requiredCount,
+    maxCount: requiredCount,
     helper:
       requiredCount === 1
         ? "Select 1 class for this plan."

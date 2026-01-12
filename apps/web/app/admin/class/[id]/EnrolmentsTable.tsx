@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import type { Enrolment, Student, Level, EnrolmentPlan } from "@prisma/client";
+import type { Enrolment, Student, Level, EnrolmentPlan, ClassTemplate } from "@prisma/client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,7 +37,11 @@ function fmtDate(d: Date | null | undefined) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-type EnrolmentWithStudent = Enrolment & { student: Student; plan: EnrolmentPlan | null };
+type EnrolmentWithStudent = Enrolment & {
+  student: Student;
+  plan: EnrolmentPlan | null;
+  classAssignments?: Array<{ templateId: string; template?: ClassTemplate | null }>;
+};
 
 export function EnrolmentsTable({
   enrolments,
@@ -49,16 +53,6 @@ export function EnrolmentsTable({
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
-
-  const planSiblingsById = React.useMemo(() => {
-    return enrolments.reduce<Record<string, EnrolmentWithStudent[]>>((acc, enrolment) => {
-      if (enrolment.planId) {
-        acc[enrolment.planId] = acc[enrolment.planId] ?? [];
-        acc[enrolment.planId].push(enrolment);
-      }
-      return acc;
-    }, {});
-  }, [enrolments]);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
@@ -151,8 +145,8 @@ export function EnrolmentsTable({
           enrolment={editing as Enrolment & { plan: EnrolmentPlan }}
           levels={levels}
           initialTemplateIds={
-            editing.planId && planSiblingsById[editing.planId]
-              ? planSiblingsById[editing.planId].map((s) => s.templateId)
+            editing.classAssignments?.length
+              ? editing.classAssignments.map((assignment) => assignment.templateId)
               : [editing.templateId]
           }
           onChanged={() => {

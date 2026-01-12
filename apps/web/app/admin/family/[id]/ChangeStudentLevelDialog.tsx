@@ -87,15 +87,14 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
 
   const requiredSelectionCount = React.useMemo(() => {
     if (!selectedPlan) return 1;
-    if (selectedPlan.billingType === BillingType.PER_WEEK) return 1;
     const requirement = getSelectionRequirement(selectedPlan);
-    return Math.max(1, requirement.requiredCount);
+    return Math.max(1, requirement.maxCount);
   }, [selectedPlan]);
 
   const selectionMeetsPlan =
     selectedTemplateIds.length > 0 &&
     (selectedPlan?.billingType === BillingType.PER_WEEK
-      ? selectedTemplateIds.length === 1
+      ? selectedTemplateIds.length <= requiredSelectionCount
       : selectedTemplateIds.length === requiredSelectionCount);
 
   const availabilityKnown = availabilityCount !== null;
@@ -159,7 +158,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
         return next;
       }
 
-      const maxSelectable = Math.max(requiredSelectionCount, 6);
+      const maxSelectable = requiredSelectionCount;
       if (Object.keys(prev).length >= maxSelectable) {
         toast.error(`You can select up to ${maxSelectable} classes. Deselect one to add another.`);
         return prev;
@@ -178,7 +177,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
       return;
     }
     if (!selectionMeetsPlan) {
-      toast.error(`Select ${requiredSelectionCount} class${requiredSelectionCount === 1 ? "" : "es"} for this plan.`);
+      toast.error(`Select up to ${requiredSelectionCount} class${requiredSelectionCount === 1 ? "" : "es"} for this plan.`);
       return;
     }
     setSubmitting(true);

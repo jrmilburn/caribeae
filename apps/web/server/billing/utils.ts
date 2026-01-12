@@ -42,7 +42,7 @@ export async function adjustInvoicePayment(
 const invoice = await tx.invoice.findUnique({
   where: { id: invoiceId },
   include: {
-    enrolment: { include: { plan: true, template: true } },
+    enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
     lineItems: { select: { id: true, kind: true, quantity: true } },
     _count: { select: { lineItems: true } },
   },

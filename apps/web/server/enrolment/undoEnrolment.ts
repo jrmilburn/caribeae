@@ -18,6 +18,7 @@ export async function undoEnrolment(enrolmentId: string) {
       include: {
         student: { select: { id: true } },
         template: { select: { id: true } },
+        classAssignments: { select: { templateId: true } },
         invoices: {
           include: {
             allocations: { include: { payment: true } },
@@ -81,7 +82,7 @@ export async function undoEnrolment(enrolmentId: string) {
         creditsRemaining: null,
         creditsBalanceCached: null,
       },
-      include: { student: true, template: true, plan: true },
+      include: { student: true, template: true, plan: true, classAssignments: true },
     });
 
     await getEnrolmentBillingStatus(enrolmentId, { client: tx });
@@ -90,7 +91,11 @@ export async function undoEnrolment(enrolmentId: string) {
   });
 
   revalidatePath(`/admin/student/${result.enrolment.studentId}`);
-  revalidatePath(`/admin/class/${result.enrolment.templateId}`);
+  const templatesToRevalidate = new Set<string>([
+    result.enrolment.templateId,
+    ...result.enrolment.classAssignments.map((assignment) => assignment.templateId),
+  ]);
+  templatesToRevalidate.forEach((templateId) => revalidatePath(`/admin/class/${templateId}`));
   revalidatePath("/admin/enrolment");
 
   return result;

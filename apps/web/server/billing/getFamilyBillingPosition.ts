@@ -94,9 +94,17 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
           id: true,
           name: true,
           enrolments: {
+            where: { isBillingPrimary: true },
             include: {
               plan: true,
               template: { select: { name: true } },
+              classAssignments: {
+                include: {
+                  template: {
+                    select: { name: true, dayOfWeek: true, startTime: true, endTime: true },
+                  },
+                },
+              },
             },
           },
         },
@@ -190,6 +198,14 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         thresholdCredits,
       });
 
+      const assignments = enrolment.classAssignments?.length
+        ? enrolment.classAssignments
+            .map((assignment) => assignment.template)
+            .filter(Boolean)
+        : enrolment.template
+          ? [enrolment.template]
+          : [];
+
       return {
         id: enrolment.id,
         studentId: student.id,
@@ -206,6 +222,12 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         startDate: asDate(enrolment.startDate),
         endDate: asDate(enrolment.endDate),
         templateName: enrolment.template?.name ?? null,
+        assignedClasses: assignments.map((template) => ({
+          name: template?.name ?? null,
+          dayOfWeek: template?.dayOfWeek ?? null,
+          startTime: template?.startTime ?? null,
+          endTime: template?.endTime ?? null,
+        })),
         status: enrolment.status,
         entitlementStatus: status as EntitlementStatus,
         latestCoverageEnd,

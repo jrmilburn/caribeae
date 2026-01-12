@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { cn } from "@/lib/utils";
+import { dayLabel } from "../../class/[id]/utils/time";
 
 type Props = {
   billing: FamilyBillingPosition;
@@ -14,6 +15,20 @@ type Props = {
 function formatDate(value?: Date | null) {
   if (!value) return "—";
   return format(value, "d MMM yyyy");
+}
+
+function formatTimeRange(start?: number | null, end?: number | null) {
+  if (typeof start !== "number") return "";
+  const startDate = minutesToDate(start);
+  const endDate = typeof end === "number" ? minutesToDate(end) : null;
+  return `${format(startDate, "h:mm a")}${endDate ? ` – ${format(endDate, "h:mm a")}` : ""}`;
+}
+
+function minutesToDate(minutes: number) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setMinutes(minutes);
+  return d;
 }
 
 function statusVariant(status: FamilyBillingPosition["students"][number]["enrolments"][number]["entitlementStatus"]) {
@@ -117,7 +132,19 @@ export function FamilyBillingPositionCard({ billing }: Props) {
                           <Badge variant="secondary" className="text-[11px]">
                             {enrolment.billingType ?? "Unbilled"}
                           </Badge>
-                          {enrolment.templateName ? (
+                          {enrolment.assignedClasses?.length ? (
+                            <Badge variant="outline" className="text-[11px]">
+                              {enrolment.assignedClasses
+                                .map((assignment: { name: string | null; dayOfWeek: number | null; startTime: number | null; endTime: number | null }) => {
+                                  const day =
+                                    typeof assignment.dayOfWeek === "number" ? dayLabel(assignment.dayOfWeek) : "—";
+                                  const time = formatTimeRange(assignment.startTime, assignment.endTime);
+                                  const label = assignment.name ?? "Class";
+                                  return time ? `${label} · ${day} ${time}` : `${label} · ${day}`;
+                                })
+                                .join(", ")}
+                            </Badge>
+                          ) : enrolment.templateName ? (
                             <Badge variant="outline" className="text-[11px]">
                               {enrolment.templateName}
                             </Badge>

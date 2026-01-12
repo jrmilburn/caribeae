@@ -23,6 +23,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
         include: {
           student: true,
           plan: true,
+          classAssignments: { include: { template: true } },
         },
       },
     },

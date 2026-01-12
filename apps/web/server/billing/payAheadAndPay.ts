@@ -74,6 +74,9 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       const enrolment = enrolments.find((e) => e.id === item.enrolmentId);
       if (!enrolment) throw new Error("Enrolment not found.");
       if (!enrolment.plan) throw new Error("Enrolment plan missing.");
+      if (!enrolment.isBillingPrimary) {
+        throw new Error("Secondary enrolments cannot be billed directly.");
+      }
       if (!enrolment.template) throw new Error("Class template missing for enrolment.");
       assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
       if (enrolment.status !== EnrolmentStatus.ACTIVE) {
