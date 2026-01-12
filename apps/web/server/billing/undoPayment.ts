@@ -12,10 +12,21 @@ import { normalizeDate } from "@/server/invoicing/dateUtils";
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
   include: {
-    enrolment: { include: { plan: true; template: true } };
+    enrolment: {
+      include: {
+        plan: true;
+        template: true;
+        classAssignments: {
+          include: {
+            template: true; // optional, keep only if resolveCreditsPurchased needs it
+          };
+        };
+      };
+    };
     lineItems: { select: { id: true; kind: true; quantity: true } };
   };
 }>;
+
 
 function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
@@ -79,7 +90,16 @@ async function recomputeInvoicePaymentState(
       entitlementsAppliedAt: status === InvoiceStatus.PAID ? invoice.entitlementsAppliedAt : null,
     },
     include: {
-      enrolment: { include: { plan: true, template: true } },
+      enrolment: {
+        include: {
+          plan: true,
+          template: true,
+          classAssignments: {
+            include: { template: true }, // or just `true`
+          },
+        },
+      },
+
       lineItems: { select: { id: true, kind: true, quantity: true } },
     },
   });

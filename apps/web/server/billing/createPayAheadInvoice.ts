@@ -1,6 +1,6 @@
 "use server";
 
-import { addDays, isAfter } from "date-fns";
+import { addDays } from "date-fns";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 import { z } from "zod";
 
