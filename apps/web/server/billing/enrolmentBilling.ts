@@ -345,7 +345,13 @@ async function computeCreditPaidThroughInternal(
 
   const balance = await updateCachedCreditBalance(tx, enrolment.id, today);
 
-  const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
+  const explicitPaidThrough = asDate(enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed);
+  const explicitPaidThroughNormalized = explicitPaidThrough ? normalizeDate(explicitPaidThrough) : null;
+  const baseStart = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
+  const startWindow =
+    explicitPaidThroughNormalized && isAfter(explicitPaidThroughNormalized, baseStart)
+      ? addDaysUtc(explicitPaidThroughNormalized, 1)
+      : baseStart;
   const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
   const cadence = sessionsPerWeek(enrolment.plan);
   const assignedTemplates = resolveAssignedTemplates(enrolment);
@@ -401,11 +407,19 @@ async function computeCreditPaidThroughInternal(
     cancellations: cancellations.map((c) => c.date),
   });
 
+  const paidThroughDate =
+    explicitPaidThroughNormalized &&
+    (!calculation.paidThroughDate || isAfter(explicitPaidThroughNormalized, calculation.paidThroughDate))
+      ? explicitPaidThroughNormalized
+      : calculation.paidThroughDate;
+
+  const nextPaymentDueDate = calculation.nextDueDate;
+
   return {
     enrolmentId: enrolment.id,
     billingType: enrolment.plan?.billingType ?? null,
-    paidThroughDate: calculation.paidThroughDate,
-    nextPaymentDueDate: calculation.nextDueDate,
+    paidThroughDate,
+    nextPaymentDueDate,
     remainingCredits: calculation.remainingCredits,
     coveredOccurrences: calculation.coveredOccurrences,
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
