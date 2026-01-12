@@ -18,7 +18,10 @@ export async function deleteHoliday(id: string) {
 
   await prisma.holiday.delete({ where: { id } });
 
-  await recomputeHolidayEnrolments([{ startDate: existing.startDate, endDate: existing.endDate }]);
+  await recomputeHolidayEnrolments(
+    [{ startDate: existing.startDate, endDate: existing.endDate }],
+    "HOLIDAY_REMOVED"
+  );
 
   revalidatePath("/admin/holidays");
   revalidatePath("/admin/settings/holidays");

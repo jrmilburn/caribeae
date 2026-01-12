@@ -9,7 +9,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getSelectionRequirement, normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
 import { validateSelection } from "@/server/enrolment/validateSelection";
-import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
+import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 
@@ -212,7 +212,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
 
     if (!updated) throw new Error("Enrolment not found after update.");
 
-    await recomputeEnrolmentComputedFields(updated.id, { client: tx });
+    await recomputeEnrolmentCoverage(updated.id, "CLASS_CHANGED", { client: tx });
 
     return {
       enrolments: [updated],

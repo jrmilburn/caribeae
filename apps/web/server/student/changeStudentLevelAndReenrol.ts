@@ -23,6 +23,7 @@ import { validateSelection } from "@/server/enrolment/validateSelection";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
+import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 
@@ -340,7 +341,11 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
     });
 
     await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
-    await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+    if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
+      await recomputeEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { client: tx });
+    } else {
+      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+    }
 
     const enrolments: EnrolmentWithRelations[] = [enrolment];
 

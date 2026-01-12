@@ -343,6 +343,15 @@ enum EnrolmentAdjustmentType {
   CANCELLATION_CREDIT
 }
 
+enum EnrolmentCoverageReason {
+  HOLIDAY_ADDED
+  HOLIDAY_REMOVED
+  HOLIDAY_UPDATED
+  CLASS_CHANGED
+  PLAN_CHANGED
+  INVOICE_APPLIED
+}
+
 model Enrolment {
   id String @id @default(cuid())
 
@@ -373,6 +382,7 @@ model Enrolment {
   adjustments  EnrolmentAdjustment[]
   classAssignments EnrolmentClassAssignment[]
   creditEvents EnrolmentCreditEvent[]
+  coverageAudits EnrolmentCoverageAudit[]
 
   invoices Invoice[]
 
@@ -385,6 +395,24 @@ model Enrolment {
   @@index([templateId, startDate])
   @@index([templateId, endDate])
   @@index([billingGroupId])
+}
+
+model EnrolmentCoverageAudit {
+  id String @id @default(cuid())
+
+  enrolmentId String
+  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  reason EnrolmentCoverageReason
+  previousPaidThroughDate DateTime?
+  nextPaidThroughDate DateTime?
+  actorId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([enrolmentId])
+  @@index([reason])
+  @@index([createdAt])
 }
 
 model EnrolmentClassAssignment {

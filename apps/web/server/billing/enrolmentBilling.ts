@@ -16,16 +16,30 @@
  * - Compute and cache paidThroughDateComputed + nextDueDateComputed + creditsBalanceCached for reuse across the app via
  *   getEnrolmentBillingStatus, ensuring all surfaces share the same selector.
  */
+/**
+ * Holiday & coverage entry points:
+ * - server/holiday/createHoliday|updateHoliday|deleteHoliday -> recomputeHolidayEnrolments -> recomputeEnrolmentCoverage
+ * - server/enrolment/changeEnrolment (schedule modal) -> recomputeEnrolmentCoverage
+ * - server/invoicing/coverage.ts + applyPaidInvoiceToEnrolment.ts (weekly coverage windows)
+ * - server/billing/recomputeEnrolmentCoverage (authoritative paidThrough recompute)
+ *
+ * Coverage meaning of paidThroughDate:
+ * - The Brisbane calendar day of the last entitled session under the enrolment's current class assignments,
+ *   after skipping holidays. paidThroughDateComputed stores the raw coverage boundary (no holiday skipping).
+ *
+ * Authoritative functions:
+ * - computeCoverageEndDay (server/billing/coverageEngine)
+ * - recomputeEnrolmentCoverage (server/billing/recomputeEnrolmentCoverage)
+ * - resolveWeeklyCoverageWindow (server/invoicing/coverage)
+ */
 
 import { addDays, isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
-import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { resolveOccurrenceHorizon } from "./occurrenceWalker";
 import { calculatePaidThroughDate, listScheduledOccurrences } from "./paidThroughDate";
-import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
-import { computeWeeklyHolidayExtensionWeeks } from "@/server/billing/weeklyHolidayExtensions";
 
 import {
   BillingType,
@@ -220,8 +234,8 @@ async function ensureConsumptionEvents(
     cancelledByTemplate.set(cancellation.templateId, set);
   }
 
-  const holidayStart = normalizeToScheduleMidnight(enrolment.startDate);
-  const holidayEnd = normalizeToScheduleMidnight(windowEnd);
+  const holidayStart = brisbaneStartOfDay(enrolment.startDate);
+  const holidayEnd = brisbaneStartOfDay(windowEnd);
   const holidays = await tx.holiday.findMany({
     where: {
       startDate: { lte: holidayEnd },
@@ -295,11 +309,11 @@ export function getWeeklyPaidThrough(
   enrolment: Pick<Prisma.EnrolmentGetPayload<true>, "paidThroughDate" | "paidThroughDateComputed" | "startDate" | "endDate">
 ) {
   const explicit = asDate(enrolment.paidThroughDate) ?? asDate(enrolment.paidThroughDateComputed);
-  if (explicit) return normalizeDate(explicit);
+  if (explicit) return brisbaneStartOfDay(explicit);
   const start = asDate(enrolment.startDate);
   if (!start) return null;
-  if (enrolment.endDate && isAfter(normalizeDate(start), normalizeDate(enrolment.endDate))) return null;
-  return normalizeDate(start);
+  if (enrolment.endDate && isAfter(brisbaneStartOfDay(start), brisbaneStartOfDay(enrolment.endDate))) return null;
+  return brisbaneStartOfDay(start);
 }
 
 function resolveNextWeeklyDueDate(enrolment: EnrolmentWithPlanTemplate, paidThrough: Date | null) {
@@ -318,56 +332,6 @@ function resolveNextWeeklyDueDateLocal(enrolment: EnrolmentWithPlanTemplate, pai
   if (!next) return null;
   if (enrolment.endDate && isAfter(next, normalizeToLocalMidnight(enrolment.endDate))) return null;
   return next;
-}
-
-async function applyHolidayAdjustmentsForWeeklyPlan(
-  tx: Prisma.TransactionClient,
-  enrolment: EnrolmentWithPlanTemplate,
-  snapshot: EnrolmentBillingSnapshot
-): Promise<EnrolmentBillingSnapshot> {
-  if (!enrolment.template || enrolment.plan?.billingType !== BillingType.PER_WEEK) return snapshot;
-  if (!snapshot.paidThroughDate) return snapshot;
-  const assignedTemplates = resolveAssignedTemplates(enrolment);
-  if (!assignedTemplates.length) return snapshot;
-
-  const baseStart = normalizeToScheduleMidnight(enrolment.startDate);
-  const baseEnd = normalizeToScheduleMidnight(snapshot.paidThroughDate);
-  if (baseEnd < baseStart) return snapshot;
-
-  const holidays = await tx.holiday.findMany({
-    where: {
-      startDate: { lte: baseEnd },
-      endDate: { gte: baseStart },
-    },
-    select: { startDate: true, endDate: true },
-  });
-
-  if (!holidays.length) return snapshot;
-
-  const holidayCount = assignedTemplates.reduce((sum, template) => {
-    if (template.dayOfWeek == null) return sum;
-    return (
-      sum +
-      countHolidayOccurrences({
-        startDate: baseStart,
-        endDate: baseEnd,
-        templateDayOfWeek: template.dayOfWeek,
-        holidays,
-      })
-    );
-  }, 0);
-
-  if (!holidayCount) return snapshot;
-
-  const extensionWeeks = computeWeeklyHolidayExtensionWeeks(holidayCount, sessionsPerWeek(enrolment.plan));
-  const paidThrough = addDays(baseEnd, extensionWeeks * 7);
-  const nextDue = resolveNextWeeklyDueDateLocal(enrolment, paidThrough);
-
-  return {
-    ...snapshot,
-    paidThroughDate: paidThrough,
-    nextPaymentDueDate: nextDue,
-  };
 }
 
 async function computeCreditPaidThroughInternal(
@@ -415,8 +379,8 @@ async function computeCreditPaidThroughInternal(
     select: { templateId: true, date: true },
   });
 
-  const holidayStart = normalizeToScheduleMidnight(startWindow);
-  const holidayEnd = normalizeToScheduleMidnight(horizon);
+  const holidayStart = brisbaneStartOfDay(startWindow);
+  const holidayEnd = brisbaneStartOfDay(horizon);
   const holidays = await tx.holiday.findMany({
     where: {
       startDate: { lte: holidayEnd },
@@ -512,10 +476,7 @@ export async function recomputeEnrolmentComputedFields(
       throw new Error("Enrolment not found");
     }
 
-    let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
-    if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-      snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
-    }
+    const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
     await persistSnapshot(tx, snapshot);
     return snapshot;
   });
@@ -543,10 +504,7 @@ export async function getBillingStatusForEnrolments(
 
     const map = new Map<string, EnrolmentBillingSnapshot>();
     for (const enrolment of enrolments) {
-      let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
-      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
-      }
+      const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
       await persistSnapshot(tx, snapshot);
       map.set(enrolment.id, snapshot);
     }
@@ -677,10 +635,7 @@ export async function getFamilyEnrolmentBillingStatus(
     const map = new Map<string, EnrolmentBillingSnapshot>();
     const asOf = normalizeDate(new Date());
     for (const enrolment of enrolments) {
-      let snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
-      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
-      }
+      const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
       await persistSnapshot(tx, snapshot);
       map.set(enrolment.id, snapshot);
     }
@@ -702,10 +657,7 @@ export async function refreshBillingForOpenEnrolments(options?: { client?: Prism
     });
 
     for (const enrolment of enrolments) {
-      let snapshot = await computeBillingSnapshot(tx, enrolment, today);
-      if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-        snapshot = await applyHolidayAdjustmentsForWeeklyPlan(tx, enrolment, snapshot);
-      }
+      const snapshot = await computeBillingSnapshot(tx, enrolment, today);
       await persistSnapshot(tx, snapshot);
     }
   });

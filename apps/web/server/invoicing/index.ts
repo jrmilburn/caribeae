@@ -8,16 +8,11 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import {
   getEnrolmentBillingStatus,
-  getWeeklyPaidThrough,
   refreshBillingForOpenEnrolments,
 } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
-import {
-  enrolmentWithPlanInclude,
-  resolveCoverageForPlan,
-  resolveWeeklyCoverageWindow,
-} from "@/server/invoicing/coverage";
+import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoicing/coverage";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
@@ -83,9 +78,11 @@ export async function createInitialInvoiceForEnrolment(
     });
     if (existingOpen) return { invoice: existingOpen, created: false };
 
+    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
     const { coverageStart, coverageEnd, creditsPurchased } = resolveCoverageForPlan({
       enrolment,
       plan: enrolment.plan,
+      holidays,
       today: enrolment.startDate,
     });
 
@@ -194,17 +191,14 @@ export async function issueNextInvoiceForEnrolment(
     if (openInvoice) return { invoice: openInvoice, created: false };
 
     const billingSnapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx });
+    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
 
     const today = new Date();
     if (enrolment.plan.billingType === BillingType.PER_WEEK) {
-      const paidThrough = billingSnapshot.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
-      const { coverageStart, coverageEnd } = resolveWeeklyCoverageWindow({
-        enrolment: {
-          startDate: enrolment.startDate,
-          endDate: enrolment.endDate,
-          paidThroughDate: paidThrough,
-        },
-        plan: { durationWeeks: enrolment.plan.durationWeeks ?? null },
+      const { coverageStart, coverageEnd } = resolveCoverageForPlan({
+        enrolment,
+        plan: enrolment.plan,
+        holidays,
         today,
       });
 
@@ -279,8 +273,6 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
           OR: [
             { paidThroughDate: null },
             { paidThroughDate: { lt: today } },
-            { paidThroughDateComputed: null },
-            { paidThroughDateComputed: { lt: today } },
           ],
         },
         {
@@ -323,7 +315,7 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     if (!openingState) return true;
     if (enrolment.invoices.length > 0) return true;
     if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-      const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate;
+      const paidThrough = enrolment.paidThroughDate;
       const paidThroughStart = paidThrough ? startOfDay(paidThrough) : null;
       return !paidThroughStart || isAfter(startOfDay(today), paidThroughStart);
     }

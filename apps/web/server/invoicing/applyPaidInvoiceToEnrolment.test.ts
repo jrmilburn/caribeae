@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { BillingType } from "@prisma/client";
 
 import { hasAppliedEntitlements, resolveBlockCoverageWindow } from "./applyPaidInvoiceToEnrolment";
-import { resolveCoverageForPlan, resolveWeeklyCoverageWindow, resolveWeeklyPayAheadSequence } from "./coverage";
+import { resolveCoverageForPlan, resolveWeeklyPayAheadSequence } from "./coverage";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -25,6 +25,10 @@ function test(name: string, fn: () => void) {
 }
 
 const plan = { durationWeeks: null, blockLength: 8 };
+
+const noHolidays: { startDate: Date; endDate: Date }[] = [];
+
+const mondayTemplate = [{ dayOfWeek: 0 }];
 
 test("Scenario A: first block payment extends 8 weeks from start", () => {
   const { coverageEnd } = resolveBlockCoverageWindow({
@@ -73,6 +77,7 @@ test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends covera
     name: "8 classes over 8 weeks",
     priceCents: 1000,
     levelId: "lvl",
+    sessionsPerWeek: 1,
   };
   const enrolment = {
     id: "enrol",
@@ -81,11 +86,14 @@ test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends covera
     paidThroughDate: null,
     student: { familyId: "fam" },
     plan,
+    template: { dayOfWeek: 0, name: "Monday" },
+    classAssignments: [],
   };
 
   const coverage = resolveCoverageForPlan({
     enrolment,
     plan,
+    holidays: noHolidays,
     today: start,
   });
 
@@ -122,14 +130,17 @@ test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", ()
     endDate: null,
     paidThroughDate: null as Date | null,
   };
-  const plan = { durationWeeks: 1 };
+  const plan = { durationWeeks: 1, sessionsPerWeek: 1 };
 
   const sequence = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,
     endDate: enrolment.endDate,
     paidThroughDate: enrolment.paidThroughDate,
     durationWeeks: plan.durationWeeks,
+    sessionsPerWeek: plan.sessionsPerWeek,
     quantity: 2,
+    assignedTemplates: mondayTemplate,
+    holidays: noHolidays,
     today: d("2026-06-01"),
   });
 
@@ -140,14 +151,17 @@ test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", ()
 
 test("Scenario F: long weekly duration respects quantity and clamps to end date", () => {
   const start = d("2026-07-05");
-  const plan = { durationWeeks: 26 };
+  const plan = { durationWeeks: 26, sessionsPerWeek: 1 };
 
   const first = resolveWeeklyPayAheadSequence({
     startDate: start,
     endDate: null,
     paidThroughDate: null,
     durationWeeks: plan.durationWeeks,
+    sessionsPerWeek: plan.sessionsPerWeek,
     quantity: 1,
+    assignedTemplates: [{ dayOfWeek: 6 }],
+    holidays: noHolidays,
     today: start,
   });
 
@@ -160,11 +174,46 @@ test("Scenario F: long weekly duration respects quantity and clamps to end date"
     endDate: first.coverageEnd,
     paidThroughDate: first.coverageEnd,
     durationWeeks: plan.durationWeeks,
+    sessionsPerWeek: plan.sessionsPerWeek,
     quantity: 1,
+    assignedTemplates: [{ dayOfWeek: 6 }],
+    holidays: noHolidays,
     today: first.coverageEnd ?? start,
   });
 
   assert.strictEqual(second.periods, 0);
   assert.strictEqual(second.coverageStart, null);
   assert.strictEqual(second.coverageEnd, null);
+});
+
+test("Scenario G: weekly coverage skips holidays after paid-through", () => {
+  const enrolment = {
+    startDate: d("2026-01-12"),
+    endDate: null,
+    paidThroughDate: d("2026-02-09"),
+    template: { dayOfWeek: 0, name: "Monday" },
+    classAssignments: [],
+    student: { familyId: "fam" },
+  };
+  const plan = {
+    billingType: BillingType.PER_WEEK as const,
+    enrolmentType: "CLASS" as const,
+    durationWeeks: 4,
+    blockLength: 1,
+    blockClassCount: null,
+    name: "Weekly",
+    priceCents: 1000,
+    levelId: "lvl",
+    sessionsPerWeek: 1,
+  };
+
+  const coverage = resolveCoverageForPlan({
+    enrolment,
+    plan,
+    holidays: [{ startDate: d("2026-03-02"), endDate: d("2026-03-02") }],
+    today: d("2026-02-10"),
+  });
+
+  assert.strictEqual(coverage.coverageStart?.toISOString().slice(0, 10), "2026-02-16");
+  assert.strictEqual(coverage.coverageEnd?.toISOString().slice(0, 10), "2026-03-16");
 });

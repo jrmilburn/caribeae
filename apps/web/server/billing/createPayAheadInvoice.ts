@@ -10,7 +10,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems } from "./invoiceMutations";
 import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
-import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import { normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const inputSchema = z.object({
@@ -33,6 +33,7 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
       plan: true,
       student: { select: { familyId: true } },
       template: { select: { dayOfWeek: true, name: true } },
+      classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
     },
   });
 
@@ -52,16 +53,25 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
 
   const billing = await getEnrolmentBillingStatus(enrolment.id, { client: prisma });
 
-  const today = normalizeDate(new Date(), "today");
+  const today = new Date();
   const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
   const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
+  const holidays = await prisma.holiday.findMany({ select: { startDate: true, endDate: true } });
+  const assignedTemplates = enrolment.classAssignments.length
+    ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+    : enrolment.template
+      ? [enrolment.template]
+      : [];
 
   const payAhead = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,
     endDate: enrolmentEnd,
     paidThroughDate: paidThrough,
     durationWeeks: enrolment.plan.durationWeeks,
+    sessionsPerWeek: enrolment.plan.sessionsPerWeek ?? null,
     quantity: periods,
+    assignedTemplates,
+    holidays,
     today,
   });
 
