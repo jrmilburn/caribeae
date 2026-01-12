@@ -314,9 +314,12 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     const openingState = enrolment.student.family?.accountOpeningState;
     if (!openingState) return true;
     if (enrolment.invoices.length > 0) return true;
+    const paidThrough = enrolment.paidThroughDate;
+    const paidThroughStart = paidThrough ? startOfDay(paidThrough) : null;
+    if (paidThroughStart && !isAfter(startOfDay(today), paidThroughStart)) {
+      return false;
+    }
     if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-      const paidThrough = enrolment.paidThroughDate;
-      const paidThroughStart = paidThrough ? startOfDay(paidThrough) : null;
       return !paidThroughStart || isAfter(startOfDay(today), paidThroughStart);
     }
     if (enrolment.plan?.billingType === BillingType.PER_CLASS) {
