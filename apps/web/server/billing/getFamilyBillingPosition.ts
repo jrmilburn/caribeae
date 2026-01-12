@@ -200,7 +200,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
 
       const assignments = enrolment.classAssignments?.length
         ? enrolment.classAssignments
-            .map((assignment) => assignment.template)
+            .map((assignment : any) => assignment.template)
             .filter(Boolean)
         : enrolment.template
           ? [enrolment.template]
@@ -222,7 +222,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         startDate: asDate(enrolment.startDate),
         endDate: asDate(enrolment.endDate),
         templateName: enrolment.template?.name ?? null,
-        assignedClasses: assignments.map((template) => ({
+        assignedClasses: assignments.map((template : any) => ({
           name: template?.name ?? null,
           dayOfWeek: template?.dayOfWeek ?? null,
           startTime: template?.startTime ?? null,
