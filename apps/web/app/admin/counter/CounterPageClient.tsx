@@ -34,7 +34,7 @@ import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/bil
 import { createPayment } from "@/server/billing/createPayment";
 import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
 import { undoPayment } from "@/server/billing/undoPayment";
-import { CounterPayAheadCard } from "./CounterPayAheadCard";
+import { PayAheadCard } from "@/components/admin/PayAheadCard";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
 type AllocationMap = Record<string, string>;
@@ -521,7 +521,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
         isUndoing={isUndoing}
         undoingPaymentId={undoingPaymentId}
         payAheadContent={
-          <CounterPayAheadCard
+          <PayAheadCard
             summary={summary}
             onRefresh={(familyId) => refreshSummary(familyId)}
           />
