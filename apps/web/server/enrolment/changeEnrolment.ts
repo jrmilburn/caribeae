@@ -45,12 +45,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       },
     });
 
-    if (!enrolment) {
-      throw new Error("Enrolment not found.");
-    }
-    if (!enrolment.plan) {
-      throw new Error("Enrolment plan missing.");
-    }
+    if (!enrolment) throw new Error("Enrolment not found.");
+    if (!enrolment.plan) throw new Error("Enrolment plan missing.");
 
     const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
     if (!effectiveLevelId) {
@@ -77,7 +73,10 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
     if (missingLevelTemplate) {
       throw new Error("Selected classes must have a level set before enrolling.");
     }
-    const mismatchedTemplate = templates.find((template) => template.levelId && template.levelId !== effectiveLevelId);
+
+    const mismatchedTemplate = templates.find(
+      (template) => template.levelId && template.levelId !== effectiveLevelId
+    );
     if (mismatchedTemplate) {
       throw new Error("Selected classes must match the student's level.");
     }
@@ -89,6 +88,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       templateIds: payload.templateIds,
       templates,
     });
+
     if (!selectionValidation.ok) {
       throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
     }
@@ -101,14 +101,23 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
     }
 
-    const enrolmentEnd = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
+    // -----------------------------
+    // Dates / windows (NO redeclares)
+    // -----------------------------
     const baseStart = payload.startDate ?? startOfDay(enrolment.startDate);
+
+    // This is a LIMIT/CAP used when validating windows, not necessarily the final planned end date.
+    const currentEndLimit = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
+
     const windows = templates.map((template) => {
       const templateStart = startOfDay(template.startDate);
       const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
+
+      // enrolment can't start before template starts
       const startDate = baseStart < templateStart ? templateStart : baseStart;
 
-      let endDate = enrolmentEnd;
+      // end date can't exceed either existing enrolment end (if any) or template end (if any)
+      let endDate = currentEndLimit;
       if (templateEnd && (!endDate || isAfter(endDate, templateEnd))) {
         endDate = templateEnd;
       }
@@ -121,7 +130,12 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         });
       }
 
-      return { templateId: template.id, templateName: template.name ?? "class", startDate, endDate };
+      return {
+        templateId: template.id,
+        templateName: template.name ?? "class",
+        startDate,
+        endDate,
+      };
     });
 
     const existing = await tx.enrolment.findMany({
@@ -142,12 +156,12 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       ignoreEnrolmentIds: new Set([enrolment.id]),
     });
 
-    const existingAssignments = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
+    const existingAssignments = new Set(enrolment.classAssignments.map((a) => a.templateId));
     const nextAssignments = new Set(payload.templateIds);
 
     const toAdd = payload.templateIds.filter((id) => !existingAssignments.has(id));
     const toRemove = enrolment.classAssignments
-      .map((assignment) => assignment.templateId)
+      .map((a) => a.templateId)
       .filter((id) => !nextAssignments.has(id));
 
     if (toAdd.length) {
@@ -163,26 +177,31 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       });
     }
 
-    const anchorTemplate = templates.sort((a, b) => {
-      const dayA = a.dayOfWeek ?? 7;
-      const dayB = b.dayOfWeek ?? 7;
-      if (dayA !== dayB) return dayA - dayB;
-      return a.id.localeCompare(b.id);
-    })[0];
+    const anchorTemplate = templates
+      .slice()
+      .sort((a, b) => {
+        const dayA = a.dayOfWeek ?? 7;
+        const dayB = b.dayOfWeek ?? 7;
+        if (dayA !== dayB) return dayA - dayB;
+        return a.id.localeCompare(b.id);
+      })[0];
 
-    const baseStart = payload.startDate ?? startOfDay(enrolment.startDate);
-    const templateEndDates = windows.map((window) => window.endDate).filter(Boolean) as Date[];
-    const earliestEnd = templateEndDates.length
-      ? templateEndDates.reduce((acc, end) => (acc && acc < end ? acc : end))
-      : null;
-    const enrolmentEnd = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
+    // Compute the earliest template end date (if any) to cap the planned end date.
+    const templateEndDates = windows.map((w) => w.endDate).filter(Boolean) as Date[];
+    const earliestEnd =
+      templateEndDates.length > 0
+        ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
+        : null;
+
+    // This is the FINAL planned end date according to plan rules + any caps.
+    const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
 
     await tx.enrolment.update({
       where: { id: enrolment.id },
       data: {
         templateId: anchorTemplate?.id ?? enrolment.templateId,
         startDate: baseStart,
-        endDate: enrolmentEnd,
+        endDate: plannedEndDate,
       },
     });
 
@@ -199,7 +218,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       enrolments: [updated],
       templateIds: Array.from(new Set([...toAdd, ...toRemove])),
       studentId: enrolment.studentId,
-      originalTemplates: enrolment.classAssignments.map((assignment) => assignment.templateId),
+      originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
     };
   });
 
