@@ -2,7 +2,6 @@ import { addWeeks, isAfter, max as maxDate } from "date-fns";
 import {
   BillingType,
   EnrolmentCreditEventType,
-  EnrolmentType,
   InvoiceLineItemKind,
   InvoiceStatus,
   type Prisma,
@@ -65,12 +64,10 @@ function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
 export function resolveBlockCoverageWindow(params: {
   enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
   plan: { durationWeeks: number | null; blockLength: number };
-  today?: Date;
 }) {
-  const today = normalizeDate(params.today ?? new Date());
   const durationWeeks = params.plan.durationWeeks ?? params.plan.blockLength;
   const baseline = maxDate([
-    today,
+    normalizeDate(params.enrolment.startDate),
     normalizeDate(params.enrolment.paidThroughDate ?? params.enrolment.startDate),
   ]);
   let coverageEnd = addWeeks(baseline, durationWeeks);
@@ -181,20 +178,6 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
           occurredOn: paidAt,
           invoiceId: invoice.id,
         });
-      }
-
-      if (plan.enrolmentType === EnrolmentType.BLOCK) {
-        const { coverageEnd } = resolveBlockCoverageWindow({
-          enrolment: {
-            startDate: enrolment.startDate,
-            endDate: enrolment.endDate,
-            paidThroughDate: asDate(enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed),
-          },
-          plan: { durationWeeks: plan.durationWeeks ?? null, blockLength: plan.blockLength },
-          today: paidAt,
-        });
-        updates.paidThroughDate = coverageEnd;
-        updates.paidThroughDateComputed = coverageEnd;
       }
     }
 

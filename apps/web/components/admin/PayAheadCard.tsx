@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as React from "react";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { Loader2, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { payAheadAndPay } from "@/server/billing/payAheadAndPay";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
+import { calculatePaidThroughDate } from "@/server/billing/paidThroughDate";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -98,7 +99,46 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: Holi
 
   if (enrolment.billingType === "PER_CLASS") {
     const creditsAdded = blockSize(enrolment) * quantity;
-    return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + creditsAdded };
+    const creditsCurrent = enrolment.creditsRemaining ?? 0;
+    const creditsTotal = creditsCurrent + creditsAdded;
+    const anchorTemplate = enrolment.assignedClasses?.[0] ?? null;
+    if (anchorTemplate?.dayOfWeek == null) {
+      return { creditsRemaining: creditsTotal };
+    }
+
+    const startDate = paidThrough ? addDays(paidThrough, 1) : asDate(enrolment.startDate) ?? today;
+    const endDate = asDate(enrolment.endDate);
+    const normalizedHolidays = normalizeHolidays(holidays);
+
+    const currentCoverage = calculatePaidThroughDate({
+      startDate,
+      endDate,
+      creditsToCover: creditsCurrent,
+      classTemplate: {
+        dayOfWeek: anchorTemplate.dayOfWeek,
+        startTime: anchorTemplate.startTime ?? null,
+      },
+      holidays: normalizedHolidays,
+      cancellations: [],
+    });
+
+    const projection = calculatePaidThroughDate({
+      startDate,
+      endDate,
+      creditsToCover: creditsTotal,
+      classTemplate: {
+        dayOfWeek: anchorTemplate.dayOfWeek,
+        startTime: anchorTemplate.startTime ?? null,
+      },
+      holidays: normalizedHolidays,
+      cancellations: [],
+    });
+
+    return {
+      creditsRemaining: creditsTotal,
+      coverageStart: currentCoverage.nextDueDate ?? startDate,
+      nextPaidThrough: projection.paidThroughDate,
+    };
   }
 
   return {};
@@ -230,10 +270,12 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                 const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
                 const currentLabel = isWeekly
                   ? `Paid to ${formatDate(currentPaidThrough)}`
-                  : `${enrolment.creditsRemaining ?? 0} credits`;
+                  : `Paid to ${formatDate(currentPaidThrough)}`;
                 const projectedLabel = isWeekly
                   ? `→ ${projection.nextPaidThrough ? formatDate(projection.nextPaidThrough) : "—"}`
-                  : `→ ${(projection.creditsRemaining ?? enrolment.creditsRemaining ?? 0).toString()} credits`;
+                  : projection.coverageStart && projection.nextPaidThrough
+                    ? `Coverage ${formatDate(projection.coverageStart)} → ${formatDate(projection.nextPaidThrough)}`
+                    : `→ ${formatDate(projection.nextPaidThrough)}`;
 
                 return (
                   <div
