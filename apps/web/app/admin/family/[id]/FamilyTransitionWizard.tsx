@@ -37,7 +37,7 @@ type StudentDraft = {
   studentId: string;
   selected: boolean;
   planId: string;
-  classTemplateId: string;
+  classTemplateIds: string[];
   startDate: string;
   paidThroughDate: string;
   credits: number;
@@ -74,7 +74,6 @@ export function FamilyTransitionWizard({
   );
 
   const defaultPlanId = sortedPlans[0]?.id ?? "";
-  const defaultTemplateId = sortedTemplates[0]?.id ?? "";
   const defaultDate = todayString();
 
   const [step, setStep] = React.useState(0);
@@ -90,7 +89,7 @@ export function FamilyTransitionWizard({
       studentId: student.id,
       selected: true,
       planId: defaultPlanId,
-      classTemplateId: defaultTemplateId,
+      classTemplateIds: [],
       startDate: defaultDate,
       paidThroughDate: defaultDate,
       credits: 0,
@@ -134,11 +133,10 @@ export function FamilyTransitionWizard({
         return {
           ...student,
           planId,
-          classTemplateId: student.classTemplateId || defaultTemplateId,
         };
       })
     );
-  }, [defaultPlanId, defaultTemplateId, plansByLevel, studentById]);
+  }, [defaultPlanId, plansByLevel, studentById]);
 
   const updateStudent = (studentId: string, updates: Partial<StudentDraft>) => {
     setStudents((prev) =>
@@ -155,11 +153,16 @@ export function FamilyTransitionWizard({
     if (step === 0) return selectedStudents.length > 0;
     if (step === 1) {
       return selectedStudents.every((student) => {
-        if (!student.planId || !student.classTemplateId || !student.startDate) return false;
+        if (!student.planId || !student.startDate) return false;
         const plan = planById.get(student.planId);
         if (!plan) return false;
         if (!student.paidThroughDate) return false;
-        return plan.billingType === "PER_CLASS" ? Number.isFinite(student.credits) : true;
+        if (plan.billingType === "PER_CLASS") {
+          const requiredCount = Math.max(1, plan.sessionsPerWeek ?? 1);
+          if (student.classTemplateIds.length !== requiredCount) return false;
+          return Number.isFinite(student.credits);
+        }
+        return true;
       });
     }
     return true;
@@ -191,7 +194,7 @@ export function FamilyTransitionWizard({
         students: selectedStudents.map((student) => ({
           studentId: student.studentId,
           planId: student.planId,
-          classTemplateId: student.classTemplateId,
+          templateIds: student.classTemplateIds,
           startDate: new Date(student.startDate),
           paidThroughDate: new Date(student.paidThroughDate) || new Date(student.startDate),
           credits: student.credits,
@@ -213,13 +216,17 @@ export function FamilyTransitionWizard({
     : null;
   const schedulePlan = scheduleDraft ? planById.get(scheduleDraft.planId) ?? null : null;
   const scheduleBlocked = !scheduleStudent?.levelId;
-  const scheduleSelectedIds = scheduleDraft?.classTemplateId ? [scheduleDraft.classTemplateId] : [];
+  const scheduleSelectedIds = scheduleDraft?.classTemplateIds ?? [];
+  const scheduleAllowsMultiple = schedulePlan
+    ? schedulePlan.billingType === "PER_CLASS" && Math.max(1, schedulePlan.sessionsPerWeek ?? 1) > 1
+    : false;
 
   const onScheduleClassClick = (
     occurrence: NormalizedScheduleClass,
     context?: ScheduleClassClickContext
   ) => {
     if (!scheduleDraft || !scheduleStudentId) return;
+    if (!schedulePlan || schedulePlan.billingType !== "PER_CLASS") return;
     const studentLevelId = scheduleStudent?.levelId ?? null;
     if (!studentLevelId) {
       toast.error("Set the student's level first.");
@@ -233,11 +240,36 @@ export function FamilyTransitionWizard({
       toast.error("Select classes that match the enrolment plan level.");
       return;
     }
+    const isSaturday = occurrence.dayOfWeek === 5;
+    if (schedulePlan.isSaturdayOnly && !isSaturday) {
+      toast.error("Saturday-only plans can only use Saturday classes.");
+      return;
+    }
+    if (!schedulePlan.isSaturdayOnly && isSaturday) {
+      toast.error("Saturday classes require a Saturday-only enrolment plan.");
+      return;
+    }
 
     const alignedOccurrence =
       context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
-    updateStudent(scheduleStudentId, { classTemplateId: alignedOccurrence.templateId });
-    setScheduleStudentId(null);
+
+    if (scheduleAllowsMultiple) {
+      const current = new Set(scheduleDraft.classTemplateIds);
+      if (current.has(alignedOccurrence.templateId)) {
+        current.delete(alignedOccurrence.templateId);
+      } else {
+        const maxCount = Math.max(1, schedulePlan.sessionsPerWeek ?? 1);
+        if (current.size >= maxCount) {
+          toast.error(`Select ${maxCount} classes for this plan.`);
+          return;
+        }
+        current.add(alignedOccurrence.templateId);
+      }
+      updateStudent(scheduleStudentId, { classTemplateIds: Array.from(current) });
+    } else {
+      updateStudent(scheduleStudentId, { classTemplateIds: [alignedOccurrence.templateId] });
+      setScheduleStudentId(null);
+    }
   };
 
   return (
@@ -332,12 +364,18 @@ export function FamilyTransitionWizard({
             ) : null}
             {selectedStudents.map((student) => {
               const plan = planById.get(student.planId);
-              const template = templateById.get(student.classTemplateId);
+              const templates = student.classTemplateIds
+                .map((templateId) => templateById.get(templateId))
+                .filter((template): template is ClassTemplateOption => Boolean(template));
               const billingType = plan?.billingType ?? null;
               const studentInfo = studentById.get(student.studentId);
               const studentLevelId = studentInfo?.levelId ?? null;
               const availablePlans = studentLevelId
                 ? plansByLevel.get(studentLevelId) ?? []
+                : [];
+              const planSessions = plan ? Math.max(1, plan.sessionsPerWeek ?? 1) : 1;
+              const levelClasses = studentLevelId
+                ? sortedTemplates.filter((templateOption) => templateOption.levelId === studentLevelId)
                 : [];
 
               return (
@@ -350,31 +388,64 @@ export function FamilyTransitionWizard({
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label>Class template</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="justify-start"
-                        onClick={() => setScheduleStudentId(student.studentId)}
-                      >
-                        {template
-                          ? `${template.name ?? template.level.name ?? "Class"} · ${
-                              typeof template.dayOfWeek === "number" ? dayOfWeekToName(template.dayOfWeek) : "Unscheduled"
-                            }`
-                          : "Select class on schedule"}
-                      </Button>
-                      {template ? (
-                        <p className="text-xs text-muted-foreground">
-                          Level: {template.level.name}
-                          {template.teacher?.name ? ` · ${template.teacher.name}` : ""}
+                    {billingType === "PER_CLASS" ? (
+                      <div className="space-y-1">
+                        <Label>Class template</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="justify-start"
+                          onClick={() => setScheduleStudentId(student.studentId)}
+                        >
+                          {templates.length > 0
+                            ? planSessions > 1
+                              ? `${templates.length} class${templates.length === 1 ? "" : "es"} selected`
+                              : `${templates[0]?.name ?? templates[0]?.level.name ?? "Class"} · ${
+                                  typeof templates[0]?.dayOfWeek === "number"
+                                    ? dayOfWeekToName(templates[0].dayOfWeek)
+                                    : "Unscheduled"
+                                }`
+                            : "Select class on schedule"}
+                        </Button>
+                        {templates.length > 0 ? (
+                          <div className="space-y-1">
+                            {templates.map((template) => (
+                              <p key={template.id} className="text-xs text-muted-foreground">
+                                {template.name ?? template.level.name ?? "Class"} ·{" "}
+                                {typeof template.dayOfWeek === "number"
+                                  ? dayOfWeekToName(template.dayOfWeek)
+                                  : "Unscheduled"}
+                                {template.teacher?.name ? ` · ${template.teacher.name}` : ""}
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Choose a class from the schedule view.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label>Weekly plan</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Weekly plan: student will be enrolled in all classes for their level.
                         </p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Choose a class from the schedule view.
-                        </p>
-                      )}
-                    </div>
+                        {levelClasses.length > 0 ? (
+                          <div className="space-y-1">
+                            {levelClasses.map((template) => (
+                              <p key={template.id} className="text-xs text-muted-foreground">
+                                {template.name ?? template.level.name ?? "Class"} ·{" "}
+                                {typeof template.dayOfWeek === "number"
+                                  ? dayOfWeekToName(template.dayOfWeek)
+                                  : "Unscheduled"}
+                                {template.teacher?.name ? ` · ${template.teacher.name}` : ""}
+                              </p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No active classes found for this level.</p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-1">
                       <Label>Enrolment plan</Label>
@@ -384,7 +455,8 @@ export function FamilyTransitionWizard({
                           const plan = planById.get(value);
                           updateStudent(student.studentId, {
                             planId: value,
-                            paidThroughDate: plan?.billingType === "PER_WEEK" ? student.startDate : "",
+                            classTemplateIds: [],
+                            paidThroughDate: student.startDate,
                             credits: plan?.billingType === "PER_CLASS" ? student.credits : 0,
                           });
                         }}
@@ -495,17 +567,51 @@ export function FamilyTransitionWizard({
               <div className="mt-2 space-y-2 text-sm">
                 {selectedStudents.map((student) => {
                   const plan = planById.get(student.planId);
-                  const template = templateById.get(student.classTemplateId);
-                  const dayLabel =
-                    typeof template?.dayOfWeek === "number" ? dayOfWeekToName(template.dayOfWeek) : "Unscheduled";
+                  const templates = student.classTemplateIds
+                    .map((templateId) => templateById.get(templateId))
+                    .filter((template): template is ClassTemplateOption => Boolean(template));
+                  const studentInfo = studentById.get(student.studentId);
+                  const levelTemplates = studentInfo?.levelId
+                    ? sortedTemplates.filter((template) => template.levelId === studentInfo.levelId)
+                    : [];
                   return (
                     <div key={student.studentId} className="flex flex-col gap-1">
                       <span className="font-medium">
                         {family.students.find((s) => s.id === student.studentId)?.name}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {template?.name ?? template?.level.name ?? "Class"} · {dayLabel}
-                      </span>
+                      {plan?.billingType === "PER_WEEK" ? (
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <div>Weekly plan · All classes for this level</div>
+                          {levelTemplates.length > 0 ? (
+                            levelTemplates.map((template) => (
+                              <div key={template.id}>
+                                {template.name ?? template.level.name ?? "Class"} ·{" "}
+                                {typeof template.dayOfWeek === "number"
+                                  ? dayOfWeekToName(template.dayOfWeek)
+                                  : "Unscheduled"}
+                              </div>
+                            ))
+                          ) : (
+                            <div>No active classes found.</div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          {templates.length > 0
+                            ? templates.map((template) => {
+                                const dayLabel =
+                                  typeof template.dayOfWeek === "number"
+                                    ? dayOfWeekToName(template.dayOfWeek)
+                                    : "Unscheduled";
+                                return (
+                                  <div key={template.id}>
+                                    {template.name ?? template.level.name ?? "Class"} · {dayLabel}
+                                  </div>
+                                );
+                              })
+                            : "No classes selected"}
+                        </div>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {plan?.name} · Start {student.startDate}
                         {student.paidThroughDate ? ` · Paid through ${student.paidThroughDate}` : ""}
@@ -566,7 +672,19 @@ export function FamilyTransitionWizard({
               <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
                 {scheduleStudent?.name ?? "Select class"}
               </div>
-              {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+              <div className="flex items-center gap-2">
+                {scheduleAllowsMultiple ? (
+                  <span>
+                    {scheduleSelectedIds.length} selected
+                  </span>
+                ) : null}
+                {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+                {scheduleAllowsMultiple ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setScheduleStudentId(null)}>
+                    Done
+                  </Button>
+                ) : null}
+              </div>
             </div>
             {scheduleBlocked ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
