@@ -80,7 +80,16 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
         },
       ],
     },
-    include: { student: true, plan: true, template: true, classAssignments: true },
+    include: {
+      student: true,
+      plan: true,
+      template: true,
+      classAssignments: {
+        include: {
+          template: true,
+        },
+      },
+    },
     orderBy: [{ student: { name: "asc" } }],
   });
 
