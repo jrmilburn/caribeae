@@ -29,7 +29,9 @@ export function resolveTransitionTemplates({
     throw new Error("Choose each class only once.");
   }
 
-  let templates = uniqueSelectedIds.map((id) => templatesById.get(id)).filter(Boolean);
+  let templates = uniqueSelectedIds
+    .map((id) => templatesById.get(id))
+    .filter((template): template is TemplateSummary => Boolean(template));
 
   if (templates.length !== uniqueSelectedIds.length) {
     throw new Error("Missing enrolment plan or class template.");
