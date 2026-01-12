@@ -49,6 +49,7 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
   ]);
 
   revalidatePath("/admin/holidays");
+  revalidatePath("/admin/settings/holidays");
   revalidatePath("/admin/schedule");
 
   return holiday;
