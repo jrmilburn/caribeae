@@ -10,7 +10,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceMutations";
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
-import { normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const payAheadItemSchema = z.object({
