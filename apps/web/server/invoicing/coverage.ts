@@ -27,7 +27,9 @@ export function resolveWeeklyCoverageWindow(params: {
   const today = normalizeDate(params.today ?? new Date(), "today");
   const enrolmentEnd = normalizeOptionalDate(params.enrolment.endDate);
 
-  const coverageStart = paidThrough ? maxDate([today, paidThrough]) : maxDate([today, startDate]);
+  const coverageStart = paidThrough
+    ? maxDate([paidThrough, startDate])
+    : maxDate([today, startDate]);
 
   if (enrolmentEnd && isAfter(coverageStart, enrolmentEnd)) {
     throw new Error("Enrolment end date has passed.");
