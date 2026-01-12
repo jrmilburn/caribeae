@@ -347,11 +347,7 @@ async function computeCreditPaidThroughInternal(
 
   const explicitPaidThrough = asDate(enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed);
   const explicitPaidThroughNormalized = explicitPaidThrough ? normalizeDate(explicitPaidThrough) : null;
-  const baseStart = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
-  const startWindow =
-    explicitPaidThroughNormalized && isAfter(explicitPaidThroughNormalized, baseStart)
-      ? addDaysUtc(explicitPaidThroughNormalized, 1)
-      : baseStart;
+  const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
   const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
   const cadence = sessionsPerWeek(enrolment.plan);
   const assignedTemplates = resolveAssignedTemplates(enrolment);

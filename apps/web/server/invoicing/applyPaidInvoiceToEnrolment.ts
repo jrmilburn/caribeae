@@ -1,4 +1,4 @@
-import { addWeeks, isAfter, max as maxDate } from "date-fns";
+import { isAfter } from "date-fns";
 import {
   BillingType,
   EnrolmentCreditEventType,
@@ -59,22 +59,6 @@ export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Enr
 function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
   const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
   return enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
-}
-
-export function resolveBlockCoverageWindow(params: {
-  enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
-  plan: { durationWeeks: number | null; blockLength: number };
-}) {
-  const durationWeeks = params.plan.durationWeeks ?? params.plan.blockLength;
-  const baseline = maxDate([
-    normalizeDate(params.enrolment.startDate),
-    normalizeDate(params.enrolment.paidThroughDate ?? params.enrolment.startDate),
-  ]);
-  let coverageEnd = addWeeks(baseline, durationWeeks);
-  if (params.enrolment.endDate && isAfter(coverageEnd, params.enrolment.endDate)) {
-    coverageEnd = normalizeDate(params.enrolment.endDate);
-  }
-  return { coverageStart: baseline, coverageEnd: normalizeDate(coverageEnd) };
 }
 
 export function hasAppliedEntitlements(invoice: { entitlementsAppliedAt: Date | null }) {
@@ -178,6 +162,12 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
           occurredOn: paidAt,
           invoiceId: invoice.id,
         });
+      }
+
+      if (invoice.coverageEnd) {
+        const coverageEnd = normalizeDate(invoice.coverageEnd);
+        updates.paidThroughDate = coverageEnd;
+        updates.paidThroughDateComputed = coverageEnd;
       }
     }
 
