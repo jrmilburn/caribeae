@@ -7,12 +7,13 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate } from "@/server/enrolment/planRules";
-import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { resolveAnchorTemplate, resolveTransitionTemplates } from "@/server/family/transitionFamilyUtils";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
   planId: z.string().min(1),
-  classTemplateId: z.string().min(1),
+  classTemplateId: z.string().min(1).optional(),
+  templateIds: z.array(z.string().min(1)).optional(),
   startDate: z.coerce.date(),
   paidThroughDate: z.coerce.date(),
   credits: z.number().int().optional().nullable(),
@@ -64,11 +65,22 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     }
 
     const planIds = payload.students.map((student) => student.planId);
-    const templateIds = payload.students.map((student) => student.classTemplateId);
+    const templateIds = payload.students.flatMap((student) =>
+      student.templateIds && student.templateIds.length
+        ? student.templateIds
+        : student.classTemplateId
+          ? [student.classTemplateId]
+          : []
+    );
+    const uniqueTemplateIds = Array.from(new Set(templateIds));
 
     const [plans, templates] = await Promise.all([
       tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
-      tx.classTemplate.findMany({ where: { id: { in: templateIds } } }),
+      uniqueTemplateIds.length
+        ? tx.classTemplate.findMany({
+            where: { id: { in: uniqueTemplateIds } },
+          })
+        : Promise.resolve([]),
     ]);
 
     const planMap = new Map(plans.map((plan) => [plan.id, plan]));
@@ -78,22 +90,49 @@ export async function transitionFamily(input: TransitionFamilyInput) {
 
     for (const selection of payload.students) {
       const plan = planMap.get(selection.planId);
-      const template = templateMap.get(selection.classTemplateId);
+      const selectedIds =
+        selection.templateIds && selection.templateIds.length
+          ? selection.templateIds
+          : selection.classTemplateId
+            ? [selection.classTemplateId]
+            : [];
 
-      if (!plan || !template) {
-        throw new Error("Missing enrolment plan or class template.");
+      if (!plan) {
+        throw new Error("Missing enrolment plan.");
       }
-
-      assertPlanMatchesTemplate(plan, template);
 
       const normalizedStart = normalizeStartDate(selection.startDate);
       const paidThrough = normalizeStartDate(selection.paidThroughDate);
+      const levelTemplates =
+        plan.billingType === BillingType.PER_WEEK && selectedIds.length === 0
+          ? await tx.classTemplate.findMany({
+              where: {
+                levelId: plan.levelId,
+                active: true,
+                startDate: { lte: normalizedStart },
+                OR: [{ endDate: null }, { endDate: { gte: normalizedStart } }],
+              },
+            })
+          : [];
+
+      const templatesForSelection = resolveTransitionTemplates({
+        plan,
+        selectedIds,
+        templatesById: templateMap,
+        levelTemplates,
+        startDate: normalizedStart,
+      });
+
+      const anchorTemplate = resolveAnchorTemplate(templatesForSelection);
+      if (!anchorTemplate) {
+        throw new Error("Select at least one class template.");
+      }
 
       const enrolment = await tx.enrolment.create({
         data: {
           studentId: selection.studentId,
           planId: plan.id,
-          templateId: template.id,
+          templateId: anchorTemplate.id,
           startDate: normalizedStart,
           status: EnrolmentStatus.ACTIVE,
           paidThroughDate: paidThrough,
@@ -105,8 +144,12 @@ export async function transitionFamily(input: TransitionFamilyInput) {
         data: { billingGroupId: enrolment.id },
       });
 
-      await tx.enrolmentClassAssignment.create({
-        data: { enrolmentId: enrolment.id, templateId: template.id },
+      await tx.enrolmentClassAssignment.createMany({
+        data: templatesForSelection.map((template) => ({
+          enrolmentId: enrolment.id,
+          templateId: template.id,
+        })),
+        skipDuplicates: true,
       });
 
       if (plan.billingType === BillingType.PER_CLASS) {
