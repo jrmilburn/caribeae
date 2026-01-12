@@ -7,20 +7,14 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { cn } from "@/lib/utils";
 import { dayLabel } from "../../class/[id]/utils/time";
-import { BRISBANE_TIME_ZONE } from "@/server/dates/brisbaneDay";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 type Props = {
   billing: FamilyBillingPosition;
 };
 
 function formatDate(value?: Date | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-AU", {
-    timeZone: BRISBANE_TIME_ZONE,
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(value);
+  return formatBrisbaneDate(value);
 }
 
 function formatTimeRange(start?: number | null, end?: number | null) {
