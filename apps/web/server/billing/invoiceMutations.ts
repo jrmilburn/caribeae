@@ -358,7 +358,12 @@ async function persistAllocations(
               enrolment: {
                 include: {
                   plan: true,
-                  template: true, // ✅ add this
+                  template: true,
+                  classAssignments: {
+                    include: {
+                      template: true, // keep/remove depending on what applyPaidInvoiceToEnrolment needs
+                    },
+                  },
                 },
               },
               lineItems: { select: { kind: true, quantity: true } },
