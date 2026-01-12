@@ -70,15 +70,17 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
     where: {
       status: { not: EnrolmentStatus.CANCELLED },
       startDate: { lte: date },
-      OR: [
-        { templateId },
+      OR: [{ endDate: null }, { endDate: { gte: date } }],
+      AND: [
         {
-          plan: { billingType: BillingType.PER_WEEK },
-          student: { levelId },
-        }, { endDate: null }, { endDate: { gte: date } }
+          OR: [
+            { templateId },
+            { classAssignments: { some: { templateId } } },
+          ],
+        },
       ],
     },
-    include: { student: true, plan: true, template: true },
+    include: { student: true, plan: true, template: true, classAssignments: true },
     orderBy: [{ student: { name: "asc" } }],
   });
 
@@ -86,8 +88,10 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
 
   for (const enrolment of candidates) {
     const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
+    const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
+    const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
+    if (!hasAssignment) continue;
     if (isWeekly && enrolment.student.levelId !== levelId) continue;
-    if (!isWeekly && enrolment.templateId !== templateId) continue;
 
     if (isWeekly) {
       const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate ?? null;

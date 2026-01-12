@@ -21,6 +21,31 @@ import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 
+type TemplateSummary = {
+  id: string;
+  levelId: string;
+  active: boolean | null;
+  startDate: Date;
+  endDate: Date | null;
+  name: string | null;
+  dayOfWeek: number | null;
+  startTime?: number | null;
+};
+
+function resolveAnchorTemplate(templates: TemplateSummary[]) {
+  if (!templates.length) return null;
+  const sorted = [...templates].sort((a, b) => {
+    const dayA = a.dayOfWeek ?? 7;
+    const dayB = b.dayOfWeek ?? 7;
+    if (dayA !== dayB) return dayA - dayB;
+    const timeA = a.startTime ?? 0;
+    const timeB = b.startTime ?? 0;
+    if (timeA !== timeB) return timeA - timeB;
+    return a.id.localeCompare(b.id);
+  });
+  return sorted[0] ?? null;
+}
+
 /**
  * Findings + Proposed Fix
  * - /admin/class and /admin/student enrolment dialogs both funnel through enrolStudentWithPlan, which
@@ -81,9 +106,10 @@ export async function createEnrolmentsFromSelection(
   }
 
   let templateIds = templateIdsInput;
+  const selectionRequirement = getSelectionRequirement(plan);
   if (plan.billingType === BillingType.PER_WEEK) {
-    if (templateIds.length > 1) {
-      throw new Error("Weekly plans only need one anchor class.");
+    if (templateIds.length > selectionRequirement.maxCount) {
+      throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this weekly plan.`);
     }
   } else if (!templateIds.length) {
     throw new Error("Select at least one class for this plan.");
@@ -101,6 +127,7 @@ export async function createEnrolmentsFromSelection(
             endDate: true,
             name: true,
             dayOfWeek: true,
+            startTime: true,
           },
         })
       : [];
@@ -121,6 +148,7 @@ export async function createEnrolmentsFromSelection(
         endDate: true,
         name: true,
         dayOfWeek: true,
+        startTime: true,
       },
       orderBy: [{ startDate: "asc" }, { id: "asc" }],
     });
@@ -172,10 +200,18 @@ export async function createEnrolmentsFromSelection(
     return { templateId: template.id, startDate: alignedStart, endDate };
   });
 
+  const anchorTemplate = resolveAnchorTemplate(templates);
+  if (!anchorTemplate) {
+    throw new Error("Select at least one class template.");
+  }
+
   const existing = await prisma.enrolment.findMany({
     where: {
       studentId: payload.studentId,
-      templateId: { in: templateIds },
+      OR: [
+        { templateId: { in: templateIds } },
+        { classAssignments: { some: { templateId: { in: templateIds } } } },
+      ],
       status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
     },
     select: {
@@ -197,28 +233,50 @@ export async function createEnrolmentsFromSelection(
 
   const status = payload.status ?? EnrolmentStatus.ACTIVE;
   const created = await prisma.$transaction(async (tx) => {
-    const enrolments = [];
-    for (const window of windows) {
-      const accounting = initialAccountingForPlan(normalizedPlan, window.startDate);
-      const enrolment = await tx.enrolment.create({
-        data: {
-          templateId: window.templateId,
-          studentId: payload.studentId,
-          startDate: window.startDate,
-          endDate: window.endDate,
-          status,
-          planId: plan.id,
-          paidThroughDate: accounting.paidThroughDate,
-          creditsRemaining: accounting.creditsRemaining,
-          creditsBalanceCached: accounting.creditsRemaining ?? null,
-          paidThroughDateComputed: accounting.paidThroughDate ?? null,
-        },
+    const earliestStart = windows.reduce(
+      (acc, window) => (acc && acc < window.startDate ? acc : window.startDate),
+      windows[0]?.startDate ?? startDate
+    );
+    const templateEndDates = windows.map((window) => window.endDate).filter(Boolean) as Date[];
+    const earliestEnd = templateEndDates.length
+      ? templateEndDates.reduce((acc, end) => (acc && acc < end ? acc : end))
+      : null;
+    const enrolmentEnd = resolvePlannedEndDate(plan, earliestStart, explicitEndDate, earliestEnd);
+    const accounting = initialAccountingForPlan(normalizedPlan, earliestStart);
+
+    const enrolment = await tx.enrolment.create({
+      data: {
+        templateId: anchorTemplate.id,
+        studentId: payload.studentId,
+        startDate: earliestStart,
+        endDate: enrolmentEnd,
+        status,
+        planId: plan.id,
+        paidThroughDate: accounting.paidThroughDate,
+        creditsRemaining: accounting.creditsRemaining,
+        creditsBalanceCached: accounting.creditsRemaining ?? null,
+        paidThroughDateComputed: accounting.paidThroughDate ?? null,
+      },
+    });
+
+    await tx.enrolment.update({
+      where: { id: enrolment.id },
+      data: { billingGroupId: enrolment.id },
+    });
+
+    if (templateIds.length) {
+      await tx.enrolmentClassAssignment.createMany({
+        data: templateIds.map((templateId) => ({
+          enrolmentId: enrolment.id,
+          templateId,
+        })),
+        skipDuplicates: true,
       });
-      await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
-      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
-      enrolments.push(enrolment);
     }
-    return enrolments;
+
+    await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
+    await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+    return [enrolment];
   });
 
   revalidatePath(`/admin/student/${payload.studentId}`);

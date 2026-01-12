@@ -14,8 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import {
+  getSelectionRequirement,
   initialAccountingForPlan,
-  normalizePlan,
   normalizeStartDate,
   resolvePlannedEndDate,
 } from "@/server/enrolment/planRules";
@@ -194,18 +194,15 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
     if (templateIds.length < 1) {
       throw new Error("Select at least one class template.");
     }
-    if (plan.billingType === BillingType.PER_WEEK && templateIds.length !== 1) {
-      throw new Error("Weekly plans support one anchor class for level changes.");
-    }
 
     assertPlanMatchesTemplates(plan, templates);
 
-    const normalizedPlan = normalizePlan(plan);
-    if (plan.billingType !== BillingType.PER_WEEK) {
-      const requiredCount = Math.max(1, normalizedPlan.sessionsPerWeek);
-      if (templateIds.length !== requiredCount) {
-        throw new Error(`Select ${requiredCount} classes for this plan.`);
-      }
+    const selectionRequirement = getSelectionRequirement(plan);
+    if (selectionRequirement.requiredCount > 0 && templateIds.length !== selectionRequirement.requiredCount) {
+      throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
+    }
+    if (selectionRequirement.requiredCount === 0 && templateIds.length > selectionRequirement.maxCount) {
+      throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
     }
 
     const existingEnrolments = await tx.enrolment.findMany({
@@ -288,36 +285,64 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
       data: { levelId: input.toLevelId },
     });
 
-    const enrolments: EnrolmentWithRelations[] = [];
-    for (const template of templates) {
+    const windows = templates.map((template) => {
       const templateStart = startOfDay(template.startDate);
       const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
       const startDate = isBefore(effectiveDate, templateStart) ? templateStart : effectiveDate;
       if (templateEnd && isAfter(startDate, templateEnd)) {
         throw new Error(`Start date is after the class ends for ${template.name ?? "class"}.`);
       }
+      return { templateId: template.id, startDate, endDate: templateEnd };
+    });
 
-      const endDate = resolvePlannedEndDate(plan, startDate, null, templateEnd);
-      const accounting = initialAccountingForPlan(plan, startDate);
-      const enrolment = await tx.enrolment.create({
-        data: {
-          templateId: template.id,
-          studentId: input.studentId,
-          startDate,
-          endDate,
-          status: EnrolmentStatus.ACTIVE,
-          planId: plan.id,
-          paidThroughDate: accounting.paidThroughDate,
-          creditsRemaining: accounting.creditsRemaining,
-          creditsBalanceCached: accounting.creditsRemaining ?? null,
-          paidThroughDateComputed: accounting.paidThroughDate ?? null,
-        },
-        include: { plan: true, template: true },
-      });
-      await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
-      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
-      enrolments.push(enrolment);
-    }
+    const anchorTemplate = templates.sort((a, b) => {
+      const dayA = a.dayOfWeek ?? 7;
+      const dayB = b.dayOfWeek ?? 7;
+      if (dayA !== dayB) return dayA - dayB;
+      return a.id.localeCompare(b.id);
+    })[0];
+
+    const earliestStart = windows.reduce(
+      (acc, window) => (acc && acc < window.startDate ? acc : window.startDate),
+      windows[0]?.startDate ?? effectiveDate
+    );
+    const templateEndDates = windows.map((window) => window.endDate).filter(Boolean) as Date[];
+    const earliestEnd = templateEndDates.length
+      ? templateEndDates.reduce((acc, end) => (acc && acc < end ? acc : end))
+      : null;
+    const endDate = resolvePlannedEndDate(plan, earliestStart, null, earliestEnd);
+    const accounting = initialAccountingForPlan(plan, earliestStart);
+
+    const enrolment = await tx.enrolment.create({
+      data: {
+        templateId: anchorTemplate?.id ?? templates[0]?.id ?? "",
+        studentId: input.studentId,
+        startDate: earliestStart,
+        endDate,
+        status: EnrolmentStatus.ACTIVE,
+        planId: plan.id,
+        paidThroughDate: accounting.paidThroughDate,
+        creditsRemaining: accounting.creditsRemaining,
+        creditsBalanceCached: accounting.creditsRemaining ?? null,
+        paidThroughDateComputed: accounting.paidThroughDate ?? null,
+      },
+      include: { plan: true, template: true },
+    });
+
+    await tx.enrolment.update({
+      where: { id: enrolment.id },
+      data: { billingGroupId: enrolment.id },
+    });
+
+    await tx.enrolmentClassAssignment.createMany({
+      data: templateIds.map((templateId) => ({ enrolmentId: enrolment.id, templateId })),
+      skipDuplicates: true,
+    });
+
+    await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
+    await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+
+    const enrolments: EnrolmentWithRelations[] = [enrolment];
 
     const newInvoices = enrolments.length
       ? await tx.invoice.findMany({

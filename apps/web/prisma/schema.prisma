@@ -129,6 +129,7 @@ model ClassTemplate {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   enrolments           Enrolment[]
+  enrolmentAssignments EnrolmentClassAssignment[]
   teacherSubstitutions TeacherSubstitution[]
   attendances          Attendance[]
   cancellations        ClassCancellation[]
@@ -351,6 +352,10 @@ model Enrolment {
   templateId String
   template   ClassTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
+  billingGroupId   String?
+  isBillingPrimary Boolean @default(true)
+  billingPrimaryId String?
+
   startDate   DateTime
   endDate     DateTime?
   status      EnrolmentStatus @default(ACTIVE)
@@ -366,6 +371,7 @@ model Enrolment {
   creditsBalanceCached    Int?
 
   adjustments  EnrolmentAdjustment[]
+  classAssignments EnrolmentClassAssignment[]
   creditEvents EnrolmentCreditEvent[]
 
   invoices Invoice[]
@@ -378,6 +384,22 @@ model Enrolment {
   @@index([templateId])
   @@index([templateId, startDate])
   @@index([templateId, endDate])
+  @@index([billingGroupId])
+}
+
+model EnrolmentClassAssignment {
+  id String @id @default(cuid())
+
+  enrolmentId String
+  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  templateId String
+  template   ClassTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([enrolmentId, templateId])
+  @@index([templateId])
 }
 
 enum EnrolmentType {

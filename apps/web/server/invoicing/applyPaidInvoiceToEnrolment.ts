@@ -16,12 +16,19 @@ import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
+import { computeWeeklyHolidayExtensionWeeks } from "@/server/billing/weeklyHolidayExtensions";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
 type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
   include: {
-    enrolment: { include: { plan: true, template: { select: { dayOfWeek: true, name: true } } } };
+    enrolment: {
+      include: {
+        plan: true;
+        template: { select: { dayOfWeek: true, name: true } };
+        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } };
+      };
+    };
     lineItems: { select: { kind: true; quantity: true } };
   };
 }>;
@@ -108,7 +115,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       (await tx.invoice.findUnique({
         where: { id: invoiceId },
         include: {
-          enrolment: { include: { plan: true, template: true } },
+          enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
           lineItems: { select: { kind: true, quantity: true } },
         },
       }));
@@ -138,7 +145,12 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         throw new Error("Weekly invoices must include a coverage end date.");
       }
       let adjustedCoverageEnd = coverageEnd;
-      if (coverageStart && enrolment.template?.dayOfWeek != null) {
+      const assignedTemplates = enrolment.classAssignments.length
+        ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+        : enrolment.template
+          ? [enrolment.template]
+          : [];
+      if (coverageStart && assignedTemplates.length) {
         const baseStart = normalizeToScheduleMidnight(coverageStart);
         const baseEnd = normalizeToScheduleMidnight(coverageEnd);
         const holidays = await tx.holiday.findMany({
@@ -149,14 +161,24 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
           select: { startDate: true, endDate: true },
         });
         if (holidays.length) {
-          const holidayCount = countHolidayOccurrences({
-            startDate: baseStart,
-            endDate: baseEnd,
-            templateDayOfWeek: enrolment.template.dayOfWeek,
-            holidays,
-          });
+          const holidayCount = assignedTemplates.reduce((sum, template) => {
+            if (template?.dayOfWeek == null) return sum;
+            return (
+              sum +
+              countHolidayOccurrences({
+                startDate: baseStart,
+                endDate: baseEnd,
+                templateDayOfWeek: template.dayOfWeek,
+                holidays,
+              })
+            );
+          }, 0);
           if (holidayCount > 0) {
-            adjustedCoverageEnd = normalizeDate(addWeeks(baseEnd, holidayCount));
+            const extensionWeeks = computeWeeklyHolidayExtensionWeeks(
+              holidayCount,
+              plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1
+            );
+            adjustedCoverageEnd = normalizeDate(addWeeks(baseEnd, extensionWeeks));
           }
         }
       }

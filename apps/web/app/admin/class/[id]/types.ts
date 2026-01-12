@@ -10,6 +10,11 @@ export type ClientTemplateWithInclusions =
         include: {
           student: true;
           plan: true;
+          classAssignments: {
+            include: {
+              template: true;
+            };
+          };
         };
       };
     };
@@ -28,7 +33,9 @@ export type AttendanceChangeDTO = {
 };
 
 export type ClassOccurrenceRoster = {
-  enrolments: Prisma.EnrolmentGetPayload<{ include: { student: true; plan: true } }>[];
+  enrolments: Prisma.EnrolmentGetPayload<{
+    include: { student: true; plan: true; classAssignments: { include: { template: true } } };
+  }>[];
   attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
 };
 

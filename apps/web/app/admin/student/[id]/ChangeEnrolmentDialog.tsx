@@ -103,7 +103,7 @@ export function ChangeEnrolmentDialog({
 
   const selectionSatisfied =
     selectionRequirement.requiredCount === 0
-      ? selectedTemplateIds.length <= 1
+      ? selectedTemplateIds.length > 0 && selectedTemplateIds.length <= selectionRequirement.maxCount
       : selectedTemplateIds.length === selectionRequirement.requiredCount;
 
   const canSubmit = selectionSatisfied && Boolean(startDate) && !saving;
@@ -148,11 +148,12 @@ export function ChangeEnrolmentDialog({
         return next;
       }
 
-      if (planIsWeekly && Object.keys(prev).length >= 1) {
-        return { [occurrence.templateId]: occurrence };
+      if (planIsWeekly && Object.keys(prev).length >= selectionRequirement.maxCount) {
+        toast.error(selectionRequirement.helper);
+        return prev;
       }
 
-      if (Object.keys(prev).length >= selectionRequirement.requiredCount) {
+      if (Object.keys(prev).length >= selectionRequirement.maxCount) {
         toast.error(selectionRequirement.helper);
         return prev;
       }
@@ -256,7 +257,7 @@ export function ChangeEnrolmentDialog({
               <div className="font-medium">Selected classes</div>
               <div className="text-muted-foreground">
                 {selectionRequirement.requiredCount === 0
-                  ? `${selectedTemplateIds.length} selected (optional)`
+                  ? `${selectedTemplateIds.length}/${selectionRequirement.maxCount} selected (optional)`
                   : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
                 • {startDate ? `Start date ${startDate}` : "Select a start date"}
               </div>

@@ -8,6 +8,12 @@ export async function deleteTemplate(id : string) {
 
     await getOrCreateUser();
 
+    const deletedAssignments = await prisma.enrolmentClassAssignment.deleteMany({
+        where: {
+            templateId: id
+        }
+    })
+
     const deletedEnrolments = await prisma.enrolment.deleteMany({
         where: {
             templateId: id
@@ -20,7 +26,7 @@ export async function deleteTemplate(id : string) {
         },
     })
 
-    if(!deletedTemplate || !deletedEnrolments) {
+    if(!deletedTemplate || !deletedEnrolments || !deletedAssignments) {
         return { success: false }
     }
 

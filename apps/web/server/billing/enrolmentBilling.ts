@@ -25,6 +25,7 @@ import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
 import { resolveOccurrenceHorizon } from "./occurrenceWalker";
 import { calculatePaidThroughDate, listScheduledOccurrences } from "./paidThroughDate";
 import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
+import { computeWeeklyHolidayExtensionWeeks } from "@/server/billing/weeklyHolidayExtensions";
 
 import {
   BillingType,
@@ -43,6 +44,11 @@ type EnrolmentWithPlanTemplate = Prisma.EnrolmentGetPayload<{
   include: {
     plan: true;
     template: true;
+    classAssignments: {
+      include: {
+        template: true;
+      };
+    };
   };
 }>;
 
@@ -91,6 +97,15 @@ function sessionsPerWeek(plan: EnrolmentPlan | null | undefined) {
   if (!plan) return 1;
   const count = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
   return count;
+}
+
+function resolveAssignedTemplates(enrolment: EnrolmentWithPlanTemplate) {
+  if (enrolment.classAssignments.length) {
+    return enrolment.classAssignments
+      .map((assignment) => assignment.template)
+      .filter((template): template is NonNullable<typeof template> => Boolean(template));
+  }
+  return enrolment.template ? [enrolment.template] : [];
 }
 
 function nextOccurrenceOnOrAfter(start: Date, templateDayOfWeek: number | null | undefined) {
@@ -179,6 +194,9 @@ async function ensureConsumptionEvents(
   if (!enrolment.plan || !enrolment.template) return;
   if (enrolment.plan.billingType !== BillingType.PER_CLASS) return;
 
+  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  if (!assignedTemplates.length) return;
+
   const windowEnd = enrolment.endDate && isAfter(normalizeDate(enrolment.endDate), normalizeDate(throughDate))
     ? normalizeDate(throughDate)
     : enrolment.endDate
@@ -187,14 +205,20 @@ async function ensureConsumptionEvents(
 
   if (isAfter(normalizeDate(enrolment.startDate), windowEnd)) return;
 
+  const templateIds = assignedTemplates.map((template) => template.id);
   const cancellations = await tx.classCancellation.findMany({
     where: {
-      templateId: enrolment.templateId,
+      templateId: { in: templateIds },
       date: { gte: normalizeDate(enrolment.startDate), lte: windowEnd },
     },
-    select: { date: true },
+    select: { date: true, templateId: true },
   });
-  const cancelledSet = new Set(cancellations.map((c) => dateKey(c.date)));
+  const cancelledByTemplate = new Map<string, Set<string>>();
+  for (const cancellation of cancellations) {
+    const set = cancelledByTemplate.get(cancellation.templateId) ?? new Set<string>();
+    set.add(dateKey(cancellation.date));
+    cancelledByTemplate.set(cancellation.templateId, set);
+  }
 
   const holidayStart = normalizeToScheduleMidnight(enrolment.startDate);
   const holidayEnd = normalizeToScheduleMidnight(windowEnd);
@@ -214,23 +238,42 @@ async function ensureConsumptionEvents(
     },
     select: { occurredOn: true },
   });
-  const existingSet = new Set(existing.map((e) => dateKey(e.occurredOn)));
-
-  const chargeable = listScheduledOccurrences({
-    startDate: enrolment.startDate,
-    endDate: windowEnd,
-    classTemplate: {
-      dayOfWeek: enrolment.template.dayOfWeek ?? null,
-      startTime: enrolment.template.startTime ?? null,
-    },
-    holidays,
-    cancellations: cancellations.map((c) => c.date),
+  const existingCounts = new Map<string, number>();
+  existing.forEach((entry) => {
+    const key = dateKey(entry.occurredOn);
+    existingCounts.set(key, (existingCounts.get(key) ?? 0) + 1);
   });
 
-  const toCreate = chargeable.filter((occurrence) => {
-    const key = dateKey(occurrence);
-    return !cancelledSet.has(key) && !existingSet.has(key);
-  });
+  const occurrenceCounts = new Map<string, number>();
+  for (const template of assignedTemplates) {
+    const cancelledSet = cancelledByTemplate.get(template.id) ?? new Set<string>();
+    const scheduled = listScheduledOccurrences({
+      startDate: enrolment.startDate,
+      endDate: windowEnd,
+      classTemplate: {
+        dayOfWeek: template.dayOfWeek ?? null,
+        startTime: template.startTime ?? null,
+      },
+      holidays,
+      cancellations: cancellations.filter((c) => c.templateId === template.id).map((c) => c.date),
+    });
+    for (const occurrence of scheduled) {
+      const key = dateKey(occurrence);
+      if (cancelledSet.has(key)) continue;
+      occurrenceCounts.set(key, (occurrenceCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const toCreate: Date[] = [];
+  for (const [key, count] of occurrenceCounts.entries()) {
+    const existingCount = existingCounts.get(key) ?? 0;
+    const missing = count - existingCount;
+    if (missing <= 0) continue;
+    const occurrenceDate = new Date(key);
+    for (let i = 0; i < missing; i += 1) {
+      toCreate.push(occurrenceDate);
+    }
+  }
 
   if (toCreate.length === 0) return;
 
@@ -284,7 +327,8 @@ async function applyHolidayAdjustmentsForWeeklyPlan(
 ): Promise<EnrolmentBillingSnapshot> {
   if (!enrolment.template || enrolment.plan?.billingType !== BillingType.PER_WEEK) return snapshot;
   if (!snapshot.paidThroughDate) return snapshot;
-  if (enrolment.template.dayOfWeek == null) return snapshot;
+  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  if (!assignedTemplates.length) return snapshot;
 
   const baseStart = normalizeToScheduleMidnight(enrolment.startDate);
   const baseEnd = normalizeToScheduleMidnight(snapshot.paidThroughDate);
@@ -300,16 +344,23 @@ async function applyHolidayAdjustmentsForWeeklyPlan(
 
   if (!holidays.length) return snapshot;
 
-  const holidayCount = countHolidayOccurrences({
-    startDate: baseStart,
-    endDate: baseEnd,
-    templateDayOfWeek: enrolment.template.dayOfWeek,
-    holidays,
-  });
+  const holidayCount = assignedTemplates.reduce((sum, template) => {
+    if (template.dayOfWeek == null) return sum;
+    return (
+      sum +
+      countHolidayOccurrences({
+        startDate: baseStart,
+        endDate: baseEnd,
+        templateDayOfWeek: template.dayOfWeek,
+        holidays,
+      })
+    );
+  }, 0);
 
   if (!holidayCount) return snapshot;
 
-  const paidThrough = addDays(baseEnd, holidayCount * 7);
+  const extensionWeeks = computeWeeklyHolidayExtensionWeeks(holidayCount, sessionsPerWeek(enrolment.plan));
+  const paidThrough = addDays(baseEnd, extensionWeeks * 7);
   const nextDue = resolveNextWeeklyDueDateLocal(enrolment, paidThrough);
 
   return {
@@ -333,6 +384,19 @@ async function computeCreditPaidThroughInternal(
   const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
   const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
   const cadence = sessionsPerWeek(enrolment.plan);
+  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  const anchorTemplate = assignedTemplates[0] ?? enrolment.template;
+  if (!anchorTemplate) {
+    return {
+      enrolmentId: enrolment.id,
+      billingType: enrolment.plan?.billingType ?? null,
+      paidThroughDate: null,
+      nextPaymentDueDate: null,
+      remainingCredits: balance,
+      coveredOccurrences: 0,
+      sessionsPerWeek: sessionsPerWeek(enrolment.plan),
+    };
+  }
   const occurrencesNeeded = Math.max(balance + cadence, 1);
   const horizon = resolveOccurrenceHorizon({
     startDate: startWindow,
@@ -342,7 +406,7 @@ async function computeCreditPaidThroughInternal(
   });
   const cancellations = await tx.classCancellation.findMany({
     where: {
-      templateId: enrolment.templateId,
+      templateId: anchorTemplate.id,
       date: {
         gte: startWindow,
         lte: horizon,
@@ -366,8 +430,8 @@ async function computeCreditPaidThroughInternal(
     endDate: horizon,
     creditsToCover: balance,
     classTemplate: {
-      dayOfWeek: enrolment.template.dayOfWeek ?? null,
-      startTime: enrolment.template.startTime ?? null,
+      dayOfWeek: anchorTemplate.dayOfWeek ?? null,
+      startTime: anchorTemplate.startTime ?? null,
     },
     holidays,
     cancellations: cancellations.map((c) => c.date),
@@ -442,7 +506,7 @@ export async function recomputeEnrolmentComputedFields(
   return withTx(options?.client, async (tx) => {
     const enrolment = await tx.enrolment.findUnique({
       where: { id: enrolmentId },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
     if (!enrolment) {
       throw new Error("Enrolment not found");
@@ -474,7 +538,7 @@ export async function getBillingStatusForEnrolments(
   return withTx(options?.client, async (tx) => {
     const enrolments = await tx.enrolment.findMany({
       where: { id: { in: enrolmentIds } },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
     const map = new Map<string, EnrolmentBillingSnapshot>();
@@ -559,15 +623,22 @@ export async function registerCreditConsumptionForDate(
   return withTx(options?.client, async (tx) => {
     const enrolment = await tx.enrolment.findFirst({
       where: {
-        templateId,
         studentId,
         status: EnrolmentStatus.ACTIVE,
         startDate: { lte: when },
         OR: [{ endDate: null }, { endDate: { gte: when } }],
+        AND: [
+          {
+            OR: [
+              { templateId },
+              { classAssignments: { some: { templateId } } },
+            ],
+          },
+        ],
       },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
-  if (!enrolment?.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) {
+    if (!enrolment?.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) {
       return;
     }
 
@@ -601,7 +672,7 @@ export async function getFamilyEnrolmentBillingStatus(
   return withTx(options?.client, async (tx) => {
     const enrolments = await tx.enrolment.findMany({
       where: { student: { familyId } },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
     const map = new Map<string, EnrolmentBillingSnapshot>();
     const asOf = normalizeDate(new Date());
@@ -627,7 +698,7 @@ export async function refreshBillingForOpenEnrolments(options?: { client?: Prism
         startDate: { lte: today },
         OR: [{ endDate: null }, { endDate: { gte: today } }],
       },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
     for (const enrolment of enrolments) {

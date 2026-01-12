@@ -130,13 +130,13 @@ export function AddEnrolmentDialog({
     () =>
       selectedPlan
         ? getSelectionRequirement(selectedPlan)
-        : { requiredCount: 1, helper: "Select a plan to see class requirements." },
+        : { requiredCount: 1, maxCount: 1, helper: "Select a plan to see class requirements." },
     [selectedPlan]
   );
 
   const selectionSatisfied =
     selectionRequirement.requiredCount === 0
-      ? selectedTemplateIds.length <= 1
+      ? selectedTemplateIds.length <= selectionRequirement.maxCount
       : selectedTemplateIds.length === selectionRequirement.requiredCount;
 
   const canSubmit = !!planId && !saving && Boolean(startDate) && selectionSatisfied;
@@ -189,15 +189,15 @@ export function AddEnrolmentDialog({
         return next;
       }
 
-      if (planIsWeekly && Object.keys(prev).length >= 1) {
+      if (planIsWeekly && Object.keys(prev).length >= selectionRequirement.maxCount) {
         if (!startDateTouched) {
           setStartDate(occurrenceDateKey);
         }
-        return { [occurrence.templateId]: alignedOccurrence };
+        return prev;
       }
 
       const count = Object.keys(prev).length;
-      const maxSelectable = Math.max(selectionRequirement.requiredCount, 6);
+      const maxSelectable = selectionRequirement.maxCount;
       if (count >= maxSelectable) {
         toast.error(`You can select up to ${maxSelectable} classes at once. Deselect one to add another.`);
         return prev;
@@ -350,7 +350,7 @@ export function AddEnrolmentDialog({
               <div className="font-medium">{selectionRequirement.helper}</div>
               <div className="text-muted-foreground">
                 {selectionRequirement.requiredCount === 0
-                  ? `${selectedTemplateIds.length} selected (optional)`
+                  ? `${selectedTemplateIds.length}/${selectionRequirement.maxCount} selected (optional)`
                   : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
                 •{" "}
                 {startDate ? `Start date ${startDate}` : "Start date will follow the first class"}

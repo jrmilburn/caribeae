@@ -18,7 +18,8 @@ export async function getClassTemplate(id : string) {
             enrolments: {
                 include: {
                     student: true,
-                    plan: true
+                    plan: true,
+                    classAssignments: { include: { template: true } }
                 }
             },
             level: true,

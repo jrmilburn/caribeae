@@ -100,6 +100,15 @@ export async function transitionFamily(input: TransitionFamilyInput) {
         },
       });
 
+      await tx.enrolment.update({
+        where: { id: enrolment.id },
+        data: { billingGroupId: enrolment.id },
+      });
+
+      await tx.enrolmentClassAssignment.create({
+        data: { enrolmentId: enrolment.id, templateId: template.id },
+      });
+
       if (plan.billingType === BillingType.PER_CLASS) {
         const credits = selection.credits ?? 0;
         if (credits < 0) {

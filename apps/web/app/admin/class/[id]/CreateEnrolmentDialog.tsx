@@ -84,7 +84,7 @@ export function CreateEnrolmentDialog({
     () =>
       selectedPlan
         ? getSelectionRequirement(selectedPlan)
-        : { requiredCount: 1, helper: "Select a plan to continue." },
+        : { requiredCount: 1, maxCount: 1, helper: "Select a plan to continue." },
     [selectedPlan]
   );
   React.useEffect(() => {
@@ -92,7 +92,7 @@ export function CreateEnrolmentDialog({
       setPlanId(availablePlans[0]?.id ?? "");
     }
   }, [availablePlans, planId]);
-  const requiresMultipleTemplates = selectionRequirement.requiredCount > 1;
+  const requiresMultipleTemplates = selectionRequirement.maxCount > 1;
   const canSubmit = studentId && startDate && planId && !saving && !requiresMultipleTemplates;
 
   async function onSubmit(e: React.FormEvent) {
