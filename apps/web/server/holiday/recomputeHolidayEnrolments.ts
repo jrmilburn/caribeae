@@ -51,9 +51,9 @@ export async function recomputeHolidayEnrolments(
       OR: [
         { template: { dayOfWeek: { in: Array.from(dayOfWeekSet) } } },
         { classAssignments: { some: { template: { dayOfWeek: { in: Array.from(dayOfWeekSet) } } } } },
+        { endDate: null }, { endDate: { gte: minStart } }
       ],
       startDate: { lte: maxEnd },
-      OR: [{ endDate: null }, { endDate: { gte: minStart } }],
     },
     select: { id: true },
   });
