@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as React from "react";
-import { addWeeks, format, isAfter, max as maxDate } from "date-fns";
+import { format } from "date-fns";
 import { Loader2, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +17,8 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { payAheadAndPay } from "@/server/billing/payAheadAndPay";
+import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
+import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -24,6 +26,11 @@ type Props = {
 };
 
 type Enrolment = FamilyBillingSummary["enrolments"][number];
+
+type HolidayRange = {
+  startDate: Date | string;
+  endDate: Date | string;
+};
 
 function asDate(value?: Date | string | null) {
   if (!value) return null;
@@ -42,40 +49,84 @@ function blockSize(enrolment: Enrolment) {
   return size > 0 ? size : 0;
 }
 
-function projectPaidAhead(enrolment: Enrolment, quantity: number) {
+function normalizeHolidays(holidays: HolidayRange[]) {
+  return holidays
+    .map((holiday) => ({
+      startDate: asDate(holiday.startDate),
+      endDate: asDate(holiday.endDate),
+    }))
+    .filter((holiday): holiday is { startDate: Date; endDate: Date } => Boolean(holiday.startDate && holiday.endDate));
+}
+
+function resolveCurrentPaidThrough(enrolment: Enrolment) {
+  return (
+    asDate(enrolment.paidThroughDate) ??
+    asDate(enrolment.projectedCoverageEnd) ??
+    asDate(enrolment.latestCoverageEnd) ??
+    asDate(enrolment.startDate)
+  );
+}
+
+function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: HolidayRange[]) {
   const today = new Date();
+  const paidThrough = resolveCurrentPaidThrough(enrolment);
+
   if (enrolment.billingType === "PER_WEEK" && enrolment.durationWeeks) {
     const startDate = asDate(enrolment.startDate) ?? today;
-    const paidThrough = asDate(enrolment.paidThroughDate);
-    const latestCoverageEnd = asDate(enrolment.latestCoverageEnd);
     const endDate = asDate(enrolment.endDate);
-    const start = maxDate([startDate, paidThrough ?? startDate, latestCoverageEnd ?? startDate, today]);
-    if (endDate && isAfter(start, endDate)) return { nextPaidThrough: paidThrough };
+    const assignedTemplates = (enrolment.assignedClasses ?? [])
+      .map((template) => ({ dayOfWeek: template.dayOfWeek }))
+      .filter((template): template is { dayOfWeek: number } => template.dayOfWeek != null);
 
-    let currentStart = start;
-    let nextPaidThrough = paidThrough ?? startDate;
-    let periods = 0;
-
-    for (let i = 0; i < quantity; i++) {
-      if (endDate && isAfter(currentStart, endDate)) break;
-      const rawEnd = addWeeks(currentStart, enrolment.durationWeeks);
-      nextPaidThrough = endDate && isAfter(rawEnd, endDate) ? endDate : rawEnd;
-      currentStart = nextPaidThrough;
-      periods += 1;
+    if (assignedTemplates.length === 0) {
+      return { nextPaidThrough: paidThrough };
     }
 
-    return { nextPaidThrough: periods > 0 ? nextPaidThrough : paidThrough };
+    const payAhead = resolveWeeklyPayAheadSequence({
+      startDate,
+      endDate,
+      paidThroughDate: paidThrough,
+      durationWeeks: enrolment.durationWeeks,
+      sessionsPerWeek: enrolment.sessionsPerWeek ?? null,
+      quantity,
+      assignedTemplates,
+      holidays: normalizeHolidays(holidays),
+      today,
+    });
+
+    return { nextPaidThrough: payAhead.coverageEnd ?? paidThrough };
   }
 
   if (enrolment.billingType === "PER_CLASS") {
-    const creditsAdded = blockSize(enrolment) * quantity;
-    return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + creditsAdded };
+    const anchorTemplate = enrolment.assignedClasses?.[0] ?? null;
+    if (anchorTemplate?.dayOfWeek == null) {
+      return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + blockSize(enrolment) * quantity };
+    }
+
+    const range = computeBlockPayAheadCoverage({
+      currentPaidThroughDate: paidThrough,
+      enrolmentStartDate: asDate(enrolment.startDate) ?? today,
+      enrolmentEndDate: asDate(enrolment.endDate),
+      classTemplate: {
+        dayOfWeek: anchorTemplate.dayOfWeek,
+        startTime: anchorTemplate.startTime ?? null,
+      },
+      blocksPurchased: quantity,
+      blockClassCount: blockSize(enrolment),
+      holidays: normalizeHolidays(holidays),
+    });
+
+    return {
+      coverageStart: range.coverageStart,
+      nextPaidThrough: range.coverageEnd,
+      creditsRemaining: (enrolment.creditsRemaining ?? 0) + range.creditsPurchased,
+    };
   }
 
   return {};
 }
 
-export function CounterPayAheadCard({ summary, onRefresh }: Props) {
+export function PayAheadCard({ summary, onRefresh }: Props) {
   const [selected, setSelected] = React.useState<string[]>([]);
   const [quantities, setQuantities] = React.useState<Record<string, number>>({});
   const [method, setMethod] = React.useState("Cash");
@@ -90,7 +141,6 @@ export function CounterPayAheadCard({ summary, onRefresh }: Props) {
     const activeIds = enrolments.filter((e : any) => e.status === "ACTIVE").map((e : any) => e.id);
     setSelected(activeIds);
     setQuantities(
-      
       activeIds.reduce<Record<string, number>>((acc : any, id : string) => {
         acc[id] = 1;
         return acc;
@@ -197,14 +247,17 @@ export function CounterPayAheadCard({ summary, onRefresh }: Props) {
             <div className="space-y-2">
               {enrolments.map((enrolment : any) => {
                 const qty = quantities[enrolment.id] ?? 1;
-                const projection = projectPaidAhead(enrolment, qty);
+                const projection = projectPaidAhead(enrolment, qty, summary.holidays ?? []);
                 const isWeekly = enrolment.billingType === "PER_WEEK";
+                const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
                 const currentLabel = isWeekly
-                  ? `Paid to ${formatDate(enrolment.paidThroughDate)}`
-                  : `${enrolment.creditsRemaining ?? 0} credits`;
+                  ? `Paid to ${formatDate(currentPaidThrough)}`
+                  : `Paid to ${formatDate(currentPaidThrough)}`;
                 const projectedLabel = isWeekly
                   ? `→ ${projection.nextPaidThrough ? formatDate(projection.nextPaidThrough) : "—"}`
-                  : `→ ${(projection.creditsRemaining ?? enrolment.creditsRemaining ?? 0).toString()} credits`;
+                  : projection.coverageStart && projection.nextPaidThrough
+                    ? `Coverage ${formatDate(projection.coverageStart)} → ${formatDate(projection.nextPaidThrough)}`
+                    : `→ ${formatDate(projection.nextPaidThrough)}`;
 
                 return (
                   <div
