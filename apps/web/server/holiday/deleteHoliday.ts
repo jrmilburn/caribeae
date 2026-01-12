@@ -21,5 +21,6 @@ export async function deleteHoliday(id: string) {
   await recomputeHolidayEnrolments([{ startDate: existing.startDate, endDate: existing.endDate }]);
 
   revalidatePath("/admin/holidays");
+  revalidatePath("/admin/settings/holidays");
   revalidatePath("/admin/schedule");
 }

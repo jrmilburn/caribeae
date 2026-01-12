@@ -40,6 +40,7 @@ export async function createHoliday(input: z.input<typeof payloadSchema>) {
   await recomputeHolidayEnrolments([{ startDate, endDate }]);
 
   revalidatePath("/admin/holidays");
+  revalidatePath("/admin/settings/holidays");
   revalidatePath("/admin/schedule");
 
   return holiday;
