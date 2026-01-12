@@ -1,20 +1,62 @@
-import { addWeeks, isAfter, max as maxDate } from "date-fns";
+
 import { BillingType, type Prisma } from "@prisma/client";
 
-import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import {
+  computeCoverageEndDay,
+  dayKeyToDate,
+  nextScheduledDayKey,
+} from "@/server/billing/coverageEngine";
+import { brisbaneAddDays, brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
     template: { select: { dayOfWeek: true, name: true } },
+    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
   },
 } satisfies Prisma.EnrolmentDefaultArgs;
 
+function resolveAssignedTemplates(enrolment: {
+  template: { dayOfWeek: number | null } | null;
+  classAssignments: Array<{ template: { dayOfWeek: number | null } | null }>;
+}) {
+  if (enrolment.classAssignments.length) {
+    return enrolment.classAssignments
+      .map((assignment) => assignment.template)
+      .filter((template): template is NonNullable<typeof template> => Boolean(template));
+  }
+  return enrolment.template ? [enrolment.template] : [];
+}
+
+function resolveCoverageStartDayKey(params: {
+  enrolmentStart: Date;
+  paidThroughDate: Date | null;
+  today: Date;
+  assignedTemplates: { dayOfWeek: number | null }[];
+  holidays: { startDate: Date; endDate: Date }[];
+  enrolmentEndDayKey: string | null;
+}) {
+  const enrolmentStartDayKey = toBrisbaneDayKey(params.enrolmentStart);
+  const todayDayKey = toBrisbaneDayKey(params.today);
+  const baseline = params.paidThroughDate
+    ? brisbaneAddDays(toBrisbaneDayKey(params.paidThroughDate), 1)
+    : enrolmentStartDayKey;
+
+  const candidate = brisbaneCompare(todayDayKey, baseline) > 0 ? todayDayKey : baseline;
+  return nextScheduledDayKey({
+    startDayKey: candidate,
+    assignedTemplates: params.assignedTemplates,
+    holidays: params.holidays,
+    endDayKey: params.enrolmentEndDayKey,
+  });
+}
 
 export function resolveWeeklyCoverageWindow(params: {
   enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
-  plan: { durationWeeks: number | null };
+  plan: { durationWeeks: number | null; sessionsPerWeek: number | null };
+  assignedTemplates: { dayOfWeek: number | null }[];
+  holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
 }) {
   const durationWeeks = params.plan.durationWeeks;
@@ -22,27 +64,45 @@ export function resolveWeeklyCoverageWindow(params: {
     throw new Error("Weekly plans require durationWeeks to be greater than zero.");
   }
 
-  const startDate = normalizeDate(params.enrolment.startDate, "enrolment.startDate");
-  const paidThrough = normalizeOptionalDate(params.enrolment.paidThroughDate);
-  const today = normalizeDate(params.today ?? new Date(), "today");
-  const enrolmentEnd = normalizeOptionalDate(params.enrolment.endDate);
+  const sessionsPerWeek = params.plan.sessionsPerWeek && params.plan.sessionsPerWeek > 0 ? params.plan.sessionsPerWeek : 1;
+  const entitlementSessions = durationWeeks * sessionsPerWeek;
 
-  const coverageStart = paidThrough
-    ? maxDate([paidThrough, startDate])
-    : maxDate([today, startDate]);
+  const today = params.today ?? new Date();
+  const enrolmentEndDayKey = params.enrolment.endDate ? toBrisbaneDayKey(params.enrolment.endDate) : null;
 
-  if (enrolmentEnd && isAfter(coverageStart, enrolmentEnd)) {
-    throw new Error("Enrolment end date has passed.");
+  const coverageStartDayKey = resolveCoverageStartDayKey({
+    enrolmentStart: params.enrolment.startDate,
+    paidThroughDate: params.enrolment.paidThroughDate,
+    today,
+    assignedTemplates: params.assignedTemplates,
+    holidays: params.holidays,
+    enrolmentEndDayKey,
+  });
+
+  if (!coverageStartDayKey) {
+    return { coverageStart: null as Date | null, coverageEnd: null as Date | null, coverageEndBase: null as Date | null };
   }
 
-  let coverageEnd = addWeeks(coverageStart, durationWeeks);
-  if (enrolmentEnd && isAfter(coverageEnd, enrolmentEnd)) {
-    coverageEnd = enrolmentEnd;
-  }
+  const coverageEndDayKey = computeCoverageEndDay({
+    startDayKey: coverageStartDayKey,
+    assignedTemplates: params.assignedTemplates,
+    holidays: params.holidays,
+    entitlementSessions,
+    endDayKey: enrolmentEndDayKey,
+  });
+
+  const coverageEndBaseDayKey = computeCoverageEndDay({
+    startDayKey: coverageStartDayKey,
+    assignedTemplates: params.assignedTemplates,
+    holidays: [],
+    entitlementSessions,
+    endDayKey: enrolmentEndDayKey,
+  });
 
   return {
-    coverageStart: normalizeDate(coverageStart),
-    coverageEnd: normalizeDate(coverageEnd),
+    coverageStart: dayKeyToDate(coverageStartDayKey),
+    coverageEnd: dayKeyToDate(coverageEndDayKey),
+    coverageEndBase: dayKeyToDate(coverageEndBaseDayKey),
   };
 }
 
@@ -51,7 +111,10 @@ export function resolveWeeklyPayAheadSequence(params: {
   endDate: Date | null;
   paidThroughDate: Date | null;
   durationWeeks: number;
+  sessionsPerWeek: number | null;
   quantity: number;
+  assignedTemplates: { dayOfWeek: number | null }[];
+  holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
 }) {
   if (!params.durationWeeks || params.durationWeeks <= 0) {
@@ -61,31 +124,55 @@ export function resolveWeeklyPayAheadSequence(params: {
     return { coverageStart: null as Date | null, coverageEnd: null as Date | null, periods: 0 };
   }
 
-  const today = normalizeDate(params.today ?? new Date(), "today");
-  const endDate = normalizeOptionalDate(params.endDate);
-  const baseline = normalizeDate(params.paidThroughDate ?? params.startDate, "paidThroughDate");
-  const firstCoverageStart = maxDate([today, baseline]);
+  const today = params.today ?? new Date();
+  const endDayKey = params.endDate ? toBrisbaneDayKey(params.endDate) : null;
+  const entitlementSessions = params.durationWeeks * (params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1);
 
-  if (endDate && (isAfter(firstCoverageStart, endDate) || firstCoverageStart.getTime() === endDate.getTime())) {
+  const firstStartDayKey = resolveCoverageStartDayKey({
+    enrolmentStart: params.startDate,
+    paidThroughDate: params.paidThroughDate,
+    today,
+    assignedTemplates: params.assignedTemplates,
+    holidays: params.holidays,
+    enrolmentEndDayKey: endDayKey,
+  });
+
+  if (!firstStartDayKey) {
     return { coverageStart: null, coverageEnd: null, periods: 0 };
   }
 
-  let currentStart = firstCoverageStart;
-  const coverageStart = firstCoverageStart;
-  let coverageEnd = firstCoverageStart;
+  let currentStart = firstStartDayKey;
+  let coverageEndDayKey = firstStartDayKey;
   let periods = 0;
 
-  for (let i = 0; i < params.quantity; i++) {
-    if (endDate && isAfter(currentStart, endDate)) break;
-    const rawEnd = addWeeks(currentStart, params.durationWeeks);
-    coverageEnd = endDate && isAfter(rawEnd, endDate) ? endDate : rawEnd;
-    currentStart = coverageEnd;
+  for (let i = 0; i < params.quantity; i += 1) {
+    const endKey = computeCoverageEndDay({
+      startDayKey: currentStart,
+      assignedTemplates: params.assignedTemplates,
+      holidays: params.holidays,
+      entitlementSessions,
+      endDayKey,
+    });
+
+    if (!endKey) break;
+    coverageEndDayKey = endKey;
     periods += 1;
+
+    const nextStartCandidate = brisbaneAddDays(endKey, 1);
+    const nextStart = nextScheduledDayKey({
+      startDayKey: nextStartCandidate,
+      assignedTemplates: params.assignedTemplates,
+      holidays: params.holidays,
+      endDayKey,
+    });
+
+    if (!nextStart) break;
+    currentStart = nextStart;
   }
 
   return {
-    coverageStart: periods > 0 ? normalizeDate(coverageStart) : null,
-    coverageEnd: periods > 0 ? normalizeDate(coverageEnd) : null,
+    coverageStart: dayKeyToDate(firstStartDayKey),
+    coverageEnd: dayKeyToDate(coverageEndDayKey),
     periods,
   };
 }
@@ -93,27 +180,31 @@ export function resolveWeeklyPayAheadSequence(params: {
 export function resolveCoverageForPlan(params: {
   enrolment: Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
   plan: Prisma.EnrolmentPlanUncheckedCreateInput | Prisma.EnrolmentPlanGetPayload<{ include: { level: true } }>;
+  holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
 }) {
   const { enrolment, plan } = params;
   const today = params.today ?? new Date();
 
   if (plan.billingType === BillingType.PER_WEEK) {
-    const { coverageStart, coverageEnd } = resolveWeeklyCoverageWindow({
+    const assignedTemplates = resolveAssignedTemplates(enrolment);
+    const { coverageStart, coverageEnd, coverageEndBase } = resolveWeeklyCoverageWindow({
       enrolment: {
         startDate: enrolment.startDate,
         endDate: enrolment.endDate,
         paidThroughDate: enrolment.paidThroughDate,
       },
-      plan: { durationWeeks: plan.durationWeeks ?? null },
+      plan: { durationWeeks: plan.durationWeeks ?? null, sessionsPerWeek: plan.sessionsPerWeek ?? null },
+      assignedTemplates,
+      holidays: params.holidays,
       today,
     });
-    return { coverageStart, coverageEnd, creditsPurchased: null };
+    return { coverageStart, coverageEnd, coverageEndBase, creditsPurchased: null };
   }
 
   const creditsPurchased = plan.blockClassCount ?? 1;
   if (plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans with blockClassCount must be > 0.");
   }
-  return { coverageStart: null, coverageEnd: null, creditsPurchased };
+  return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
 }

@@ -2,11 +2,10 @@ import { addDays, isAfter } from "date-fns";
 
 import type { HolidayRange } from "@/server/holiday/holidayUtils";
 import {
-  SCHEDULE_TIME_ZONE,
-  normalizeToScheduleMidnight,
-  scheduleDateKey,
-  scheduleDayOfWeek,
-} from "@/server/schedule/rangeUtils";
+  brisbaneDayOfWeek,
+  brisbaneStartOfDay,
+  toBrisbaneDayKey,
+} from "@/server/dates/brisbaneDay";
 
 export type PaidThroughTemplate = {
   dayOfWeek: number | null;
@@ -20,7 +19,6 @@ type PaidThroughOptions = {
   classTemplate: PaidThroughTemplate;
   holidays: HolidayRange[];
   cancellations?: Date[];
-  timeZone?: string;
 };
 
 type PaidThroughResult = {
@@ -30,38 +28,33 @@ type PaidThroughResult = {
   remainingCredits: number;
 };
 
-function scheduleDateAtUtcMidnight(date: Date, timeZone: string): Date {
-  const key = scheduleDateKey(date, timeZone);
-  return new Date(`${key}T00:00:00.000Z`);
+function scheduleDateAtUtcMidnight(date: Date): Date {
+  const key = toBrisbaneDayKey(date);
+  return brisbaneStartOfDay(key);
 }
 
-function buildSkippedDateSet(dates: Date[], timeZone: string) {
-  return new Set(dates.map((date) => scheduleDateKey(date, timeZone)));
+function buildSkippedDateSet(dates: Date[]) {
+  return new Set(dates.map((date) => toBrisbaneDayKey(date)));
 }
 
-function buildHolidayDateSet(holidays: HolidayRange[], timeZone: string) {
+function buildHolidayDateSet(holidays: HolidayRange[]) {
   const set = new Set<string>();
   holidays.forEach((holiday) => {
-    const start = scheduleDateAtUtcMidnight(holiday.startDate, timeZone);
-    const end = scheduleDateAtUtcMidnight(holiday.endDate, timeZone);
+    const start = scheduleDateAtUtcMidnight(holiday.startDate);
+    const end = scheduleDateAtUtcMidnight(holiday.endDate);
     let cursor = start;
     while (cursor <= end) {
-      set.add(scheduleDateKey(cursor, timeZone));
+      set.add(toBrisbaneDayKey(cursor));
       cursor = addDays(cursor, 1);
     }
   });
   return set;
 }
 
-function nextScheduledOccurrence(
-  cursor: Date,
-  endDate: Date | null,
-  skippedDates: Set<string>,
-  timeZone: string
-) {
+function nextScheduledOccurrence(cursor: Date, endDate: Date | null, skippedDates: Set<string>) {
   let next = cursor;
   while (!endDate || next <= endDate) {
-    const key = scheduleDateKey(next, timeZone);
+    const key = toBrisbaneDayKey(next);
     if (!skippedDates.has(key)) return next;
     next = addDays(next, 7);
   }
@@ -69,7 +62,6 @@ function nextScheduledOccurrence(
 }
 
 export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThroughResult {
-  const timeZone = options.timeZone ?? SCHEDULE_TIME_ZONE;
   const templateDay = options.classTemplate.dayOfWeek;
   if (templateDay === null || templateDay === undefined) {
     return {
@@ -80,13 +72,8 @@ export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThrou
     };
   }
 
-  const start = scheduleDateAtUtcMidnight(
-    normalizeToScheduleMidnight(options.startDate, timeZone),
-    timeZone
-  );
-  const end = options.endDate
-    ? scheduleDateAtUtcMidnight(normalizeToScheduleMidnight(options.endDate, timeZone), timeZone)
-    : null;
+  const start = scheduleDateAtUtcMidnight(brisbaneStartOfDay(options.startDate));
+  const end = options.endDate ? scheduleDateAtUtcMidnight(brisbaneStartOfDay(options.endDate)) : null;
 
   if (end && isAfter(start, end)) {
     return {
@@ -97,19 +84,19 @@ export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThrou
     };
   }
 
-  const startDay = scheduleDayOfWeek(start, timeZone);
+  const startDay = brisbaneDayOfWeek(start);
   const delta = (templateDay - startDay + 7) % 7;
   let cursor = addDays(start, delta);
 
-  const holidayDates = buildHolidayDateSet(options.holidays, timeZone);
-  const cancellationDates = buildSkippedDateSet(options.cancellations ?? [], timeZone);
+  const holidayDates = buildHolidayDateSet(options.holidays);
+  const cancellationDates = buildSkippedDateSet(options.cancellations ?? []);
   const skippedDates = new Set<string>([...holidayDates, ...cancellationDates]);
 
   const debugEnabled = process.env.DEBUG_PAID_THROUGH === "1";
   const debugEntries: string[] = [];
 
   if (options.creditsToCover <= 0) {
-    const nextDue = nextScheduledOccurrence(cursor, end, skippedDates, timeZone);
+    const nextDue = nextScheduledOccurrence(cursor, end, skippedDates);
     return {
       paidThroughDate: null,
       nextDueDate: nextDue,
@@ -123,7 +110,7 @@ export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThrou
   let covered = 0;
 
   while ((!end || cursor <= end) && remaining > 0) {
-    const key = scheduleDateKey(cursor, timeZone);
+    const key = toBrisbaneDayKey(cursor);
     const skipped = skippedDates.has(key);
     if (debugEnabled && debugEntries.length < 8) {
       debugEntries.push(`${key}${skipped ? " (skipped)" : " (counted)"}`);
@@ -138,15 +125,15 @@ export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThrou
 
   if (debugEnabled && debugEntries.length > 0) {
     console.debug(
-      `[paidThrough] credits=${options.creditsToCover} start=${scheduleDateKey(start, timeZone)} ` +
+      `[paidThrough] credits=${options.creditsToCover} start=${toBrisbaneDayKey(start)} ` +
         `occurrences=${debugEntries.join(", ")}`
     );
   }
 
   const nextDue =
     paidThroughDate && remaining <= 0
-      ? nextScheduledOccurrence(addDays(paidThroughDate, 7), end, skippedDates, timeZone)
-      : nextScheduledOccurrence(cursor, end, skippedDates, timeZone);
+      ? nextScheduledOccurrence(addDays(paidThroughDate, 7), end, skippedDates)
+      : nextScheduledOccurrence(cursor, end, skippedDates);
 
   return {
     paidThroughDate,
@@ -162,34 +149,26 @@ export function listScheduledOccurrences(options: {
   classTemplate: PaidThroughTemplate;
   holidays: HolidayRange[];
   cancellations?: Date[];
-  timeZone?: string;
 }) {
-  const timeZone = options.timeZone ?? SCHEDULE_TIME_ZONE;
   const templateDay = options.classTemplate.dayOfWeek;
   if (templateDay === null || templateDay === undefined) return [];
 
-  const start = scheduleDateAtUtcMidnight(
-    normalizeToScheduleMidnight(options.startDate, timeZone),
-    timeZone
-  );
-  const end = scheduleDateAtUtcMidnight(
-    normalizeToScheduleMidnight(options.endDate, timeZone),
-    timeZone
-  );
+  const start = scheduleDateAtUtcMidnight(brisbaneStartOfDay(options.startDate));
+  const end = scheduleDateAtUtcMidnight(brisbaneStartOfDay(options.endDate));
 
   if (isAfter(start, end)) return [];
 
-  const startDay = scheduleDayOfWeek(start, timeZone);
+  const startDay = brisbaneDayOfWeek(start);
   const delta = (templateDay - startDay + 7) % 7;
   let cursor = addDays(start, delta);
 
-  const holidayDates = buildHolidayDateSet(options.holidays, timeZone);
-  const cancellationDates = buildSkippedDateSet(options.cancellations ?? [], timeZone);
+  const holidayDates = buildHolidayDateSet(options.holidays);
+  const cancellationDates = buildSkippedDateSet(options.cancellations ?? []);
   const skippedDates = new Set<string>([...holidayDates, ...cancellationDates]);
 
   const occurrences: Date[] = [];
   while (cursor <= end) {
-    const key = scheduleDateKey(cursor, timeZone);
+    const key = toBrisbaneDayKey(cursor);
     if (!skippedDates.has(key)) {
       occurrences.push(cursor);
     }

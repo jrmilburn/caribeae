@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
-import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { recomputeHolidayEnrolments } from "./recomputeHolidayEnrolments";
 
 const payloadSchema = z.object({
@@ -21,8 +21,8 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
   await requireAdmin();
 
   const payload = payloadSchema.parse(input);
-  const startDate = normalizeToScheduleMidnight(payload.startDate);
-  const endDate = normalizeToScheduleMidnight(payload.endDate);
+  const startDate = brisbaneStartOfDay(payload.startDate);
+  const endDate = brisbaneStartOfDay(payload.endDate);
 
   if (endDate < startDate) {
     throw new Error("End date must be on or after start date.");
@@ -43,10 +43,13 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
     },
   });
 
-  await recomputeHolidayEnrolments([
-    { startDate: existing.startDate, endDate: existing.endDate },
-    { startDate, endDate },
-  ]);
+  await recomputeHolidayEnrolments(
+    [
+      { startDate: existing.startDate, endDate: existing.endDate },
+      { startDate, endDate },
+    ],
+    "HOLIDAY_UPDATED"
+  );
 
   revalidatePath("/admin/holidays");
   revalidatePath("/admin/settings/holidays");

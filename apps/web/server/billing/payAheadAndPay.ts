@@ -10,7 +10,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceMutations";
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
-import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
+import { normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 
 const payAheadItemSchema = z.object({
@@ -48,6 +48,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         plan: true,
         student: { select: { familyId: true, name: true } },
         template: { select: { dayOfWeek: true, name: true } },
+        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
       },
     });
 
@@ -65,7 +66,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       { client: tx }
     );
 
-    const today = normalizeDate(new Date(), "today");
+    const today = new Date();
+    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
     const createdInvoices: { invoice: Invoice; enrolmentId: string }[] = [];
     const issuedAt = new Date();
     const dueAt = addDays(issuedAt, 7);
@@ -92,12 +94,20 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
 
         const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
         const paidThrough = statusMap.get(enrolment.id)?.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
+        const assignedTemplates = enrolment.classAssignments.length
+          ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+          : enrolment.template
+            ? [enrolment.template]
+            : [];
         const payAhead = resolveWeeklyPayAheadSequence({
           startDate: enrolment.startDate,
           endDate: enrolmentEnd,
           paidThroughDate: paidThrough,
           durationWeeks: plan.durationWeeks,
+          sessionsPerWeek: plan.sessionsPerWeek ?? null,
           quantity: item.quantity,
+          assignedTemplates,
+          holidays,
           today,
         });
 

@@ -12,11 +12,11 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
-import { countHolidayOccurrences } from "@/server/holiday/holidayUtils";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
-import { normalizeToScheduleMidnight } from "@/server/schedule/rangeUtils";
-import { computeWeeklyHolidayExtensionWeeks } from "@/server/billing/weeklyHolidayExtensions";
+import { computeCoverageEndDay } from "@/server/billing/coverageEngine";
+import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -55,6 +55,11 @@ export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Enr
     return invoice.creditsPurchased < computed ? computed : invoice.creditsPurchased;
   }
   return computed;
+}
+
+function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
+  const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
+  return enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
 }
 
 export function resolveBlockCoverageWindow(params: {
@@ -144,46 +149,29 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       if (!coverageEnd) {
         throw new Error("Weekly invoices must include a coverage end date.");
       }
-      let adjustedCoverageEnd = coverageEnd;
+      if (!coverageStart) {
+        throw new Error("Weekly invoices must include a coverage start date.");
+      }
       const assignedTemplates = enrolment.classAssignments.length
         ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
         : enrolment.template
           ? [enrolment.template]
           : [];
-      if (coverageStart && assignedTemplates.length) {
-        const baseStart = normalizeToScheduleMidnight(coverageStart);
-        const baseEnd = normalizeToScheduleMidnight(coverageEnd);
-        const holidays = await tx.holiday.findMany({
-          where: {
-            startDate: { lte: baseEnd },
-            endDate: { gte: baseStart },
-          },
-          select: { startDate: true, endDate: true },
-        });
-        if (holidays.length) {
-          const holidayCount = assignedTemplates.reduce((sum, template) => {
-            if (template?.dayOfWeek == null) return sum;
-            return (
-              sum +
-              countHolidayOccurrences({
-                startDate: baseStart,
-                endDate: baseEnd,
-                templateDayOfWeek: template.dayOfWeek,
-                holidays,
-              })
-            );
-          }, 0);
-          if (holidayCount > 0) {
-            const extensionWeeks = computeWeeklyHolidayExtensionWeeks(
-              holidayCount,
-              plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1
-            );
-            adjustedCoverageEnd = normalizeDate(addWeeks(baseEnd, extensionWeeks));
-          }
-        }
-      }
-      updates.paidThroughDate = adjustedCoverageEnd;
-      updates.paidThroughDateComputed = adjustedCoverageEnd;
+      const entitlementSessions =
+        (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1) *
+        (plan.durationWeeks && plan.durationWeeks > 0 ? plan.durationWeeks : 1) *
+        resolveEnrolmentQuantity(invoice);
+      const baseCoverageEndDayKey = computeCoverageEndDay({
+        startDayKey: toBrisbaneDayKey(coverageStart),
+        assignedTemplates,
+        holidays: [],
+        entitlementSessions,
+        endDayKey: enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null,
+      });
+      updates.paidThroughDateComputed = baseCoverageEndDayKey
+        ? brisbaneStartOfDay(baseCoverageEndDayKey)
+        : null;
+      updates.paidThroughDate = coverageEnd;
     } else {
       const creditsDelta = resolveCreditsPurchased(invoice, plan);
       if (creditsDelta > 0) {
@@ -215,6 +203,10 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         where: { id: enrolment.id },
         data: updates,
       });
+    }
+
+    if (plan.billingType === BillingType.PER_WEEK) {
+      await recomputeEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { client: tx });
     }
 
     const updatedInvoice = await tx.invoice.update({

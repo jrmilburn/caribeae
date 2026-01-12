@@ -20,6 +20,7 @@ import { validateSelection } from "./validateSelection";
 import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
+import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
 
 type TemplateSummary = {
   id: string;
@@ -275,7 +276,11 @@ export async function createEnrolmentsFromSelection(
     }
 
     await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
-    await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+    if (plan.billingType === BillingType.PER_WEEK) {
+      await recomputeEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { client: tx });
+    } else {
+      await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+    }
     return [enrolment];
   });
 
