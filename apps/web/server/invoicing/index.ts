@@ -1,5 +1,5 @@
 
-import { addDays } from "date-fns";
+import { addDays, isAfter, startOfDay } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
@@ -317,7 +317,8 @@ export async function runInvoicingSweep(params: { maxToProcess?: number }) {
     if (enrolment.invoices.length > 0) return true;
     if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
       const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate;
-      return !paidThrough || paidThrough < today;
+      const paidThroughStart = paidThrough ? startOfDay(paidThrough) : null;
+      return !paidThroughStart || isAfter(startOfDay(today), paidThroughStart);
     }
     if (enrolment.plan?.billingType === BillingType.PER_CLASS) {
       const creditsRemaining = enrolment.creditsBalanceCached ?? enrolment.creditsRemaining;
