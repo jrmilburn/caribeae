@@ -40,7 +40,7 @@ export type RecordPaymentInput = {
 };
 
 export async function recordPayment(input: RecordPaymentInput): Promise<{
-  payment: Prisma.PaymentGetPayload<{}>;
+  payment: Prisma.PaymentGetPayload<object>;
   receiptInvoiceId?: string;
 }> {
   if (input.amountCents <= 0) {

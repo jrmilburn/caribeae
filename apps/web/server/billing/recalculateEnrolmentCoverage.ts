@@ -1,3 +1,5 @@
+// ./server/billing/recalculateEnrolmentCoverage.ts
+
 import { prisma } from "@/lib/prisma";
 import {
   BillingType,
@@ -39,13 +41,15 @@ type RecalculateOptions = {
   confirmShorten?: boolean;
 };
 
+// ✅ Drop-in fix: fetch full template shapes so TS matches what
+// computeBillingSnapshotForEnrolment expects.
 type EnrolmentWithTemplate = Prisma.EnrolmentGetPayload<{
   include: {
     plan: true;
-    template: { select: { id: true; dayOfWeek: true; levelId: true; startDate: true; endDate: true } };
+    template: true;
     classAssignments: {
       include: {
-        template: { select: { id: true; dayOfWeek: true; levelId: true; startDate: true; endDate: true } };
+        template: true;
       };
     };
   };
@@ -57,6 +61,7 @@ function resolveTemplates(enrolment: EnrolmentWithTemplate) {
     : enrolment.template
       ? [enrolment.template]
       : [];
+
   const map = new Map(templates.map((template) => [template.id, template]));
   return Array.from(map.values());
 }
@@ -137,10 +142,10 @@ export async function recalculateEnrolmentCoverage(
       where: { id: enrolmentId },
       include: {
         plan: true,
-        template: { select: { id: true, dayOfWeek: true, levelId: true, startDate: true, endDate: true } },
+        template: true,
         classAssignments: {
           include: {
-            template: { select: { id: true, dayOfWeek: true, levelId: true, startDate: true, endDate: true } },
+            template: true,
           },
         },
       },
@@ -214,9 +219,7 @@ export async function recalculateEnrolmentCoverage(
         holidays,
       });
 
-      const proposedPaidThrough = closedWeeks > 0
-        ? addDaysUtc(paidWindowEnd, closedWeeks * 7)
-        : paidWindowEnd;
+      const proposedPaidThrough = closedWeeks > 0 ? addDaysUtc(paidWindowEnd, closedWeeks * 7) : paidWindowEnd;
 
       const currentPaidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;
       const currentKey = currentPaidThrough ? toBrisbaneDayKey(currentPaidThrough) : null;
