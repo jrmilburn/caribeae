@@ -7,8 +7,25 @@ import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility"
 import { computeCoverageEndDay, dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
 import { brisbaneAddDays, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { normalizeCoverageEndForStorage } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
+
+function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }>(
+  templates: T[],
+  sessionsPerWeek: number
+) {
+  if (!sessionsPerWeek || sessionsPerWeek <= 0) return templates;
+  const seen = new Set<number>();
+  const unique = templates.filter((template) => {
+    if (template.dayOfWeek == null) return false;
+    if (seen.has(template.dayOfWeek)) return false;
+    seen.add(template.dayOfWeek);
+    return true;
+  });
+  if (unique.length <= sessionsPerWeek) return unique;
+  return [...unique].sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7)).slice(0, sessionsPerWeek);
+}
 
 export type RecordPaymentInput = {
   familyId: string;
@@ -102,6 +119,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         : enrolment.template
           ? [enrolment.template]
           : [];
+      const effectiveTemplates = limitWeeklyTemplates(assignedTemplates, sessionsPerWeek);
 
       const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
       const enrolmentEndDayKey = enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null;
@@ -111,7 +129,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
 
       const coverageStartDayKey = nextScheduledDayKey({
         startDayKey: baseStartDayKey,
-        assignedTemplates,
+        assignedTemplates: effectiveTemplates,
         holidays,
         endDayKey: enrolmentEndDayKey,
       });
@@ -122,7 +140,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
 
       const coverageEndDayKey = computeCoverageEndDay({
         startDayKey: coverageStartDayKey,
-        assignedTemplates,
+        assignedTemplates: effectiveTemplates,
         holidays,
         entitlementSessions,
         endDayKey: enrolmentEndDayKey,
@@ -130,7 +148,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
 
       const coverageEndBaseDayKey = computeCoverageEndDay({
         startDayKey: coverageStartDayKey,
-        assignedTemplates,
+        assignedTemplates: effectiveTemplates,
         holidays: [],
         entitlementSessions,
         endDayKey: enrolmentEndDayKey,
@@ -144,11 +162,16 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         throw new Error("Unable to resolve coverage end.");
       }
 
+      const normalizedCoverageEnd = normalizeCoverageEndForStorage(coverageEnd);
+      const normalizedCoverageEndBase = coverageEndBase
+        ? normalizeCoverageEndForStorage(coverageEndBase)
+        : normalizedCoverageEnd;
+
       await tx.enrolment.update({
         where: { id: enrolment.id },
         data: {
-          paidThroughDate: coverageEnd,
-          paidThroughDateComputed: coverageEndBase ?? coverageEnd,
+          paidThroughDate: normalizedCoverageEnd,
+          paidThroughDateComputed: normalizedCoverageEndBase,
         },
       });
 

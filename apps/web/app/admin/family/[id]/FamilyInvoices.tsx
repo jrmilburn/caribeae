@@ -850,9 +850,7 @@ function RecordPaymentSheet({
                     const coverageLabel =
                       invoice.coverageStart && invoice.coverageEnd
                         ? `${formatDate(invoice.coverageStart)} → ${formatDate(invoice.coverageEnd)}`
-                        : invoice.creditsPurchased
-                          ? `${invoice.creditsPurchased} credits`
-                          : "—";
+                        : "—";
                     return (
                       <TableRow key={invoice.id} className={cn(!selected.includes(invoice.id) && "opacity-60")}>
                         <TableCell>
