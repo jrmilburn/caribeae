@@ -49,7 +49,11 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         plan: true,
         student: true,
         template: true,
-        classAssignments: true,
+        classAssignments: {
+          include: {
+            template: true
+          }
+        },
       },
     });
 
