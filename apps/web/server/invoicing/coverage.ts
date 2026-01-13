@@ -16,10 +16,10 @@ export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
-    template: { select: { dayOfWeek: true, name: true, startTime: true } },
+    template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } },
     classAssignments: {
       include: {
-        template: { select: { dayOfWeek: true, name: true, startTime: true } },
+        template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } },
       },
     },
   },

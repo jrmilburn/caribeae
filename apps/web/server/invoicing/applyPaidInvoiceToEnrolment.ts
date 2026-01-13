@@ -14,9 +14,10 @@ import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { asDate, normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { computeCoverageEndDay } from "@/server/billing/coverageEngine";
-import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -25,8 +26,8 @@ type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
     enrolment: {
       include: {
         plan: true;
-        template: { select: { dayOfWeek: true, name: true, startTime: true } };
-        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } };
+        template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } };
+        classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } } } };
       };
     };
     lineItems: { select: { kind: true; quantity: true } };
@@ -181,7 +182,12 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         throw new Error("Class template missing for enrolment.");
       }
 
-      const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
+      const templateIds = assignedTemplates.map((template) => template.id);
+      const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+      const holidays = await tx.holiday.findMany({
+        where: buildHolidayScopeWhere({ templateIds, levelIds }),
+        select: { startDate: true, endDate: true, levelId: true, templateId: true },
+      });
       const coverageRange = computeBlockCoverageRange({
         currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
         enrolmentStartDate: enrolment.startDate,
@@ -212,9 +218,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       });
     }
 
-    if (plan.billingType === BillingType.PER_WEEK) {
-      await recomputeEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { client: tx });
-    }
+    await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
 
     const updatedInvoice = await tx.invoice.update({
       where: { id: invoice.id },

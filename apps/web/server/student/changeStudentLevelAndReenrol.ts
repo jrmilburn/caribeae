@@ -23,9 +23,10 @@ import { validateSelection } from "@/server/enrolment/validateSelection";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
-import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -70,6 +71,10 @@ async function computeWeeklyCredit(params: {
     where: {
       startDate: { lte: coverageEnd },
       endDate: { gte: coverageStart },
+      ...buildHolidayScopeWhere({
+        templateIds: [params.enrolment.template.id],
+        levelIds: [params.enrolment.template.levelId ?? null],
+      }),
     },
     orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
   });
@@ -342,7 +347,7 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
 
     await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
     if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-      await recomputeEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { client: tx });
+      await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: user.id });
     } else {
       await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
     }

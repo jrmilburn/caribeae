@@ -48,6 +48,9 @@ export function ChangeEnrolmentDialog({
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>({});
   const [startDate, setStartDate] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
+  const [confirming, setConfirming] = React.useState<{ oldDateKey: string | null; newDateKey: string | null } | null>(
+    null
+  );
 
   const selectionRequirement = React.useMemo(
     () => getSelectionRequirement(enrolment.plan),
@@ -161,7 +164,7 @@ export function ChangeEnrolmentDialog({
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (confirmShorten?: boolean) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -173,16 +176,27 @@ export function ChangeEnrolmentDialog({
 
     setSaving(true);
     try {
-      await changeEnrolment({
+      const result = await changeEnrolment({
         enrolmentId: enrolment.id,
         templateIds: selectedTemplateIds,
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
+        confirmShorten,
       });
-      toast.success("Enrolment updated.");
-      onOpenChange(false);
-      onChanged?.();
-      router.refresh();
+      if (!result.ok) {
+        if (result.error.code === "COVERAGE_WOULD_SHORTEN") {
+          setConfirming({
+            oldDateKey: result.error.oldDateKey,
+            newDateKey: result.error.newDateKey,
+          });
+          return;
+        }
+      } else {
+        toast.success("Enrolment updated.");
+        onOpenChange(false);
+        onChanged?.();
+        router.refresh();
+      }
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Unable to change enrolment.");
@@ -192,7 +206,8 @@ export function ChangeEnrolmentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>Change enrolment</DialogTitle>
@@ -289,6 +304,46 @@ export function ChangeEnrolmentDialog({
           </div>
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      <Dialog open={Boolean(confirming)} onOpenChange={(next) => (!next ? setConfirming(null) : null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm paid-through change</DialogTitle>
+            <DialogDescription>
+              This class change will shorten the paid-through date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <div>
+              <span className="font-medium">Current paid-through:</span>{" "}
+              {confirming?.oldDateKey ?? "—"}
+            </div>
+            <div>
+              <span className="font-medium">New paid-through:</span>{" "}
+              {confirming?.newDateKey ?? "—"}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirming(null)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirming(null);
+                void handleSave(true);
+              }}
+              disabled={saving}
+            >
+              Confirm change
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
