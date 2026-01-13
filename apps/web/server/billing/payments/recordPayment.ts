@@ -65,7 +65,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       include: {
         plan: true,
         student: { select: { familyId: true } },
-        template: { select: { dayOfWeek: true } },
+        template: { select: { dayOfWeek: true, name: true } },
         classAssignments: { include: { template: { select: { dayOfWeek: true } } } },
       },
     });

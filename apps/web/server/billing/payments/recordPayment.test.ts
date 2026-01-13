@@ -138,7 +138,7 @@ function seedWeeklyEnrolment(db: FakeDb, options?: { paidThroughDate?: Date | nu
       blockClassCount: null,
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0 },
+    template: { dayOfWeek: 0, name: "Monday" },
     classAssignments: [],
   };
   db.__data.enrolments.push(enrolment);
@@ -165,7 +165,7 @@ function seedCreditEnrolment(db: FakeDb, options?: { creditsRemaining?: number }
       blockClassCount: 4,
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0 },
+    template: { dayOfWeek: 0, name: "Monday" },
     classAssignments: [],
   };
   db.__data.enrolments.push(enrolment);
