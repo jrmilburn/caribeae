@@ -62,7 +62,9 @@ function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
 }
 
 export function normalizeCoverageEndForStorage(value: Date) {
-  return brisbaneStartOfDay(value);
+  const dayKey = toBrisbaneDayKey(value);
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 export function hasAppliedEntitlements(invoice: { entitlementsAppliedAt: Date | null }) {

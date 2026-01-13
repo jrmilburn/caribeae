@@ -41,7 +41,7 @@ test("Scenario C: idempotency guard prevents double application", () => {
 test("Scenario D: coverageEnd stored as Brisbane day (inclusive)", () => {
   const input = new Date("2026-05-04T00:00:00+10:00");
   const normalized = normalizeCoverageEndForStorage(input);
-  assert.strictEqual(normalized.toISOString().slice(0, 10), "2026-05-04");
+  assert.strictEqual(normalized.toISOString(), "2026-05-04T00:00:00.000Z");
 });
 
 test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends coverage", () => {
