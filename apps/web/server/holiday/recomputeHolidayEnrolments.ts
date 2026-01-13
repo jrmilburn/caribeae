@@ -106,7 +106,7 @@ export async function recomputeHolidayEnrolments(
   for (let i = 0; i < enrolments.length; i += BATCH_SIZE) {
     const batch = enrolments.slice(i, i + BATCH_SIZE);
     await Promise.all(
-      batch.map((enrolment) => recalculateEnrolmentCoverage(enrolment.id, reason, { actorId: null }))
+      batch.map((enrolment) => recalculateEnrolmentCoverage(enrolment.id, reason, { actorId: undefined }))
     );
   }
 }
