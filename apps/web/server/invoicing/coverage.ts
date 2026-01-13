@@ -12,8 +12,8 @@ export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
-    template: { select: { dayOfWeek: true, name: true } },
-    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
+    template: { select: { dayOfWeek: true, name: true, startTime: true } },
+    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } },
   },
 } satisfies Prisma.EnrolmentDefaultArgs;
 

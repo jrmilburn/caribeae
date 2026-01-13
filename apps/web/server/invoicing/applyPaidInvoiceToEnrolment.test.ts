@@ -47,7 +47,7 @@ test("Scenario D: coverageEnd stored as Brisbane day (inclusive)", () => {
 test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends coverage", () => {
   const start = dAest("2026-02-02");
   const plan = {
-    billingType: BillingType.PER_CLASS as const,
+    billingType: BillingType.PER_CLASS,
     blockClassCount: 8,
     durationWeeks: null,
     name: "8 classes over 8 weeks",
@@ -150,7 +150,7 @@ test("Scenario G: weekly coverage skips holidays after paid-through", () => {
     student: { familyId: "fam" },
   };
   const plan = {
-    billingType: BillingType.PER_WEEK as const,
+    billingType: BillingType.PER_WEEK,
     enrolmentType: "CLASS" as const,
     durationWeeks: 4,
     blockLength: 1,
