@@ -1,4 +1,3 @@
-
 import { BillingType, type Prisma } from "@prisma/client";
 
 import {
@@ -7,21 +6,35 @@ import {
   nextScheduledDayKey,
 } from "@/server/billing/coverageEngine";
 import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
-import { brisbaneAddDays, brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import {
+  brisbaneAddDays,
+  brisbaneCompare,
+  toBrisbaneDayKey,
+} from "@/server/dates/brisbaneDay";
 
 export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
     template: { select: { dayOfWeek: true, name: true, startTime: true } },
-    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } },
+    classAssignments: {
+      include: {
+        template: { select: { dayOfWeek: true, name: true, startTime: true } },
+      },
+    },
   },
 } satisfies Prisma.EnrolmentDefaultArgs;
 
-function resolveAssignedTemplates(enrolment: {
-  template: { dayOfWeek: number | null } | null;
-  classAssignments: Array<{ template: { dayOfWeek: number | null } | null }>;
-}) {
+// -----------------------------------------------------------------------------
+// Types derived from the Prisma include (source of truth for template shape)
+// -----------------------------------------------------------------------------
+type EnrolmentWithPlan = Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
+type TemplateSelected = NonNullable<EnrolmentWithPlan["template"]>;
+type AssignedTemplate = EnrolmentWithPlan["template"] | null;
+
+function resolveAssignedTemplates(
+  enrolment: Pick<EnrolmentWithPlan, "template" | "classAssignments">
+): TemplateSelected[] {
   if (enrolment.classAssignments.length) {
     return enrolment.classAssignments
       .map((assignment) => assignment.template)
@@ -35,6 +48,7 @@ function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }
   sessionsPerWeek: number
 ) {
   if (!sessionsPerWeek || sessionsPerWeek <= 0) return templates;
+
   const seen = new Set<number>();
   const unique = templates.filter((template) => {
     if (template.dayOfWeek == null) return false;
@@ -42,8 +56,12 @@ function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }
     seen.add(template.dayOfWeek);
     return true;
   });
+
   if (unique.length <= sessionsPerWeek) return unique;
-  return [...unique].sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7)).slice(0, sessionsPerWeek);
+
+  return [...unique]
+    .sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7))
+    .slice(0, sessionsPerWeek);
 }
 
 function resolveCoverageStartDayKey(params: {
@@ -56,11 +74,13 @@ function resolveCoverageStartDayKey(params: {
 }) {
   const enrolmentStartDayKey = toBrisbaneDayKey(params.enrolmentStart);
   const todayDayKey = toBrisbaneDayKey(params.today);
+
   const baseline = params.paidThroughDate
     ? brisbaneAddDays(toBrisbaneDayKey(params.paidThroughDate), 1)
     : enrolmentStartDayKey;
 
   const candidate = brisbaneCompare(todayDayKey, baseline) > 0 ? todayDayKey : baseline;
+
   return nextScheduledDayKey({
     startDayKey: candidate,
     assignedTemplates: params.assignedTemplates,
@@ -81,12 +101,18 @@ export function resolveWeeklyCoverageWindow(params: {
     throw new Error("Weekly plans require durationWeeks to be greater than zero.");
   }
 
-  const sessionsPerWeek = params.plan.sessionsPerWeek && params.plan.sessionsPerWeek > 0 ? params.plan.sessionsPerWeek : 1;
+  const sessionsPerWeek =
+    params.plan.sessionsPerWeek && params.plan.sessionsPerWeek > 0
+      ? params.plan.sessionsPerWeek
+      : 1;
+
   const entitlementSessions = durationWeeks * sessionsPerWeek;
   const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
 
   const today = params.today ?? new Date();
-  const enrolmentEndDayKey = params.enrolment.endDate ? toBrisbaneDayKey(params.enrolment.endDate) : null;
+  const enrolmentEndDayKey = params.enrolment.endDate
+    ? toBrisbaneDayKey(params.enrolment.endDate)
+    : null;
 
   const coverageStartDayKey = resolveCoverageStartDayKey({
     enrolmentStart: params.enrolment.startDate,
@@ -98,7 +124,11 @@ export function resolveWeeklyCoverageWindow(params: {
   });
 
   if (!coverageStartDayKey) {
-    return { coverageStart: null as Date | null, coverageEnd: null as Date | null, coverageEndBase: null as Date | null };
+    return {
+      coverageStart: null as Date | null,
+      coverageEnd: null as Date | null,
+      coverageEndBase: null as Date | null,
+    };
   }
 
   const coverageEndDayKey = computeCoverageEndDay({
@@ -144,7 +174,10 @@ export function resolveWeeklyPayAheadSequence(params: {
 
   const today = params.today ?? new Date();
   const endDayKey = params.endDate ? toBrisbaneDayKey(params.endDate) : null;
-  const sessionsPerWeek = params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1;
+
+  const sessionsPerWeek =
+    params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1;
+
   const entitlementSessions = params.durationWeeks * sessionsPerWeek;
   const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
 
@@ -175,6 +208,7 @@ export function resolveWeeklyPayAheadSequence(params: {
     });
 
     if (!endKey) break;
+
     coverageEndDayKey = endKey;
     periods += 1;
 
@@ -198,7 +232,7 @@ export function resolveWeeklyPayAheadSequence(params: {
 }
 
 export function resolveCoverageForPlan(params: {
-  enrolment: Prisma.EnrolmentGetPayload<typeof enrolmentWithPlanInclude>;
+  enrolment: EnrolmentWithPlan;
   plan: Prisma.EnrolmentPlanUncheckedCreateInput | Prisma.EnrolmentPlanGetPayload<{ include: { level: true } }>;
   holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
@@ -208,7 +242,10 @@ export function resolveCoverageForPlan(params: {
 
   if (plan.billingType === BillingType.PER_WEEK) {
     const assignedTemplates = resolveAssignedTemplates(enrolment);
-    const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+
+    const sessionsPerWeek =
+      plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+
     const { coverageStart, coverageEnd, coverageEndBase } = resolveWeeklyCoverageWindow({
       enrolment: {
         startDate: enrolment.startDate,
@@ -220,6 +257,7 @@ export function resolveCoverageForPlan(params: {
       holidays: params.holidays,
       today,
     });
+
     return { coverageStart, coverageEnd, coverageEndBase, creditsPurchased: null };
   }
 
@@ -229,8 +267,10 @@ export function resolveCoverageForPlan(params: {
   }
 
   const assignedTemplates = resolveAssignedTemplates(enrolment);
-  const anchorTemplate =
+
+  const anchorTemplate: AssignedTemplate =
     assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+
   if (!anchorTemplate?.dayOfWeek && anchorTemplate?.dayOfWeek !== 0) {
     return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
   }
