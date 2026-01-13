@@ -57,11 +57,11 @@ model Family {
   students Student[]
   invoices Invoice[]
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt @default(now())
-  payments      Payment[]
-  conversations Conversation[]
-  messages      Message[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  payments            Payment[]
+  conversations       Conversation[]
+  messages            Message[]
   accountOpeningState AccountOpeningState?
 }
 
@@ -96,8 +96,8 @@ model Student {
   level   Level?  @relation(fields: [levelId], references: [id])
   levelId String?
 
-  createdAt        DateTime          @default(now()) 
-  updatedAt        DateTime          @updatedAt @default(now())
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @default(now()) @updatedAt
   enrolments       Enrolment[]
   attendances      Attendance[]
   invoiceLineItems InvoiceLineItem[]
@@ -126,14 +126,15 @@ model ClassTemplate {
 
   timesheetEntries TeacherTimesheetEntry[]
 
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
   enrolments           Enrolment[]
   enrolmentAssignments EnrolmentClassAssignment[]
   teacherSubstitutions TeacherSubstitution[]
   attendances          Attendance[]
   cancellations        ClassCancellation[]
   enrolmentAdjustments EnrolmentAdjustment[]
+  holidays             Holiday[]
 }
 
 model TeacherSubstitution {
@@ -381,10 +382,10 @@ model Enrolment {
   creditsRemaining        Int?
   creditsBalanceCached    Int?
 
-  adjustments  EnrolmentAdjustment[]
+  adjustments      EnrolmentAdjustment[]
   classAssignments EnrolmentClassAssignment[]
-  creditEvents EnrolmentCreditEvent[]
-  coverageAudits EnrolmentCoverageAudit[]
+  creditEvents     EnrolmentCreditEvent[]
+  coverageAudits   EnrolmentCoverageAudit[]
 
   invoices Invoice[]
 
@@ -405,10 +406,10 @@ model EnrolmentCoverageAudit {
   enrolmentId String
   enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
 
-  reason EnrolmentCoverageReason
+  reason                  EnrolmentCoverageReason
   previousPaidThroughDate DateTime?
-  nextPaidThroughDate DateTime?
-  actorId String?
+  nextPaidThroughDate     DateTime?
+  actorId                 String?
 
   createdAt DateTime @default(now())
 
@@ -445,8 +446,8 @@ enum BillingType {
 model EnrolmentPlan {
   id String @id @default(cuid())
 
-  name       String
-  priceCents Int    @default(0)
+  name           String
+  priceCents     Int     @default(0)
   isSaturdayOnly Boolean @default(false)
 
   enrolmentType   EnrolmentType @default(BLOCK)
@@ -495,13 +496,14 @@ model Level {
   defaultLengthMin Int    @default(30)
   defaultCapacity  Int?
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  classTemplates ClassTemplate[]
-  enrolmentPlans EnrolmentPlan[]
-  students       Student[]
-  levelChangesTo StudentLevelChange[]   @relation("StudentLevelChangeTo")
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  classTemplates   ClassTemplate[]
+  enrolmentPlans   EnrolmentPlan[]
+  students         Student[]
+  levelChangesTo   StudentLevelChange[] @relation("StudentLevelChangeTo")
   levelChangesFrom StudentLevelChange[] @relation("StudentLevelChangeFrom")
+  holidays         Holiday[]
 }
 
 model Makeup {
@@ -655,9 +657,9 @@ model Invoice {
   amountPaidCents Int           @default(0)
   status          InvoiceStatus @default(DRAFT)
 
-  coverageStart    DateTime?
-  coverageEnd      DateTime?
-  creditsPurchased Int?
+  coverageStart         DateTime?
+  coverageEnd           DateTime?
+  creditsPurchased      Int?
   entitlementsAppliedAt DateTime?
 
   issuedAt DateTime  @default(now())
@@ -685,7 +687,7 @@ model Payment {
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   amountCents    Int
-  paidAt         DateTime @default(now())
+  paidAt         DateTime      @default(now())
   method         String?
   note           String?
   idempotencyKey String?
@@ -883,7 +885,7 @@ model StudentLevelChange {
   fromLevel   Level?  @relation("StudentLevelChangeFrom", fields: [fromLevelId], references: [id])
 
   toLevelId String
-  toLevel   Level   @relation("StudentLevelChangeTo", fields: [toLevelId], references: [id])
+  toLevel   Level  @relation("StudentLevelChangeTo", fields: [toLevelId], references: [id])
 
   effectiveDate DateTime
   note          String?
