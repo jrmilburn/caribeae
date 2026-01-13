@@ -181,7 +181,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         },
       });
 
-      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
+      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
     } else if (plan.billingType === BillingType.PER_CLASS) {
       const creditsToAdd = plan.blockClassCount ?? 1;
       if (creditsToAdd <= 0) {
@@ -212,7 +212,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         },
       });
 
-      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
+      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
     }
 
     const receiptInvoice = await tx.invoice.create({
