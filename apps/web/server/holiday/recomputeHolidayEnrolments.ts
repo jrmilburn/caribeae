@@ -1,4 +1,4 @@
-import { EnrolmentStatus } from "@prisma/client";
+import { EnrolmentStatus, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -8,20 +8,23 @@ import {
   brisbaneStartOfDay,
   toBrisbaneDayKey,
 } from "@/server/dates/brisbaneDay";
-import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import type { HolidayRange } from "./holidayUtils";
 
 const BATCH_SIZE = 25;
 
+type HolidayScope = HolidayRange & { levelId?: string | null; templateId?: string | null };
+
 export async function recomputeHolidayEnrolments(
-  ranges: HolidayRange[],
+  holidays: HolidayScope[],
   reason: "HOLIDAY_ADDED" | "HOLIDAY_REMOVED" | "HOLIDAY_UPDATED" = "HOLIDAY_UPDATED"
 ) {
-  if (!ranges.length) return;
+  if (!holidays.length) return;
 
-  const normalized = ranges.map((range) => ({
-    startDate: brisbaneStartOfDay(range.startDate),
-    endDate: brisbaneStartOfDay(range.endDate),
+  const normalized = holidays.map((holiday) => ({
+    ...holiday,
+    startDate: brisbaneStartOfDay(holiday.startDate),
+    endDate: brisbaneStartOfDay(holiday.endDate),
   }));
 
   const minStart = normalized.reduce(
@@ -43,17 +46,59 @@ export async function recomputeHolidayEnrolments(
     }
   });
 
-  if (!dayOfWeekSet.size) return;
+  const templateIds = new Set<string>();
+  const levelIds = new Set<string>();
+  let hasGlobal = false;
+
+  normalized.forEach((holiday) => {
+    if (holiday.templateId) {
+      templateIds.add(holiday.templateId);
+      return;
+    }
+    if (holiday.levelId) {
+      levelIds.add(holiday.levelId);
+      return;
+    }
+    hasGlobal = true;
+  });
+
+  const scopeClauses: Prisma.EnrolmentWhereInput[] = [];
+
+  if (templateIds.size) {
+    const ids = Array.from(templateIds);
+    scopeClauses.push({
+      OR: [{ templateId: { in: ids } }, { classAssignments: { some: { templateId: { in: ids } } } }],
+    });
+  }
+
+  if (levelIds.size) {
+    const ids = Array.from(levelIds);
+    scopeClauses.push({
+      OR: [
+        { template: { levelId: { in: ids } } },
+        { classAssignments: { some: { template: { levelId: { in: ids } } } } },
+      ],
+    });
+  }
+
+  if (hasGlobal) {
+    if (!dayOfWeekSet.size) return;
+    const days = Array.from(dayOfWeekSet);
+    scopeClauses.push({
+      OR: [
+        { template: { dayOfWeek: { in: days } } },
+        { classAssignments: { some: { template: { dayOfWeek: { in: days } } } } },
+      ],
+    });
+  }
+
+  if (!scopeClauses.length) return;
 
   const enrolments = await prisma.enrolment.findMany({
     where: {
       status: EnrolmentStatus.ACTIVE,
-      OR: [
-        { template: { dayOfWeek: { in: Array.from(dayOfWeekSet) } } },
-        { classAssignments: { some: { template: { dayOfWeek: { in: Array.from(dayOfWeekSet) } } } } },
-        { endDate: null }, { endDate: { gte: minStart } }
-      ],
       startDate: { lte: maxEnd },
+      AND: [{ OR: [{ endDate: null }, { endDate: { gte: minStart } }] }, { OR: scopeClauses }],
     },
     select: { id: true },
   });
@@ -61,7 +106,7 @@ export async function recomputeHolidayEnrolments(
   for (let i = 0; i < enrolments.length; i += BATCH_SIZE) {
     const batch = enrolments.slice(i, i + BATCH_SIZE);
     await Promise.all(
-      batch.map((enrolment) => recomputeEnrolmentCoverage(enrolment.id, reason))
+      batch.map((enrolment) => recalculateEnrolmentCoverage(enrolment.id, reason, { actorId: null }))
     );
   }
 }

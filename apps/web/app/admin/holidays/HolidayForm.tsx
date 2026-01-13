@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Holiday } from "@prisma/client";
+import type { ClassTemplate, Holiday, Level } from "@prisma/client";
 
 import {
   Dialog,
@@ -14,20 +14,45 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDateKey } from "@/lib/dateKey";
 import { createHoliday } from "@/server/holiday/createHoliday";
 import { updateHoliday } from "@/server/holiday/updateHoliday";
+
+type HolidayScope = "BUSINESS" | "LEVEL" | "TEMPLATE";
+
+type TemplateOption = ClassTemplate & { level?: Level | null };
+
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]; // 0=Mon
+
+function formatTemplateLabel(template: TemplateOption) {
+  const day = template.dayOfWeek ?? null;
+  const dayLabel = day === null ? "" : DAY_LABELS[day] ?? "";
+  const levelName = template.level?.name ? ` • ${template.level.name}` : "";
+  const name = template.name ?? "Class";
+  return `${name}${dayLabel ? ` (${dayLabel})` : ""}${levelName}`;
+}
 
 export function HolidayForm({
   open,
   onOpenChange,
   holiday,
   onSaved,
+  levels,
+  templates,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   holiday: Holiday | null;
   onSaved?: () => void;
+  levels: Level[];
+  templates: TemplateOption[];
 }) {
   const mode: "create" | "edit" = holiday ? "edit" : "create";
   const [submitting, setSubmitting] = React.useState(false);
@@ -36,6 +61,9 @@ export function HolidayForm({
     startDate: "",
     endDate: "",
     note: "",
+    scope: "BUSINESS" as HolidayScope,
+    levelId: "",
+    templateId: "",
   });
 
   React.useEffect(() => {
@@ -46,6 +74,13 @@ export function HolidayForm({
         startDate: formatDateKey(holiday.startDate),
         endDate: formatDateKey(holiday.endDate),
         note: holiday.note ?? "",
+        scope: holiday.templateId
+          ? "TEMPLATE"
+          : holiday.levelId
+            ? "LEVEL"
+            : "BUSINESS",
+        levelId: holiday.levelId ?? "",
+        templateId: holiday.templateId ?? "",
       });
     } else {
       setForm({
@@ -53,6 +88,9 @@ export function HolidayForm({
         startDate: "",
         endDate: "",
         note: "",
+        scope: "BUSINESS",
+        levelId: "",
+        templateId: "",
       });
     }
     setSubmitting(false);
@@ -61,7 +99,10 @@ export function HolidayForm({
   const canSubmit =
     form.name.trim().length > 0 &&
     form.startDate.trim().length > 0 &&
-    form.endDate.trim().length > 0;
+    form.endDate.trim().length > 0 &&
+    (form.scope === "BUSINESS" ||
+      (form.scope === "LEVEL" && form.levelId) ||
+      (form.scope === "TEMPLATE" && form.templateId));
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -72,6 +113,8 @@ export function HolidayForm({
       startDate: form.startDate,
       endDate: form.endDate,
       note: form.note.trim() || null,
+      levelId: form.scope === "LEVEL" ? form.levelId : null,
+      templateId: form.scope === "TEMPLATE" ? form.templateId : null,
     };
 
     try {
@@ -122,6 +165,72 @@ export function HolidayForm({
               />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>Scope</Label>
+            <Select
+              value={form.scope}
+              onValueChange={(value) =>
+                setForm((p) => ({
+                  ...p,
+                  scope: value as HolidayScope,
+                  levelId: value === "LEVEL" ? p.levelId : "",
+                  templateId: value === "TEMPLATE" ? p.templateId : "",
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BUSINESS">All business</SelectItem>
+                <SelectItem value="LEVEL">Level</SelectItem>
+                <SelectItem value="TEMPLATE">Specific class template</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.scope === "LEVEL" ? (
+            <div className="space-y-2">
+              <Label>Level</Label>
+              <Select
+                value={form.levelId}
+                onValueChange={(value) => setForm((p) => ({ ...p, levelId: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  {levels.map((level) => (
+                    <SelectItem key={level.id} value={level.id}>
+                      {level.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          {form.scope === "TEMPLATE" ? (
+            <div className="space-y-2">
+              <Label>Class template</Label>
+              <Select
+                value={form.templateId}
+                onValueChange={(value) => setForm((p) => ({ ...p, templateId: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {formatTemplateLabel(template)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Note</Label>
