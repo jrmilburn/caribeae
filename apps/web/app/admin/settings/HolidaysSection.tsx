@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Holiday } from "@prisma/client";
+import type { ClassTemplate, Holiday, Level } from "@prisma/client";
 import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -24,13 +24,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { deleteHoliday } from "@/server/holiday/deleteHoliday";
 import { HolidayForm } from "../holidays/HolidayForm";
+import { deleteHoliday } from "@/server/holiday/deleteHoliday";
 
-export function HolidaysSection({ holidays }: { holidays: Holiday[] }) {
+export function HolidaysSection({
+  holidays,
+  levels,
+  templates,
+}: {
+  holidays: Holiday[];
+  levels: Level[];
+  templates: Array<ClassTemplate & { level?: Level | null }>;
+}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Holiday | null>(null);
+
+  const levelMap = React.useMemo(() => new Map(levels.map((level) => [level.id, level])), [levels]);
+  const templateMap = React.useMemo(
+    () => new Map(templates.map((template) => [template.id, template])),
+    [templates]
+  );
 
   const onDelete = async (holiday: Holiday) => {
     const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
@@ -40,14 +54,25 @@ export function HolidaysSection({ holidays }: { holidays: Holiday[] }) {
   };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");
+  const scopeLabel = (holiday: Holiday) => {
+    if (holiday.templateId) {
+      const template = templateMap.get(holiday.templateId);
+      return template?.name ? `Class: ${template.name}` : "Specific class";
+    }
+    if (holiday.levelId) {
+      const level = levelMap.get(holiday.levelId);
+      return level?.name ? `Level: ${level.name}` : "Specific level";
+    }
+    return "All business";
+  };
 
   return (
-    <div>
-      <div className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
-        <div>
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
           <h2 className="text-lg font-semibold">Holidays</h2>
           <p className="text-sm text-muted-foreground">
-            Days off that extend enrolment paid-through dates.
+            Manage days off that extend enrolment paid-through dates.
           </p>
         </div>
         <Button
@@ -58,23 +83,24 @@ export function HolidaysSection({ holidays }: { holidays: Holiday[] }) {
           }}
         >
           <Plus className="mr-2 h-4 w-4" />
-          Add holiday
+          New holiday
         </Button>
       </div>
 
-      <Card className="border-l-0! shadow-none pb-0">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4">
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Holiday list</CardTitle>
         </CardHeader>
-        <CardContent className="px-2 py-0">
+        <CardContent>
           {holidays.length === 0 ? (
             <p className="text-sm text-muted-foreground">No holidays yet.</p>
           ) : (
-            <div>
+            <div className="rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Scope</TableHead>
                     <TableHead>Start date</TableHead>
                     <TableHead>End date</TableHead>
                     <TableHead>Note</TableHead>
@@ -85,6 +111,7 @@ export function HolidaysSection({ holidays }: { holidays: Holiday[] }) {
                   {holidays.map((holiday) => (
                     <TableRow key={holiday.id}>
                       <TableCell className="font-medium">{holiday.name}</TableCell>
+                      <TableCell>{scopeLabel(holiday)}</TableCell>
                       <TableCell>{fmtDate(holiday.startDate)}</TableCell>
                       <TableCell>{fmtDate(holiday.endDate)}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -133,6 +160,8 @@ export function HolidaysSection({ holidays }: { holidays: Holiday[] }) {
           if (!next) setEditing(null);
         }}
         holiday={editing}
+        levels={levels}
+        templates={templates}
         onSaved={() => router.refresh()}
       />
     </div>

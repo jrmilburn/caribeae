@@ -66,6 +66,8 @@ export type Holiday = {
   startDate: Date;
   endDate: Date;
   note?: string | null;
+  levelId?: string | null;
+  templateId?: string | null;
 };
 
 export type NormalizedScheduleClass = ScheduleClass & {
