@@ -11,6 +11,8 @@ import {
 export type HolidayRange = {
   startDate: Date;
   endDate: Date;
+  levelId?: string | null;
+  templateId?: string | null;
 };
 
 export function buildHolidayDateSet(holidays: HolidayRange[]): Set<string> {
@@ -24,6 +26,25 @@ export function buildHolidayDateSet(holidays: HolidayRange[]): Set<string> {
     }
   });
   return set;
+}
+
+export function holidayAppliesToTemplate(
+  holiday: HolidayRange,
+  template: { id: string; levelId?: string | null }
+): boolean {
+  if (holiday.templateId) {
+    return holiday.templateId === template.id;
+  }
+  if (holiday.levelId) {
+    return holiday.levelId === (template.levelId ?? null);
+  }
+  return true;
+}
+
+export function holidayRangeIncludesDayKey(holiday: HolidayRange, dayKey: string): boolean {
+  const start = toBrisbaneDayKey(holiday.startDate);
+  const end = toBrisbaneDayKey(holiday.endDate);
+  return brisbaneCompare(start, dayKey) <= 0 && brisbaneCompare(dayKey, end) <= 0;
 }
 
 export function countHolidayOccurrences(params: {

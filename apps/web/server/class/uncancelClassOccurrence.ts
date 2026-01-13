@@ -1,12 +1,13 @@
 "use server";
 
-import { EnrolmentAdjustmentType } from "@prisma/client";
+import { EnrolmentAdjustmentType, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import { removeCancellationCredit } from "@/server/billing/enrolmentBilling";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type UncancelInput = {
@@ -15,7 +16,7 @@ type UncancelInput = {
 };
 
 export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelInput) {
-  await getOrCreateUser();
+  const user = await getOrCreateUser();
   await requireAdmin();
 
   const date = parseDateKey(dateKey);
@@ -28,6 +29,23 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
     if (!cancellation) {
       return { removed: false };
     }
+
+    const enrolments = await tx.enrolment.findMany({
+      where: {
+        status: EnrolmentStatus.ACTIVE,
+        startDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+        AND: [
+          {
+            OR: [
+              { templateId },
+              { classAssignments: { some: { templateId } } },
+            ],
+          },
+        ],
+      },
+      select: { id: true },
+    });
 
     const adjustments = await tx.enrolmentAdjustment.findMany({
       where: { templateId, date, type: EnrolmentAdjustmentType.CANCELLATION_CREDIT },
@@ -43,6 +61,13 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
     });
 
     await tx.classCancellation.delete({ where: { templateId_date: { templateId, date } } });
+
+    for (const enrolment of enrolments) {
+      await recalculateEnrolmentCoverage(enrolment.id, "CANCELLATION_REVERSED", {
+        tx,
+        actorId: user.id,
+      });
+    }
 
     return { removed: true, adjustmentsRemoved: adjustments.length };
   });
