@@ -275,7 +275,7 @@ export async function createEnrolmentsFromSelection(
     }
 
     await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
-    await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: null });
+    await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: undefined });
     return [enrolment];
   });
 
