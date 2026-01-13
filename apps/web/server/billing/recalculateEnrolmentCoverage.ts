@@ -10,7 +10,6 @@ import {
 } from "@prisma/client";
 
 import {
-  addDaysUtc,
   brisbaneAddDays,
   brisbaneCompare,
   brisbaneStartOfDay,
@@ -22,6 +21,10 @@ import {
   computeBillingSnapshotForEnrolment,
   persistBillingSnapshot,
 } from "@/server/billing/enrolmentBilling";
+import {
+  computeCoverageEndDay,
+  countScheduledSessionsExcludingHolidays,
+} from "@/server/billing/coverageEngine";
 
 export class CoverageWouldShortenError extends Error {
   oldDateKey: BrisbaneDayKey | null;
@@ -39,6 +42,7 @@ type RecalculateOptions = {
   tx?: Prisma.TransactionClient;
   actorId?: string;
   confirmShorten?: boolean;
+  weeklyEntitlementSessions?: number | null;
 };
 
 // ✅ Drop-in fix: fetch full template shapes so TS matches what
@@ -220,13 +224,21 @@ export async function recalculateEnrolmentCoverage(
         select: { startDate: true, endDate: true },
       });
 
-      const closedWeeks = countFullWeekClosures({
-        startDayKey,
-        endDayKey,
-        holidays,
-      });
+      const scheduledSessions =
+        opts?.weeklyEntitlementSessions ?? countScheduledSessionsExcludingHolidays({
+          startDayKey,
+          endDayKey,
+          assignedTemplates: templates,
+          holidays,
+        });
 
-      const proposedPaidThrough = closedWeeks > 0 ? addDaysUtc(paidWindowEnd, closedWeeks * 7) : paidWindowEnd;
+      const proposedPaidThrough = computeCoverageEndDay({
+        startDayKey,
+        assignedTemplates: templates,
+        holidays,
+        entitlementSessions: scheduledSessions,
+        endDayKey,
+      });
 
       const currentPaidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;
       const currentKey = currentPaidThrough ? toBrisbaneDayKey(currentPaidThrough) : null;

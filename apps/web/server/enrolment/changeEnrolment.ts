@@ -8,6 +8,9 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getSelectionRequirement, normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { countScheduledSessionsExcludingHolidays } from "@/server/billing/coverageEngine";
+import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { validateSelection } from "@/server/enrolment/validateSelection";
 import {
   CoverageWouldShortenError,
@@ -191,6 +194,43 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         return a.id.localeCompare(b.id);
       })[0];
 
+    let weeklyEntitlementSessions: number | null = null;
+    if (enrolment.plan.billingType === "PER_WEEK") {
+      const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+      if (oldPaidThrough) {
+        const oldTemplates = enrolment.classAssignments.length
+          ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+          : enrolment.template
+            ? [enrolment.template]
+            : [];
+
+        if (oldTemplates.length) {
+          const paidWindowStart = brisbaneStartOfDay(enrolment.startDate);
+          const paidWindowEnd = brisbaneStartOfDay(oldPaidThrough);
+          const startDayKey = toBrisbaneDayKey(paidWindowStart);
+          const endDayKey = toBrisbaneDayKey(paidWindowEnd);
+
+          const templateIds = oldTemplates.map((template) => template.id);
+          const levelIds = oldTemplates.map((template) => template.levelId ?? null);
+          const holidays = await tx.holiday.findMany({
+            where: {
+              startDate: { lte: paidWindowEnd },
+              endDate: { gte: paidWindowStart },
+              ...buildHolidayScopeWhere({ templateIds, levelIds }),
+            },
+            select: { startDate: true, endDate: true },
+          });
+
+          weeklyEntitlementSessions = countScheduledSessionsExcludingHolidays({
+            startDayKey,
+            endDayKey,
+            assignedTemplates: oldTemplates,
+            holidays,
+          });
+        }
+      }
+    }
+
     // Compute the earliest template end date (if any) to cap the planned end date.
     const templateEndDates = windows.map((w) => w.endDate).filter(Boolean) as Date[];
     const earliestEnd =
@@ -221,6 +261,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       tx,
       actorId: user.id,
       confirmShorten: input.confirmShorten,
+      weeklyEntitlementSessions,
     });
 
       return {

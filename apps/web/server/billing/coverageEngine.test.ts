@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   computeCoverageEndDay,
   countScheduledSessions,
+  countScheduledSessionsExcludingHolidays,
   nextScheduledDayKey,
 } from "@/server/billing/coverageEngine";
 import { isSameBrisbaneDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
@@ -52,6 +53,17 @@ test("recompute preserves entitlement sessions after holiday added", () => {
 
   assert.strictEqual(entitlementSessions, 4);
   assert.strictEqual(paidThrough, "2026-02-09");
+});
+
+test("countScheduledSessionsExcludingHolidays skips holiday sessions", () => {
+  const sessions = countScheduledSessionsExcludingHolidays({
+    startDayKey: "2026-01-12",
+    endDayKey: "2026-02-09",
+    assignedTemplates: [{ dayOfWeek: 0 }],
+    holidays: [{ startDate: d("2026-01-26"), endDate: d("2026-01-26") }],
+  });
+
+  assert.strictEqual(sessions, 4);
 });
 
 test("multi-class plan skips holiday and counts both weekdays", () => {
