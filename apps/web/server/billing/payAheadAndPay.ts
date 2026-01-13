@@ -48,8 +48,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       include: {
         plan: true,
         student: { select: { familyId: true, name: true } },
-        template: { select: { dayOfWeek: true, name: true } },
-        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
+        template: { select: { dayOfWeek: true, name: true, startTime: true } },
+        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } },
       },
     });
 
@@ -150,6 +150,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         if (anchorTemplate?.dayOfWeek == null) {
           throw new Error("Class template missing for enrolment.");
         }
+
+        const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
 
         const coverageRange = computeBlockPayAheadCoverage({
           currentPaidThroughDate: statusMap.get(enrolment.id)?.paidThroughDate ?? enrolment.paidThroughDate,
