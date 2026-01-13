@@ -72,7 +72,7 @@ export function resolvePlannedEndDate(
 
 export function initialAccountingForPlan(plan: EnrolmentPlan, startDate: Date) {
   if (plan.billingType === BillingType.PER_WEEK) {
-    return { paidThroughDate: normalizeStartDate(startDate), creditsRemaining: null };
+    return { paidThroughDate: null, creditsRemaining: null };
   }
   return { paidThroughDate: null, creditsRemaining: 0 };
 }

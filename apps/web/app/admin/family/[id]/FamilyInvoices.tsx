@@ -831,6 +831,7 @@ function RecordPaymentSheet({
                 <TableRow>
                   <TableHead className="w-10" />
                   <TableHead>Invoice</TableHead>
+                  <TableHead>Coverage</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
                   <TableHead className="text-right">Allocate</TableHead>
                 </TableRow>
@@ -838,7 +839,7 @@ function RecordPaymentSheet({
               <TableBody>
                 {openInvoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                    <TableCell colSpan={5} className="text-sm text-muted-foreground">
                       No open invoices to allocate.
                     </TableCell>
                   </TableRow>
@@ -846,6 +847,10 @@ function RecordPaymentSheet({
                   openInvoices.map((invoice) => {
                     const balance = invoice.balanceCents;
                     const allocationValue = allocations[invoice.id] ?? "";
+                    const coverageLabel =
+                      invoice.coverageStart && invoice.coverageEnd
+                        ? `${formatDate(invoice.coverageStart)} → ${formatDate(invoice.coverageEnd)}`
+                        : "—";
                     return (
                       <TableRow key={invoice.id} className={cn(!selected.includes(invoice.id) && "opacity-60")}>
                         <TableCell>
@@ -861,6 +866,7 @@ function RecordPaymentSheet({
                           <div className="text-sm font-medium">Invoice {invoice.id}</div>
                           <div className="text-xs text-muted-foreground">Due {formatDate(invoice.dueAt)}</div>
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{coverageLabel}</TableCell>
                         <TableCell className="text-right text-sm font-semibold">{formatCurrencyFromCents(balance)}</TableCell>
                         <TableCell className="text-right">
                           <Input
