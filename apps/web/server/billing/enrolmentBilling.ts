@@ -37,7 +37,7 @@ import { addDays, isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
-import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "./occurrenceWalker";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { buildMissedOccurrencePredicate } from "./missedOccurrence";
@@ -538,6 +538,45 @@ async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: Enrolment
   });
 }
 
+function compareDayKeys(a: string | null, b: string | null) {
+  if (a === b) return 0;
+  if (a === null) return -1;
+  if (b === null) return 1;
+  return brisbaneCompare(a, b);
+}
+
+function wouldShortenPaidThrough(current: Date | null, proposed: Date | null) {
+  const currentKey = current ? toBrisbaneDayKey(brisbaneStartOfDay(current)) : null;
+  const proposedKey = proposed ? toBrisbaneDayKey(brisbaneStartOfDay(proposed)) : null;
+  return compareDayKeys(proposedKey, currentKey) < 0;
+}
+
+async function persistSnapshotWithFloor(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate,
+  snapshot: EnrolmentBillingSnapshot
+) {
+  if (
+    snapshot.billingType === BillingType.PER_CLASS &&
+    wouldShortenPaidThrough(
+      enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null,
+      snapshot.paidThroughDate
+    )
+  ) {
+    await tx.enrolment.update({
+      where: { id: enrolment.id },
+      data: {
+        nextDueDateComputed: snapshot.nextPaymentDueDate,
+        creditsBalanceCached: snapshot.remainingCredits ?? undefined,
+        creditsRemaining: snapshot.remainingCredits ?? undefined,
+      },
+    });
+    return;
+  }
+
+  await persistSnapshot(tx, snapshot);
+}
+
 export async function computeBillingSnapshotForEnrolment(
   tx: Prisma.TransactionClient,
   enrolment: EnrolmentWithPlanTemplate,
@@ -566,7 +605,7 @@ export async function recomputeEnrolmentComputedFields(
     }
 
     const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
-    await persistSnapshot(tx, snapshot);
+    await persistSnapshotWithFloor(tx, enrolment, snapshot);
     return snapshot;
   });
 }
@@ -594,7 +633,7 @@ export async function getBillingStatusForEnrolments(
     const map = new Map<string, EnrolmentBillingSnapshot>();
     for (const enrolment of enrolments) {
       const snapshot = await computeBillingSnapshot(tx, enrolment, asOf);
-      await persistSnapshot(tx, snapshot);
+      await persistSnapshotWithFloor(tx, enrolment, snapshot);
       map.set(enrolment.id, snapshot);
     }
     return map;
