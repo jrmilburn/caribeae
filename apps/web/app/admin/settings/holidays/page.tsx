@@ -1,11 +1,15 @@
 import { getHolidays } from "@/server/holiday/getHolidays";
+import { getLevels } from "@/server/level/getLevels";
+import getClassTemplates from "@/server/classTemplate/getClassTemplates";
 
 import { HolidaysSection } from "../HolidaysSection";
 
 export default async function HolidaysPage() {
-  const holidays = await getHolidays();
+  const [holidays, levels, templates] = await Promise.all([
+    getHolidays(),
+    getLevels(),
+    getClassTemplates(),
+  ]);
 
-  console.log("HOLIDAYS", holidays)
-
-  return <HolidaysSection holidays={holidays} />;
+  return <HolidaysSection holidays={holidays} levels={levels} templates={templates} />;
 }
