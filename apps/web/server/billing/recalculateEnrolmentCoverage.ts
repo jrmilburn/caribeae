@@ -42,6 +42,7 @@ type RecalculateOptions = {
   tx?: Prisma.TransactionClient;
   actorId?: string;
   confirmShorten?: boolean;
+  weeklyEntitlementSessions?: number | null;
 };
 
 // ✅ Drop-in fix: fetch full template shapes so TS matches what
@@ -223,12 +224,13 @@ export async function recalculateEnrolmentCoverage(
         select: { startDate: true, endDate: true },
       });
 
-      const scheduledSessions = countScheduledSessionsExcludingHolidays({
-        startDayKey,
-        endDayKey,
-        assignedTemplates: templates,
-        holidays,
-      });
+      const scheduledSessions =
+        opts?.weeklyEntitlementSessions ?? countScheduledSessionsExcludingHolidays({
+          startDayKey,
+          endDayKey,
+          assignedTemplates: templates,
+          holidays,
+        });
 
       const proposedPaidThrough = computeCoverageEndDay({
         startDayKey,
