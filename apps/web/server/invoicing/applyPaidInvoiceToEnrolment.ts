@@ -16,6 +16,7 @@ import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility"
 import { computeCoverageEndDay } from "@/server/billing/coverageEngine";
 import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
 import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -24,8 +25,8 @@ type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
     enrolment: {
       include: {
         plan: true;
-        template: { select: { dayOfWeek: true, name: true } };
-        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } };
+        template: { select: { dayOfWeek: true, name: true, startTime: true } };
+        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } };
       };
     };
     lineItems: { select: { kind: true; quantity: true } };
@@ -170,10 +171,37 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         });
       }
 
-      if (invoice.coverageEnd) {
-        const coverageEnd = normalizeCoverageEndForStorage(invoice.coverageEnd);
+      const assignedTemplates = enrolment.classAssignments.length
+        ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+        : enrolment.template
+          ? [enrolment.template]
+          : [];
+      const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+      if (!anchorTemplate?.dayOfWeek && anchorTemplate?.dayOfWeek !== 0) {
+        throw new Error("Class template missing for enrolment.");
+      }
+
+      const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
+      const coverageRange = computeBlockCoverageRange({
+        currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+        enrolmentStartDate: enrolment.startDate,
+        enrolmentEndDate: enrolment.endDate ?? null,
+        classTemplate: {
+          dayOfWeek: anchorTemplate.dayOfWeek,
+          startTime: anchorTemplate.startTime ?? null,
+        },
+        blockClassCount: plan.blockClassCount ?? 1,
+        creditsPurchased: creditsDelta,
+        holidays,
+      });
+
+      if (coverageRange.coverageEnd) {
+        const coverageEnd = normalizeCoverageEndForStorage(coverageRange.coverageEnd);
+        const coverageEndBase = coverageRange.coverageEndBase
+          ? normalizeCoverageEndForStorage(coverageRange.coverageEndBase)
+          : coverageEnd;
         updates.paidThroughDate = coverageEnd;
-        updates.paidThroughDateComputed = coverageEnd;
+        updates.paidThroughDateComputed = coverageEndBase;
       }
     }
 

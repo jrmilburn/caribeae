@@ -6,14 +6,15 @@ import {
   dayKeyToDate,
   nextScheduledDayKey,
 } from "@/server/billing/coverageEngine";
+import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
 import { brisbaneAddDays, brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 export const enrolmentWithPlanInclude = {
   include: {
     plan: true,
     student: { select: { familyId: true } },
-    template: { select: { dayOfWeek: true, name: true } },
-    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
+    template: { select: { dayOfWeek: true, name: true, startTime: true } },
+    classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } },
   },
 } satisfies Prisma.EnrolmentDefaultArgs;
 
@@ -226,5 +227,32 @@ export function resolveCoverageForPlan(params: {
   if (plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans with blockClassCount must be > 0.");
   }
-  return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
+
+  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  const anchorTemplate =
+    assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+  if (!anchorTemplate?.dayOfWeek && anchorTemplate?.dayOfWeek !== 0) {
+    return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
+  }
+
+  const coverageRange = computeBlockCoverageRange({
+    currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+    enrolmentStartDate: enrolment.startDate,
+    enrolmentEndDate: enrolment.endDate ?? null,
+    classTemplate: {
+      dayOfWeek: anchorTemplate.dayOfWeek,
+      startTime: anchorTemplate.startTime ?? null,
+    },
+    blockClassCount: plan.blockClassCount ?? 1,
+    blocksPurchased: 1,
+    creditsPurchased,
+    holidays: params.holidays,
+  });
+
+  return {
+    coverageStart: coverageRange.coverageStart,
+    coverageEnd: coverageRange.coverageEnd,
+    coverageEndBase: coverageRange.coverageEndBase,
+    creditsPurchased: coverageRange.creditsPurchased,
+  };
 }

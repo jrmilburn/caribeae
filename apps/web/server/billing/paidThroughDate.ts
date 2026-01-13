@@ -12,6 +12,13 @@ export type PaidThroughTemplate = {
   startTime?: number | null;
 };
 
+export type BlockCoverageResult = {
+  coverageStart: Date | null;
+  coverageEnd: Date | null;
+  coverageEndBase: Date | null;
+  creditsPurchased: number;
+};
+
 type PaidThroughOptions = {
   startDate: Date;
   endDate?: Date | null;
@@ -59,6 +66,104 @@ function nextScheduledOccurrence(cursor: Date, endDate: Date | null, skippedDate
     next = addDays(next, 7);
   }
   return null;
+}
+
+function resolveNextCoverageStart(params: {
+  startDate: Date;
+  endDate?: Date | null;
+  classTemplate: PaidThroughTemplate;
+  holidays: HolidayRange[];
+}) {
+  const next = calculatePaidThroughDate({
+    startDate: brisbaneStartOfDay(params.startDate),
+    endDate: params.endDate ? brisbaneStartOfDay(params.endDate) : null,
+    creditsToCover: 0,
+    classTemplate: params.classTemplate,
+    holidays: params.holidays,
+    cancellations: [],
+  });
+  return next.nextDueDate ?? null;
+}
+
+export function computeBlockCoverageRange(params: {
+  currentPaidThroughDate?: Date | null;
+  enrolmentStartDate: Date;
+  enrolmentEndDate?: Date | null;
+  classTemplate: PaidThroughTemplate;
+  blockClassCount: number;
+  blocksPurchased?: number;
+  creditsPurchased?: number;
+  holidays: HolidayRange[];
+}): BlockCoverageResult {
+  const blocksPurchased = Math.max(params.blocksPurchased ?? 0, 0);
+  const blockClassCount = Math.max(params.blockClassCount, 0);
+  const creditsPurchased = Math.max(
+    params.creditsPurchased ?? blockClassCount * blocksPurchased,
+    0
+  );
+
+  if (!creditsPurchased) {
+    return {
+      coverageStart: null,
+      coverageEnd: null,
+      coverageEndBase: null,
+      creditsPurchased: 0,
+    };
+  }
+
+  const baseDate = params.currentPaidThroughDate
+    ? addDays(brisbaneStartOfDay(params.currentPaidThroughDate), 1)
+    : brisbaneStartOfDay(params.enrolmentStartDate);
+
+  const coverageStart = resolveNextCoverageStart({
+    startDate: baseDate,
+    endDate: params.enrolmentEndDate ?? null,
+    classTemplate: params.classTemplate,
+    holidays: params.holidays,
+  });
+
+  if (!coverageStart) {
+    return {
+      coverageStart: null,
+      coverageEnd: null,
+      coverageEndBase: null,
+      creditsPurchased,
+    };
+  }
+
+  const projection = calculatePaidThroughDate({
+    startDate: coverageStart,
+    endDate: params.enrolmentEndDate ?? null,
+    creditsToCover: creditsPurchased,
+    classTemplate: params.classTemplate,
+    holidays: params.holidays,
+    cancellations: [],
+  });
+
+  const projectionBase = calculatePaidThroughDate({
+    startDate: coverageStart,
+    endDate: params.enrolmentEndDate ?? null,
+    creditsToCover: creditsPurchased,
+    classTemplate: params.classTemplate,
+    holidays: [],
+    cancellations: [],
+  });
+
+  if (process.env.DEBUG_BLOCK_COVERAGE === "1") {
+    console.debug(
+      `[blockCoverage] start=${toBrisbaneDayKey(coverageStart)} ` +
+        `end=${projection.paidThroughDate ? toBrisbaneDayKey(projection.paidThroughDate) : "null"} ` +
+        `baseEnd=${projectionBase.paidThroughDate ? toBrisbaneDayKey(projectionBase.paidThroughDate) : "null"} ` +
+        `credits=${creditsPurchased}`
+    );
+  }
+
+  return {
+    coverageStart,
+    coverageEnd: projection.paidThroughDate ?? null,
+    coverageEndBase: projectionBase.paidThroughDate ?? null,
+    creditsPurchased,
+  };
 }
 
 export function calculatePaidThroughDate(options: PaidThroughOptions): PaidThroughResult {
