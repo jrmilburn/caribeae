@@ -42,10 +42,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
+import { PayAheadCard } from "@/components/admin/PayAheadCard";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { recordFamilyPayment } from "@/server/billing/recordFamilyPayment";
 import { undoPayment } from "@/server/billing/undoPayment";
 import { Loader2, MoreHorizontal } from "lucide-react";
@@ -273,6 +275,7 @@ export default function FamilyInvoices({
         </div>
 
         <div className="flex items-center gap-2">
+          <PayAheadSheet familyId={family.id} />
           <RecordPaymentSheet
             familyId={family.id}
             openInvoices={openInvoices}
@@ -627,6 +630,64 @@ function Meta({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-sm font-medium">{value}</div>
     </div>
+  );
+}
+
+function PayAheadSheet({ familyId }: { familyId: string }) {
+  const router = useRouter();
+  const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [summary, setSummary] = React.useState<FamilyBillingSummary | null>(null);
+  const [isLoading, startLoading] = React.useTransition();
+
+  const loadSummary = React.useCallback(async () => {
+    try {
+      const data = await getFamilyBillingSummary(familyId);
+      setSummary(data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load billing summary.";
+      toast.error(message);
+      setSummary(null);
+    }
+  }, [familyId]);
+
+  React.useEffect(() => {
+    if (!sheetOpen) return;
+    startLoading(async () => {
+      await loadSummary();
+    });
+  }, [sheetOpen, loadSummary, startLoading]);
+
+  const handleRefresh = React.useCallback(
+    async () => {
+      await loadSummary();
+      router.refresh();
+    },
+    [loadSummary, router]
+  );
+
+  return (
+    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="sm">
+          Pay ahead
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
+        <SheetHeader>
+          <SheetTitle>Pay ahead</SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 space-y-4">
+          {isLoading && !summary ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading pay-ahead details...
+            </div>
+          ) : (
+            <PayAheadCard summary={summary} onRefresh={handleRefresh} />
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

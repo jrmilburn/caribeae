@@ -7,14 +7,14 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { cn } from "@/lib/utils";
 import { dayLabel } from "../../class/[id]/utils/time";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 type Props = {
   billing: FamilyBillingPosition;
 };
 
 function formatDate(value?: Date | null) {
-  if (!value) return "—";
-  return format(value, "d MMM yyyy");
+  return formatBrisbaneDate(value);
 }
 
 function formatTimeRange(start?: number | null, end?: number | null) {
