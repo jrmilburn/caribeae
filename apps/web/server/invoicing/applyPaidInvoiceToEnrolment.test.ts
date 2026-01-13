@@ -73,8 +73,8 @@ test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends covera
     today: start,
   });
 
-  assert.strictEqual(coverage.coverageStart, null);
-  assert.strictEqual(coverage.coverageEnd, null);
+  assert.strictEqual(coverage.coverageStart?.toISOString().slice(0, 10), "2026-02-02");
+  assert.strictEqual(coverage.coverageEnd?.toISOString().slice(0, 10), "2026-03-23");
   assert.strictEqual(coverage.creditsPurchased, 8);
 });
 

@@ -6,6 +6,7 @@ import {
   dayKeyToDate,
   nextScheduledDayKey,
 } from "@/server/billing/coverageEngine";
+import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
 import { brisbaneAddDays, brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 export const enrolmentWithPlanInclude = {
@@ -27,6 +28,22 @@ function resolveAssignedTemplates(enrolment: {
       .filter((template): template is NonNullable<typeof template> => Boolean(template));
   }
   return enrolment.template ? [enrolment.template] : [];
+}
+
+function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }>(
+  templates: T[],
+  sessionsPerWeek: number
+) {
+  if (!sessionsPerWeek || sessionsPerWeek <= 0) return templates;
+  const seen = new Set<number>();
+  const unique = templates.filter((template) => {
+    if (template.dayOfWeek == null) return false;
+    if (seen.has(template.dayOfWeek)) return false;
+    seen.add(template.dayOfWeek);
+    return true;
+  });
+  if (unique.length <= sessionsPerWeek) return unique;
+  return [...unique].sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7)).slice(0, sessionsPerWeek);
 }
 
 function resolveCoverageStartDayKey(params: {
@@ -66,6 +83,7 @@ export function resolveWeeklyCoverageWindow(params: {
 
   const sessionsPerWeek = params.plan.sessionsPerWeek && params.plan.sessionsPerWeek > 0 ? params.plan.sessionsPerWeek : 1;
   const entitlementSessions = durationWeeks * sessionsPerWeek;
+  const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
 
   const today = params.today ?? new Date();
   const enrolmentEndDayKey = params.enrolment.endDate ? toBrisbaneDayKey(params.enrolment.endDate) : null;
@@ -74,7 +92,7 @@ export function resolveWeeklyCoverageWindow(params: {
     enrolmentStart: params.enrolment.startDate,
     paidThroughDate: params.enrolment.paidThroughDate,
     today,
-    assignedTemplates: params.assignedTemplates,
+    assignedTemplates: effectiveTemplates,
     holidays: params.holidays,
     enrolmentEndDayKey,
   });
@@ -85,7 +103,7 @@ export function resolveWeeklyCoverageWindow(params: {
 
   const coverageEndDayKey = computeCoverageEndDay({
     startDayKey: coverageStartDayKey,
-    assignedTemplates: params.assignedTemplates,
+    assignedTemplates: effectiveTemplates,
     holidays: params.holidays,
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
@@ -93,7 +111,7 @@ export function resolveWeeklyCoverageWindow(params: {
 
   const coverageEndBaseDayKey = computeCoverageEndDay({
     startDayKey: coverageStartDayKey,
-    assignedTemplates: params.assignedTemplates,
+    assignedTemplates: effectiveTemplates,
     holidays: [],
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
@@ -126,13 +144,15 @@ export function resolveWeeklyPayAheadSequence(params: {
 
   const today = params.today ?? new Date();
   const endDayKey = params.endDate ? toBrisbaneDayKey(params.endDate) : null;
-  const entitlementSessions = params.durationWeeks * (params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1);
+  const sessionsPerWeek = params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1;
+  const entitlementSessions = params.durationWeeks * sessionsPerWeek;
+  const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
 
   const firstStartDayKey = resolveCoverageStartDayKey({
     enrolmentStart: params.startDate,
     paidThroughDate: params.paidThroughDate,
     today,
-    assignedTemplates: params.assignedTemplates,
+    assignedTemplates: effectiveTemplates,
     holidays: params.holidays,
     enrolmentEndDayKey: endDayKey,
   });
@@ -148,7 +168,7 @@ export function resolveWeeklyPayAheadSequence(params: {
   for (let i = 0; i < params.quantity; i += 1) {
     const endKey = computeCoverageEndDay({
       startDayKey: currentStart,
-      assignedTemplates: params.assignedTemplates,
+      assignedTemplates: effectiveTemplates,
       holidays: params.holidays,
       entitlementSessions,
       endDayKey,
@@ -161,7 +181,7 @@ export function resolveWeeklyPayAheadSequence(params: {
     const nextStartCandidate = brisbaneAddDays(endKey, 1);
     const nextStart = nextScheduledDayKey({
       startDayKey: nextStartCandidate,
-      assignedTemplates: params.assignedTemplates,
+      assignedTemplates: effectiveTemplates,
       holidays: params.holidays,
       endDayKey,
     });
@@ -188,14 +208,15 @@ export function resolveCoverageForPlan(params: {
 
   if (plan.billingType === BillingType.PER_WEEK) {
     const assignedTemplates = resolveAssignedTemplates(enrolment);
+    const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
     const { coverageStart, coverageEnd, coverageEndBase } = resolveWeeklyCoverageWindow({
       enrolment: {
         startDate: enrolment.startDate,
         endDate: enrolment.endDate,
         paidThroughDate: enrolment.paidThroughDate,
       },
-      plan: { durationWeeks: plan.durationWeeks ?? null, sessionsPerWeek: plan.sessionsPerWeek ?? null },
-      assignedTemplates,
+      plan: { durationWeeks: plan.durationWeeks ?? null, sessionsPerWeek },
+      assignedTemplates: limitWeeklyTemplates(assignedTemplates, sessionsPerWeek),
       holidays: params.holidays,
       today,
     });
@@ -206,5 +227,32 @@ export function resolveCoverageForPlan(params: {
   if (plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans with blockClassCount must be > 0.");
   }
-  return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
+
+  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  const anchorTemplate =
+    assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+  if (!anchorTemplate?.dayOfWeek && anchorTemplate?.dayOfWeek !== 0) {
+    return { coverageStart: null, coverageEnd: null, coverageEndBase: null, creditsPurchased };
+  }
+
+  const coverageRange = computeBlockCoverageRange({
+    currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+    enrolmentStartDate: enrolment.startDate,
+    enrolmentEndDate: enrolment.endDate ?? null,
+    classTemplate: {
+      dayOfWeek: anchorTemplate.dayOfWeek,
+      startTime: anchorTemplate.startTime ?? null,
+    },
+    blockClassCount: plan.blockClassCount ?? 1,
+    blocksPurchased: 1,
+    creditsPurchased,
+    holidays: params.holidays,
+  });
+
+  return {
+    coverageStart: coverageRange.coverageStart,
+    coverageEnd: coverageRange.coverageEnd,
+    coverageEndBase: coverageRange.coverageEndBase,
+    creditsPurchased: coverageRange.creditsPurchased,
+  };
 }
