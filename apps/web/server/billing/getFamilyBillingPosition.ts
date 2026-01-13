@@ -187,10 +187,10 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     const enrolments = (student.enrolments ?? []).filter((enrolment: any) => enrolment.status === "ACTIVE").map((enrolment : any) => {
       const plan = enrolment.plan ?? null;
       const snapshot = statusMap.get(enrolment.id);
-      const paidThroughDate = snapshot?.paidThroughDate ?? asDate(enrolment.paidThroughDate);
+      const paidThroughDate = asDate(enrolment.paidThroughDate);
       const creditsRemaining = snapshot?.remainingCredits ?? enrolment.creditsRemaining ?? 0;
       const latestCoverageEnd = latestCoverageMap.get(enrolment.id) ?? null;
-      const projectedCoverageEnd = snapshot?.paidThroughDate ?? paidThroughDate ?? latestCoverageEnd;
+      const projectedCoverageEnd = paidThroughDate ?? snapshot?.paidThroughDate ?? latestCoverageEnd;
       const thresholdCredits = blockSize(plan);
 
       const { status } = evaluateEntitlement({
