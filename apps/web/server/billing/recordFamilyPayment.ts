@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { createPaymentAndAllocate } from "./invoiceMutations";
+import { recordPayment } from "@/server/billing/payments/recordPayment";
 
 const allocationSchema = z.object({
   invoiceId: z.string().min(1),
@@ -18,9 +19,13 @@ const recordPaymentSchema = z
     paidAt: z.coerce.date().optional(),
     method: z.string().trim().max(100).optional(),
     note: z.string().trim().max(1000).optional(),
-    allocations: z.array(allocationSchema).nonempty(),
+    allocations: z.array(allocationSchema).optional(),
+    enrolmentId: z.string().min(1).optional(),
+    idempotencyKey: z.string().trim().min(1).optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.enrolmentId) return;
+    if (!data.allocations || data.allocations.length === 0) return;
     const allocationTotal = data.allocations.reduce((sum, a) => sum + a.amountCents, 0);
     if (allocationTotal !== data.amountCents) {
       ctx.addIssue({
@@ -39,13 +44,27 @@ export async function recordFamilyPayment(input: RecordFamilyPaymentInput) {
 
   const payload = recordPaymentSchema.parse(input);
 
+  if (payload.enrolmentId) {
+    const result = await recordPayment({
+      familyId: payload.familyId,
+      amountCents: payload.amountCents,
+      paidAt: payload.paidAt,
+      method: payload.method,
+      note: payload.note,
+      enrolmentId: payload.enrolmentId,
+      idempotencyKey: payload.idempotencyKey,
+    });
+    return result.payment;
+  }
+
   return createPaymentAndAllocate({
     familyId: payload.familyId,
     amountCents: payload.amountCents,
-    allocations: payload.allocations,
+    allocations: payload.allocations ?? [],
     paidAt: payload.paidAt,
     method: payload.method,
     note: payload.note,
+    idempotencyKey: payload.idempotencyKey,
     skipAuth: true,
   }).then((res) => res.payment);
 }

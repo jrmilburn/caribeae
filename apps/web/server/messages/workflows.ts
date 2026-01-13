@@ -6,6 +6,8 @@ import { sendSmsAction } from "./sendSms";
 import { sendEmailBroadcastAction } from "./sendEmailBroadcast";
 import { sendSingleEmail, type EmailRecipient } from "@/lib/server/email/sendgrid";
 import { InvoiceStatus, EnrolmentStatus, type Family } from "@prisma/client";
+import { isEnrolmentOverdue } from "@/server/billing/overdue";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 type Channel = "SMS" | "EMAIL";
 
@@ -41,11 +43,36 @@ async function familiesFromFilters(filters: BroadcastFilters) {
   }
 
   if (filters.invoiceStatuses?.length) {
-    const invoices = await prisma.invoice.findMany({
-      where: { status: { in: filters.invoiceStatuses } },
-      select: { familyId: true },
-    });
-    invoices.forEach((i) => familyIds.add(i.familyId));
+    const overdueRequested = filters.invoiceStatuses.includes(InvoiceStatus.OVERDUE);
+    const otherStatuses = filters.invoiceStatuses.filter((status) => status !== InvoiceStatus.OVERDUE);
+
+    if (otherStatuses.length) {
+      const invoices = await prisma.invoice.findMany({
+        where: { status: { in: otherStatuses } },
+        select: { familyId: true },
+      });
+      invoices.forEach((i) => familyIds.add(i.familyId));
+    }
+
+    if (overdueRequested) {
+      const nowBrisbane = brisbaneStartOfDay(new Date());
+      const enrolments = await prisma.enrolment.findMany({
+        where: { status: EnrolmentStatus.ACTIVE, planId: { not: null }, isBillingPrimary: true },
+        select: {
+          status: true,
+          paidThroughDate: true,
+          creditsRemaining: true,
+          creditsBalanceCached: true,
+          plan: { select: { billingType: true } },
+          student: { select: { familyId: true } },
+        },
+      });
+      enrolments.forEach((enrolment) => {
+        if (isEnrolmentOverdue(enrolment, nowBrisbane)) {
+          familyIds.add(enrolment.student.familyId);
+        }
+      });
+    }
   }
 
   if (filters.activeEnrolments) {

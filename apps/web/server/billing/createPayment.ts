@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { allocatePaymentOldestOpenInvoices, createPaymentAndAllocate } from "./invoiceMutations";
+import { recordPayment } from "@/server/billing/payments/recordPayment";
 
 const allocationSchema = z.object({
   invoiceId: z.string().min(1),
@@ -21,9 +22,11 @@ const paymentSchema = z
     allocations: z.array(allocationSchema).optional(),
     allocationMode: z.enum(["AUTO", "MANUAL"]).optional(),
     idempotencyKey: z.string().trim().min(1).optional(),
+    enrolmentId: z.string().min(1).optional(),
   })
   .superRefine((data, ctx) => {
     const mode = data.allocationMode ?? "MANUAL";
+    if (data.enrolmentId) return;
     if (mode === "AUTO" || !data.allocations || data.allocations.length === 0) return;
     const allocationTotal = data.allocations.reduce((sum, a) => sum + a.amountCents, 0);
     if (allocationTotal !== data.amountCents) {
@@ -42,6 +45,17 @@ export async function createPayment(input: CreatePaymentInput) {
   await requireAdmin();
 
   const payload = paymentSchema.parse(input);
+  if (payload.enrolmentId) {
+    return recordPayment({
+      familyId: payload.familyId,
+      amountCents: payload.amountCents,
+      paidAt: payload.paidAt,
+      method: payload.method,
+      note: payload.note,
+      enrolmentId: payload.enrolmentId,
+      idempotencyKey: payload.idempotencyKey,
+    });
+  }
   const strategy = payload.allocationMode === "AUTO" ? "oldest-open-first" : undefined;
 
   const allocations =

@@ -3,8 +3,11 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { InvoiceStatus, EnrolmentStatus, MessageChannel } from "@prisma/client";
+import { EnrolmentStatus, MessageChannel } from "@prisma/client";
 import { endOfDay, startOfDay } from "date-fns";
+
+import { isEnrolmentOverdue } from "@/server/billing/overdue";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 export type DashboardSummary = {
   families: number;
@@ -12,8 +15,7 @@ export type DashboardSummary = {
   activeEnrolments: number;
   classesToday: number;
   activeClassTemplates: number;
-  outstandingInvoices: number;
-  overdueInvoices: number;
+  overdueEnrolments: number;
   smsLast7Days: number;
   emailLast7Days: number;
 };
@@ -37,8 +39,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     activeEnrolments,
     classesToday,
     activeClassTemplates,
-    outstandingInvoices,
-    overdueInvoices,
+    overdueCandidates,
     smsLast7Days,
     emailLast7Days,
   ] = await Promise.all([
@@ -60,10 +61,16 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
         OR: [{ endDate: null }, { endDate: { gte: todayStart } }],
       },
     }),
-    prisma.invoice.count({
-      where: { status: { in: [InvoiceStatus.SENT, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] } },
+    prisma.enrolment.findMany({
+      where: { status: EnrolmentStatus.ACTIVE, planId: { not: null }, isBillingPrimary: true },
+      select: {
+        status: true,
+        paidThroughDate: true,
+        creditsRemaining: true,
+        creditsBalanceCached: true,
+        plan: { select: { billingType: true } },
+      },
     }),
-    prisma.invoice.count({ where: { status: InvoiceStatus.OVERDUE } }),
     prisma.message.count({
       where: { createdAt: { gte: sevenDaysAgo }, channel: MessageChannel.SMS },
     }),
@@ -72,14 +79,16 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     }),
   ]);
 
+  const nowBrisbane = brisbaneStartOfDay(new Date());
+  const overdueEnrolments = overdueCandidates.filter((enrolment) => isEnrolmentOverdue(enrolment, nowBrisbane)).length;
+
   return {
     families,
     students,
     activeEnrolments,
     classesToday,
     activeClassTemplates,
-    outstandingInvoices,
-    overdueInvoices,
+    overdueEnrolments,
     smsLast7Days,
     emailLast7Days,
   };

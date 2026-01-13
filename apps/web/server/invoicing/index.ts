@@ -1,19 +1,18 @@
 
-import { addDays, isAfter, startOfDay } from "date-fns";
+import { addDays } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { BillingType, InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import {
-  getEnrolmentBillingStatus,
-  refreshBillingForOpenEnrolments,
-} from "@/server/billing/enrolmentBilling";
+import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoicing/coverage";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { isEnrolmentOverdue } from "@/server/billing/overdue";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -24,7 +23,6 @@ export const OPEN_INVOICE_STATUSES = [
   InvoiceStatus.OVERDUE,
 ] as const;
 const DEFAULT_DUE_IN_DAYS = 7;
-const SWEEP_THROTTLE_MS = 15 * 60 * 1000;
 
 function asDate(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -255,160 +253,86 @@ export async function issueNextInvoiceForEnrolment(
   });
 }
 
-export async function runInvoicingSweep(params: { maxToProcess?: number }) {
+export async function runInvoicingSweep(_params?: { maxToProcess?: number }) {
   await ensureAdminAccess();
-  await refreshBillingForOpenEnrolments({ client: prisma });
-
-  const today = new Date();
-  const candidates = await prisma.enrolment.findMany({
-    where: {
-      status: "ACTIVE",
-      startDate: { lte: today },
-      planId: { not: null },
-      isBillingPrimary: true,
-      OR: [
-        { endDate: null }, { endDate: { gte: today } },
-        {
-          plan: { billingType: BillingType.PER_WEEK },
-          OR: [
-            { paidThroughDate: null },
-            { paidThroughDate: { lt: today } },
-          ],
-        },
-        {
-          plan: { billingType: BillingType.PER_CLASS },
-          OR: [
-            { creditsRemaining: null },
-            { creditsRemaining: { lte: 0 } },
-            { creditsBalanceCached: null },
-            { creditsBalanceCached: { lte: 0 } },
-          ],
-        },
-      ],
-    },
-    include: {
-      ...enrolmentWithPlanInclude.include,
-      student: {
-        select: {
-          familyId: true,
-          family: {
-            select: {
-              accountOpeningState: {
-                select: { createdAt: true },
-              },
-            },
-          },
-        },
-      },
-      invoices: {
-        select: { id: true },
-        take: 1,
-      },
-    },
-    take: params.maxToProcess ?? 200,
-  });
-
-  let created = 0;
-
-  const eligible = candidates.filter((enrolment) => {
-    const openingState = enrolment.student.family?.accountOpeningState;
-    if (!openingState) return true;
-    if (enrolment.invoices.length > 0) return true;
-    const paidThrough = enrolment.paidThroughDate;
-    const paidThroughStart = paidThrough ? startOfDay(paidThrough) : null;
-    if (paidThroughStart && !isAfter(startOfDay(today), paidThroughStart)) {
-      return false;
-    }
-    if (enrolment.plan?.billingType === BillingType.PER_WEEK) {
-      return !paidThroughStart || isAfter(startOfDay(today), paidThroughStart);
-    }
-    if (enrolment.plan?.billingType === BillingType.PER_CLASS) {
-      const creditsRemaining = enrolment.creditsBalanceCached ?? enrolment.creditsRemaining;
-      return creditsRemaining == null || creditsRemaining <= 0;
-    }
-    return enrolment.createdAt > openingState.createdAt;
-  });
-
-  for (const enrolment of eligible) {
-    const result = await issueNextInvoiceForEnrolment(enrolment.id, {
-      prismaClient: prisma,
-      enrolment,
-      skipAuth: true,
-    });
-    if (result?.created) created += 1;
-  }
-
-  return { processed: eligible.length, created };
+  return { processed: 0, created: 0 };
 }
 
 export async function maybeRunInvoicingSweep() {
   await ensureAdminAccess();
-
-  const now = new Date();
-  const shouldRun = await prisma.$transaction(async (tx) => {
-    const state = await tx.invoicingSweepState.findUnique({ where: { id: "global" } });
-    const lastRun = state?.lastRunAt ?? new Date(0);
-    if (now.getTime() - lastRun.getTime() < SWEEP_THROTTLE_MS) return false;
-
-    if (state) {
-      await tx.invoicingSweepState.update({
-        where: { id: "global" },
-        data: { lastRunAt: now },
-      });
-    } else {
-      await tx.invoicingSweepState.create({ data: { id: "global", lastRunAt: now } });
-    }
-    return true;
-  });
-
-  if (!shouldRun) return { ran: false, created: 0 };
-
-  const result = await runInvoicingSweep({ maxToProcess: 200 });
-  return { ran: true, created: result.created };
+  return { ran: false, created: 0 };
 }
 
 export async function getUnpaidFamiliesSummary() {
   await getOrCreateUser();
   await requireAdmin();
 
-  const families = await prisma.family.findMany({
+  const now = brisbaneStartOfDay(new Date());
+  const enrolments = await prisma.enrolment.findMany({
     where: {
-      invoices: {
-        some: { status: { in: [...OPEN_INVOICE_STATUSES] } },
-      },
+      status: "ACTIVE",
+      isBillingPrimary: true,
+      planId: { not: null },
     },
     select: {
       id: true,
-      name: true,
-      invoices: {
-        where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
-        select: {
-          id: true,
-          amountCents: true,
-          amountPaidCents: true,
-          status: true,
-          dueAt: true,
-        },
-        orderBy: { dueAt: "asc" },
-      },
+      status: true,
+      paidThroughDate: true,
+      creditsRemaining: true,
+      creditsBalanceCached: true,
+      plan: { select: { billingType: true, priceCents: true } },
+      student: { select: { familyId: true, family: { select: { id: true, name: true } } } },
     },
   });
 
-  const summary = families.map((family) => {
-    const amountDueCents = family.invoices.reduce(
-      (total, inv) => total + Math.max(inv.amountCents - inv.amountPaidCents, 0),
-      0
-    );
-    const latestInvoice = family.invoices[0];
-    return {
-      id: family.id,
-      name: family.name,
-      amountDueCents,
-      latestStatus: latestInvoice?.status ?? InvoiceStatus.SENT,
-      dueAt: asDate(latestInvoice?.dueAt),
-      link: `/admin/family/${family.id}`,
-    };
+  const familyMap = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      amountDueCents: number;
+      overdueEnrolments: number;
+      dueSince: Date | null;
+      lastPaidThrough: Date | null;
+    }
+  >();
+
+  enrolments.forEach((enrolment) => {
+    if (!isEnrolmentOverdue(enrolment, now)) return;
+    const family = enrolment.student.family;
+    if (!family) return;
+    const existing =
+      familyMap.get(family.id) ??
+      {
+        id: family.id,
+        name: family.name,
+        amountDueCents: 0,
+        overdueEnrolments: 0,
+        dueSince: null,
+        lastPaidThrough: null,
+      };
+
+    const price = enrolment.plan?.priceCents ?? 0;
+    const paidThrough = enrolment.plan?.billingType === BillingType.PER_WEEK ? asDate(enrolment.paidThroughDate) : null;
+
+    existing.amountDueCents += price;
+    existing.overdueEnrolments += 1;
+    if (paidThrough) {
+      if (!existing.dueSince || paidThrough.getTime() < existing.dueSince.getTime()) {
+        existing.dueSince = paidThrough;
+      }
+      if (!existing.lastPaidThrough || paidThrough.getTime() > existing.lastPaidThrough.getTime()) {
+        existing.lastPaidThrough = paidThrough;
+      }
+    }
+
+    familyMap.set(family.id, existing);
   });
+
+  const summary = Array.from(familyMap.values()).map((family) => ({
+    ...family,
+    link: `/admin/family/${family.id}`,
+  }));
 
   return {
     count: summary.length,

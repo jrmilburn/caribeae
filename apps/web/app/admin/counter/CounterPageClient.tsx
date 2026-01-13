@@ -317,6 +317,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
         note: note.trim() || undefined,
         allocations: allocationsPayload,
         allocationMode,
+        idempotencyKey: crypto.randomUUID(),
       });
 
       const unallocated = result?.unallocatedCents ?? 0;

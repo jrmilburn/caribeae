@@ -41,6 +41,8 @@ type Props = {
     method?: string | null;
     note?: string | null;
     allocations?: Array<{ invoiceId: string; amountCents: number }>;
+    enrolmentId?: string;
+    idempotencyKey?: string;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
 };
@@ -71,6 +73,8 @@ export function PaymentForm({
   );
   const [allocations, setAllocations] = React.useState<Record<string, string>>({});
   const [invoiceOptions, setInvoiceOptions] = React.useState<InvoiceOption[]>([]);
+  const [enrolmentOptions, setEnrolmentOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [applyTarget, setApplyTarget] = React.useState<string>("ALLOCATE_INVOICES");
   const [loadingInvoices, setLoadingInvoices] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -81,6 +85,7 @@ export function PaymentForm({
     setMethod(payment?.method ?? "Cash");
     setNote(payment?.note ?? "");
     setPaidOn(payment?.paidAt ? format(payment.paidAt, "yyyy-MM-dd") : new Date().toISOString().slice(0, 10));
+    setApplyTarget("ALLOCATE_INVOICES");
 
     const existingAllocations: Record<string, string> = {};
     payment?.allocations?.forEach((allocation) => {
@@ -92,6 +97,7 @@ export function PaymentForm({
   React.useEffect(() => {
     if (!open || !familyId) {
       setInvoiceOptions([]);
+      setEnrolmentOptions([]);
       return;
     }
     const previousAllocations = new Map<string, number>();
@@ -102,6 +108,12 @@ export function PaymentForm({
     getFamilyBillingData(familyId)
       .then((res) => {
         if (!active) return;
+        const enrolments =
+          res.enrolments?.map((enrolment) => ({
+            id: enrolment.id,
+            label: `${enrolment.student.name} · ${enrolment.plan?.name ?? "Plan"}`,
+          })) ?? [];
+        setEnrolmentOptions(enrolments);
         const openInvoices =
           res.openInvoices?.map((invoice) => ({
             id: invoice.id,
@@ -186,7 +198,7 @@ export function PaymentForm({
       }))
       .filter((allocation) => allocation.amountCents > 0);
 
-    if (allocationsPayload.length > 0) {
+    if (applyTarget === "ALLOCATE_INVOICES" && allocationsPayload.length > 0) {
       const allocationTotal = allocationsPayload.reduce((sum, a) => sum + a.amountCents, 0);
       if (allocationTotal !== amountCents) {
         toast.error("Allocation total must match the payment amount.");
@@ -203,6 +215,11 @@ export function PaymentForm({
       }
     }
 
+    if (applyTarget === "ALLOCATE_INVOICES" && allocationsPayload.length === 0) {
+      toast.error("Add at least one allocation or choose another apply target.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       await onSubmit({
@@ -211,7 +228,9 @@ export function PaymentForm({
         paidAt: paidOn ? new Date(paidOn) : undefined,
         method: method.trim() || undefined,
         note: note.trim() || undefined,
-        allocations: allocationsPayload,
+        allocations: applyTarget === "ALLOCATE_INVOICES" ? allocationsPayload : undefined,
+        enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+        idempotencyKey: crypto.randomUUID(),
       });
       onOpenChange(false);
     } finally {
@@ -279,77 +298,97 @@ export function PaymentForm({
             </div>
           </div>
 
-          <div className="rounded-lg border">
-            <div className="flex items-center justify-between border-b px-4 py-2 text-sm font-medium">
-              <span>Allocate to invoices</span>
-              <span className="text-muted-foreground">
-                Total {formatCurrencyFromCents(totalCents)} / Payment {formatCurrencyFromCents(dollarsToCents(amount || "0"))}
-              </span>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                  <TableHead className="text-right">Allocate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoiceOptions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-sm text-muted-foreground">
-                      {loadingInvoices ? "Loading invoices..." : "No open invoices for this family."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  invoiceOptions.map((invoice) => {
-                    const selected = allocations[invoice.id] != null;
-                    const allocationValue = allocations[invoice.id] ?? "";
-                    return (
-                      <TableRow key={invoice.id} className={cn(!selected && "opacity-70")}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-muted-foreground/60"
-                            checked={selected}
-                            onChange={() => handleToggle(invoice.id)}
-                            aria-label={`Select invoice ${invoice.id}`}
-                          />
-                        </TableCell>
-                        <TableCell className="space-y-1">
-                          <div className="text-sm font-medium">Invoice #{invoice.id}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Due {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"} · {invoice.status.toLowerCase()}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-semibold">
-                          {formatCurrencyFromCents(invoice.balanceCents)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            step="0.01"
-                            min="0"
-                            value={allocationValue}
-                            onChange={(e) =>
-                              setAllocations((prev) => ({
-                                ...prev,
-                                [invoice.id]: e.target.value,
-                              }))
-                            }
-                            disabled={!selected}
-                            className="w-28 text-right"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+          <div className="space-y-2">
+            <Label>Apply to</Label>
+            <Select value={applyTarget} onValueChange={setApplyTarget} disabled={!!payment}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select apply target" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALLOCATE_INVOICES">Allocate to invoices</SelectItem>
+                <SelectItem value="UNALLOCATED">Unallocated credit</SelectItem>
+                {enrolmentOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
+          {applyTarget === "ALLOCATE_INVOICES" ? (
+            <div className="rounded-lg border">
+              <div className="flex items-center justify-between border-b px-4 py-2 text-sm font-medium">
+                <span>Allocate to invoices</span>
+                <span className="text-muted-foreground">
+                  Total {formatCurrencyFromCents(totalCents)} / Payment {formatCurrencyFromCents(dollarsToCents(amount || "0"))}
+                </span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12"></TableHead>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead className="text-right">Allocate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoiceOptions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                        {loadingInvoices ? "Loading invoices..." : "No open invoices for this family."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    invoiceOptions.map((invoice) => {
+                      const selected = allocations[invoice.id] != null;
+                      const allocationValue = allocations[invoice.id] ?? "";
+                      return (
+                        <TableRow key={invoice.id} className={cn(!selected && "opacity-70")}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-muted-foreground/60"
+                              checked={selected}
+                              onChange={() => handleToggle(invoice.id)}
+                              aria-label={`Select invoice ${invoice.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="space-y-1">
+                            <div className="text-sm font-medium">Invoice #{invoice.id}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Due {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"} · {invoice.status.toLowerCase()}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-semibold">
+                            {formatCurrencyFromCents(invoice.balanceCents)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.01"
+                              min="0"
+                              value={allocationValue}
+                              onChange={(e) =>
+                                setAllocations((prev) => ({
+                                  ...prev,
+                                  [invoice.id]: e.target.value,
+                                }))
+                              }
+                              disabled={!selected}
+                              className="w-28 text-right"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
 
           <DialogFooter className="flex items-center justify-between gap-3 sm:justify-between">
             <div>

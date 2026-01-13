@@ -11,7 +11,7 @@ export async function getFamilyBillingData(familyId: string) {
   await getOrCreateUser();
   await requireAdmin();
 
-  const [openInvoices, payments] = await Promise.all([
+  const [openInvoices, payments, enrolments] = await Promise.all([
     prisma.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       orderBy: [{ dueAt: "asc" }, { issuedAt: "asc" }],
@@ -47,10 +47,20 @@ export async function getFamilyBillingData(familyId: string) {
         },
       },
     }),
+    prisma.enrolment.findMany({
+      where: { student: { familyId }, status: "ACTIVE", planId: { not: null } },
+      select: {
+        id: true,
+        student: { select: { name: true } },
+        plan: { select: { name: true, billingType: true } },
+      },
+      orderBy: { startDate: "asc" },
+    }),
   ]);
 
   return {
     openInvoices,
     payments,
+    enrolments,
   };
 }

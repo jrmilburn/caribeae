@@ -8,4 +8,3 @@ export const OPEN_INVOICE_STATUSES = [
 ] as const;
 
 export const DEFAULT_DUE_IN_DAYS = 7;
-export const SWEEP_THROTTLE_MS = 15 * 60 * 1000;

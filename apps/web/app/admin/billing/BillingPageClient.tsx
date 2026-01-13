@@ -167,6 +167,8 @@ export default function BillingPageClient({
         await updatePayment(editingPayment.id, normalized);
         toast.success("Payment updated.");
       } else {
+        normalized.enrolmentId = payload.enrolmentId;
+        normalized.idempotencyKey = payload.idempotencyKey;
         await createPayment(normalized);
         toast.success("Payment recorded.");
       }
@@ -370,5 +372,3 @@ function normalizeInvoicePayloadForServer(payload: any) {
     }),
   };
 }
-
-

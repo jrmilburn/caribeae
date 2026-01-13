@@ -18,9 +18,9 @@ export function BillingSummary({ summary }: { summary: Summary }) {
       helper: "Open balances across all families",
     },
     {
-      label: "Overdue invoices",
+      label: "Overdue enrolments",
       value: summary.overdueCount.toLocaleString(),
-      helper: "Marked overdue",
+      helper: "Based on paid-through dates or credits",
     },
     {
       label: "Paid last 30 days",
