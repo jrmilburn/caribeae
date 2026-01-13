@@ -17,9 +17,12 @@ import { Button } from "@/components/ui/button";
 import {
   dayOfWeekToName,
   formatScheduleWeekdayTime,
+  scheduleDateAtMinutes,
   scheduleDateKey,
+  scheduleMinutesSinceMidnight,
   ScheduleView,
   type NormalizedScheduleClass,
+  type ScheduleClassClickContext,
 } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
@@ -115,7 +118,7 @@ export function ChangeEnrolmentDialog({
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
 
-  const onClassClick = (occurrence: NormalizedScheduleClass) => {
+  const onClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -144,6 +147,9 @@ export function ChangeEnrolmentDialog({
       return;
     }
 
+    const alignedOccurrence =
+      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
+
     setSelectedTemplates((prev) => {
       const alreadySelected = Boolean(prev[occurrence.templateId]);
       if (alreadySelected) {
@@ -161,7 +167,7 @@ export function ChangeEnrolmentDialog({
         toast.error(selectionRequirement.helper);
         return prev;
       }
-      return { ...prev, [occurrence.templateId]: occurrence };
+      return { ...prev, [occurrence.templateId]: alignedOccurrence };
     });
   };
 
@@ -347,4 +353,15 @@ export function ChangeEnrolmentDialog({
       </Dialog>
     </>
   );
+}
+
+function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
+  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
+  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
+  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
+  return {
+    ...occurrence,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
 }
