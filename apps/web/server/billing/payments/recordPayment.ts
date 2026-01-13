@@ -6,8 +6,9 @@ import { normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { computeCoverageEndDay, dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
 import { brisbaneAddDays, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
-import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { normalizeCoverageEndForStorage } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -82,8 +83,8 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       include: {
         plan: true,
         student: { select: { familyId: true } },
-        template: { select: { dayOfWeek: true, name: true } },
-        classAssignments: { include: { template: { select: { dayOfWeek: true } } } },
+        template: { select: { id: true, dayOfWeek: true, name: true, levelId: true } },
+        classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, levelId: true } } } },
       },
     });
 
@@ -121,7 +122,12 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
           : [];
       const effectiveTemplates = limitWeeklyTemplates(assignedTemplates, sessionsPerWeek);
 
-      const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
+      const templateIds = effectiveTemplates.map((template) => template.id);
+      const levelIds = effectiveTemplates.map((template) => template.levelId ?? null);
+      const holidays = await tx.holiday.findMany({
+        where: buildHolidayScopeWhere({ templateIds, levelIds }),
+        select: { startDate: true, endDate: true, levelId: true, templateId: true },
+      });
       const enrolmentEndDayKey = enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null;
       const baseStartDayKey = enrolment.paidThroughDate
         ? brisbaneAddDays(toBrisbaneDayKey(enrolment.paidThroughDate), 1)
@@ -175,7 +181,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         },
       });
 
-      await recomputeEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { client: tx });
+      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
     } else if (plan.billingType === BillingType.PER_CLASS) {
       const creditsToAdd = plan.blockClassCount ?? 1;
       if (creditsToAdd <= 0) {
@@ -205,6 +211,8 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
           creditsRemaining: balance,
         },
       });
+
+      await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
     }
 
     const receiptInvoice = await tx.invoice.create({

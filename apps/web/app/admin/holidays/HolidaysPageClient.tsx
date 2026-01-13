@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Holiday } from "@prisma/client";
+import type { ClassTemplate, Holiday, Level } from "@prisma/client";
 import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -27,10 +27,24 @@ import {
 import { HolidayForm } from "./HolidayForm";
 import { deleteHoliday } from "@/server/holiday/deleteHoliday";
 
-export default function HolidaysPageClient({ holidays }: { holidays: Holiday[] }) {
+export default function HolidaysPageClient({
+  holidays,
+  levels,
+  templates,
+}: {
+  holidays: Holiday[];
+  levels: Level[];
+  templates: Array<ClassTemplate & { level?: Level | null }>;
+}) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Holiday | null>(null);
+
+  const levelMap = React.useMemo(() => new Map(levels.map((level) => [level.id, level])), [levels]);
+  const templateMap = React.useMemo(
+    () => new Map(templates.map((template) => [template.id, template])),
+    [templates]
+  );
 
   const onDelete = async (holiday: Holiday) => {
     const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
@@ -40,6 +54,17 @@ export default function HolidaysPageClient({ holidays }: { holidays: Holiday[] }
   };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");
+  const scopeLabel = (holiday: Holiday) => {
+    if (holiday.templateId) {
+      const template = templateMap.get(holiday.templateId);
+      return template?.name ? `Class: ${template.name}` : "Specific class";
+    }
+    if (holiday.levelId) {
+      const level = levelMap.get(holiday.levelId);
+      return level?.name ? `Level: ${level.name}` : "Specific level";
+    }
+    return "All business";
+  };
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
@@ -75,6 +100,7 @@ export default function HolidaysPageClient({ holidays }: { holidays: Holiday[] }
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Scope</TableHead>
                     <TableHead>Start date</TableHead>
                     <TableHead>End date</TableHead>
                     <TableHead>Note</TableHead>
@@ -85,6 +111,7 @@ export default function HolidaysPageClient({ holidays }: { holidays: Holiday[] }
                   {holidays.map((holiday) => (
                     <TableRow key={holiday.id}>
                       <TableCell className="font-medium">{holiday.name}</TableCell>
+                      <TableCell>{scopeLabel(holiday)}</TableCell>
                       <TableCell>{fmtDate(holiday.startDate)}</TableCell>
                       <TableCell>{fmtDate(holiday.endDate)}</TableCell>
                       <TableCell className="text-muted-foreground">
@@ -133,6 +160,8 @@ export default function HolidaysPageClient({ holidays }: { holidays: Holiday[] }
           if (!next) setEditing(null);
         }}
         holiday={editing}
+        levels={levels}
+        templates={templates}
         onSaved={() => router.refresh()}
       />
     </div>

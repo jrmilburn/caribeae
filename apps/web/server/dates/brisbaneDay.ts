@@ -20,6 +20,17 @@ export function brisbaneStartOfDay(value: Date | string): Date {
   return normalizeToScheduleMidnight(value, BRISBANE_TIME_ZONE);
 }
 
+export function fromBrisbaneDayKey(dayKey: BrisbaneDayKey): Date {
+  return brisbaneStartOfDay(dayKey);
+}
+
+export function addDaysUtc(date: Date, amount: number): Date {
+  const base = brisbaneStartOfDay(date);
+  const next = new Date(base);
+  next.setUTCDate(next.getUTCDate() + amount);
+  return next;
+}
+
 export function brisbaneAddDays(dayKey: BrisbaneDayKey, amount: number): BrisbaneDayKey {
   const start = brisbaneStartOfDay(dayKey);
   return toBrisbaneDayKey(addDays(start, amount));

@@ -9,7 +9,10 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getSelectionRequirement, normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
 import { validateSelection } from "@/server/enrolment/validateSelection";
-import { recomputeEnrolmentCoverage } from "@/server/billing/recomputeEnrolmentCoverage";
+import {
+  CoverageWouldShortenError,
+  recalculateEnrolmentCoverage,
+} from "@/server/billing/recalculateEnrolmentCoverage";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 
@@ -18,10 +21,11 @@ type ChangeEnrolmentInput = {
   templateIds: string[];
   startDate?: string;
   effectiveLevelId?: string | null;
+  confirmShorten?: boolean;
 };
 
 export async function changeEnrolment(input: ChangeEnrolmentInput) {
-  await getOrCreateUser();
+  const user = await getOrCreateUser();
   await requireAdmin();
 
   if (!input.templateIds.length) {
@@ -34,7 +38,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
     startDate: input.startDate ? normalizeStartDate(input.startDate) : null,
   };
 
-  const result = await prisma.$transaction(async (tx) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
     const enrolment = await tx.enrolment.findUnique({
       where: { id: payload.enrolmentId },
       include: {
@@ -212,24 +217,41 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
 
     if (!updated) throw new Error("Enrolment not found after update.");
 
-    await recomputeEnrolmentCoverage(updated.id, "CLASS_CHANGED", { client: tx });
+    await recalculateEnrolmentCoverage(updated.id, "CLASS_CHANGED", {
+      tx,
+      actorId: user.id,
+      confirmShorten: input.confirmShorten,
+    });
 
-    return {
-      enrolments: [updated],
-      templateIds: Array.from(new Set([...toAdd, ...toRemove])),
-      studentId: enrolment.studentId,
-      originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
-    };
-  });
+      return {
+        enrolments: [updated],
+        templateIds: Array.from(new Set([...toAdd, ...toRemove])),
+        studentId: enrolment.studentId,
+        originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
+      };
+    });
 
-  const allTemplates = new Set<string>([...result.templateIds, ...result.originalTemplates]);
-  result.enrolments.forEach((e) => {
-    if (e.templateId) allTemplates.add(e.templateId);
-  });
+    const allTemplates = new Set<string>([...result.templateIds, ...result.originalTemplates]);
+    result.enrolments.forEach((e) => {
+      if (e.templateId) allTemplates.add(e.templateId);
+    });
 
-  revalidatePath(`/admin/student/${result.studentId}`);
-  allTemplates.forEach((id) => revalidatePath(`/admin/class/${id}`));
-  revalidatePath("/admin/enrolment");
+    revalidatePath(`/admin/student/${result.studentId}`);
+    allTemplates.forEach((id) => revalidatePath(`/admin/class/${id}`));
+    revalidatePath("/admin/enrolment");
 
-  return result;
+    return { ok: true as const, data: result };
+  } catch (error) {
+    if (error instanceof CoverageWouldShortenError) {
+      return {
+        ok: false as const,
+        error: {
+          code: "COVERAGE_WOULD_SHORTEN",
+          oldDateKey: error.oldDateKey,
+          newDateKey: error.newDateKey,
+        },
+      };
+    }
+    throw error;
+  }
 }

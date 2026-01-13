@@ -12,6 +12,7 @@ import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBill
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -32,8 +33,8 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
     include: {
       plan: true,
       student: { select: { familyId: true } },
-      template: { select: { dayOfWeek: true, name: true } },
-      classAssignments: { include: { template: { select: { dayOfWeek: true, name: true } } } },
+      template: { select: { id: true, dayOfWeek: true, name: true, levelId: true } },
+      classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, name: true, levelId: true } } } },
     },
   });
 
@@ -56,12 +57,17 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
   const today = new Date();
   const paidThrough = billing.paidThroughDate ?? getWeeklyPaidThrough(enrolment);
   const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
-  const holidays = await prisma.holiday.findMany({ select: { startDate: true, endDate: true } });
   const assignedTemplates = enrolment.classAssignments.length
     ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
     : enrolment.template
       ? [enrolment.template]
       : [];
+  const templateIds = assignedTemplates.map((template) => template.id);
+  const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+  const holidays = await prisma.holiday.findMany({
+    where: buildHolidayScopeWhere({ templateIds, levelIds }),
+    select: { startDate: true, endDate: true, levelId: true, templateId: true },
+  });
 
   const payAhead = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,

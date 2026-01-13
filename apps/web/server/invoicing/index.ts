@@ -13,6 +13,7 @@ import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoi
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -76,15 +77,23 @@ export async function createInitialInvoiceForEnrolment(
     });
     if (existingOpen) return { invoice: existingOpen, created: false };
 
-    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
+    const assignedTemplates = enrolment.classAssignments.length
+      ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+      : enrolment.template
+        ? [enrolment.template]
+        : [];
+    const templateIds = assignedTemplates.map((template) => template.id);
+    const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+    const holidays = await tx.holiday.findMany({
+      where: buildHolidayScopeWhere({ templateIds, levelIds }),
+      select: { startDate: true, endDate: true, levelId: true, templateId: true },
+    });
     const { coverageStart, coverageEnd, creditsPurchased } = resolveCoverageForPlan({
       enrolment,
       plan: enrolment.plan,
       holidays,
       today: enrolment.startDate,
     });
-
-    console.log("COVERAGE", coverageStart, coverageEnd, creditsPurchased);
 
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
@@ -189,7 +198,17 @@ export async function issueNextInvoiceForEnrolment(
     if (openInvoice) return { invoice: openInvoice, created: false };
 
     const billingSnapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx });
-    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
+    const assignedTemplates = enrolment.classAssignments.length
+      ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+      : enrolment.template
+        ? [enrolment.template]
+        : [];
+    const templateIds = assignedTemplates.map((template) => template.id);
+    const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+    const holidays = await tx.holiday.findMany({
+      where: buildHolidayScopeWhere({ templateIds, levelIds }),
+      select: { startDate: true, endDate: true, levelId: true, templateId: true },
+    });
 
     const today = new Date();
     if (enrolment.plan.billingType === BillingType.PER_WEEK) {
