@@ -232,6 +232,7 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
         <div className="flex items-center gap-2">
           <PayAheadSheet familyId={family.id} />
           <RecordPaymentSheet
+            family={family}
             familyId={family.id}
             openInvoices={openInvoices}
             open={paymentSheetOpen}
@@ -647,11 +648,13 @@ function PayAheadSheet({ familyId }: { familyId: string }) {
 }
 
 function RecordPaymentSheet({
+  family,
   familyId,
   openInvoices,
   open,
   onOpenChange,
 }: {
+  family: FamilyWithStudentsAndInvoices;
   familyId: string;
   openInvoices: Array<
     BillingData["openInvoices"][number] & {
