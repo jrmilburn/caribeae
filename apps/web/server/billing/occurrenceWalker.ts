@@ -50,6 +50,7 @@ export function buildOccurrenceSchedule(params: {
   sessionsPerWeek: number;
   horizon?: Date | null;
   horizonBufferWeeks?: number;
+  shouldSkipOccurrence?: (params: { templateId: string; date: Date }) => boolean;
 }) {
   const start = dateOnly(params.startDate);
   const limit =
@@ -79,7 +80,7 @@ export function buildOccurrenceSchedule(params: {
     let occurrence = nextOccurrenceOnOrAfter(windowStart, template.dayOfWeek) ?? windowStart;
     while (!isAfter(occurrence, windowLimit)) {
       const key = `${template.templateId}:${dateKey(occurrence)}`;
-      if (!cancelledSet.has(key)) {
+      if (!cancelledSet.has(key) && !params.shouldSkipOccurrence?.({ templateId: template.templateId, date: occurrence })) {
         occurrences.push(occurrence);
       }
       occurrence = addDaysUtc(occurrence, 7);

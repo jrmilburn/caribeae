@@ -14,6 +14,8 @@ const payloadSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   note: z.string().optional().nullable(),
+  levelId: z.string().optional().nullable(),
+  templateId: z.string().optional().nullable(),
 });
 
 export async function updateHoliday(id: string, input: z.input<typeof payloadSchema>) {
@@ -23,6 +25,12 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
   const payload = payloadSchema.parse(input);
   const startDate = brisbaneStartOfDay(payload.startDate);
   const endDate = brisbaneStartOfDay(payload.endDate);
+  const levelId = payload.levelId?.trim() || null;
+  const templateId = payload.templateId?.trim() || null;
+
+  if (levelId && templateId) {
+    throw new Error("Select at most one holiday scope.");
+  }
 
   if (endDate < startDate) {
     throw new Error("End date must be on or after start date.");
@@ -40,13 +48,20 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
       startDate,
       endDate,
       note: payload.note?.trim() || null,
+      levelId,
+      templateId,
     },
   });
 
   await recomputeHolidayEnrolments(
     [
-      { startDate: existing.startDate, endDate: existing.endDate },
-      { startDate, endDate },
+      {
+        startDate: existing.startDate,
+        endDate: existing.endDate,
+        levelId: existing.levelId,
+        templateId: existing.templateId,
+      },
+      { startDate, endDate, levelId, templateId },
     ],
     "HOLIDAY_UPDATED"
   );

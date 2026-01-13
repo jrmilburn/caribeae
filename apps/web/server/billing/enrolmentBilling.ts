@@ -18,10 +18,10 @@
  */
 /**
  * Holiday & coverage entry points:
- * - server/holiday/createHoliday|updateHoliday|deleteHoliday -> recomputeHolidayEnrolments -> recomputeEnrolmentCoverage
- * - server/enrolment/changeEnrolment (schedule modal) -> recomputeEnrolmentCoverage
+ * - server/holiday/createHoliday|updateHoliday|deleteHoliday -> recomputeHolidayEnrolments -> recalculateEnrolmentCoverage
+ * - server/enrolment/changeEnrolment (schedule modal) -> recalculateEnrolmentCoverage
  * - server/invoicing/coverage.ts + applyPaidInvoiceToEnrolment.ts (weekly coverage windows)
- * - server/billing/recomputeEnrolmentCoverage (authoritative paidThrough recompute)
+ * - server/billing/recalculateEnrolmentCoverage (authoritative paidThrough recompute)
  *
  * Coverage meaning of paidThroughDate:
  * - The Brisbane calendar day of the last entitled session under the enrolment's current class assignments,
@@ -29,7 +29,7 @@
  *
  * Authoritative functions:
  * - computeCoverageEndDay (server/billing/coverageEngine)
- * - recomputeEnrolmentCoverage (server/billing/recomputeEnrolmentCoverage)
+ * - recalculateEnrolmentCoverage (server/billing/recalculateEnrolmentCoverage)
  * - resolveWeeklyCoverageWindow (server/invoicing/coverage)
  */
 
@@ -37,9 +37,10 @@ import { addDays, isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
-import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
-import { resolveOccurrenceHorizon } from "./occurrenceWalker";
-import { calculatePaidThroughDate, listScheduledOccurrences } from "./paidThroughDate";
+import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "./occurrenceWalker";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { buildMissedOccurrencePredicate } from "./missedOccurrence";
 
 import {
   BillingType,
@@ -74,6 +75,20 @@ export type EnrolmentBillingSnapshot = {
   remainingCredits: number | null;
   coveredOccurrences: number;
   sessionsPerWeek: number;
+};
+
+type CoverageTemplate = {
+  id: string;
+  dayOfWeek: number | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  levelId?: string | null;
+};
+
+type CoverageData = {
+  holidays: Array<{ startDate: Date; endDate: Date; levelId?: string | null; templateId?: string | null }>;
+  cancellations: Array<{ templateId: string; date: Date }>;
+  missedOccurrencePredicate: (templateId: string, dayKey: string) => boolean;
 };
 
 function withTx<T>(client: PrismaClientOrTx | undefined, fn: (tx: Prisma.TransactionClient) => Promise<T>) {
@@ -120,6 +135,68 @@ function resolveAssignedTemplates(enrolment: EnrolmentWithPlanTemplate) {
       .filter((template): template is NonNullable<typeof template> => Boolean(template));
   }
   return enrolment.template ? [enrolment.template] : [];
+}
+
+function uniqueTemplates(templates: CoverageTemplate[]) {
+  const map = new Map<string, CoverageTemplate>();
+  templates.forEach((template) => {
+    map.set(template.id, template);
+  });
+  return Array.from(map.values());
+}
+
+function buildCoverageTemplates(enrolment: EnrolmentWithPlanTemplate): CoverageTemplate[] {
+  const templates = resolveAssignedTemplates(enrolment);
+  return uniqueTemplates(
+    templates.map((template) => ({
+      id: template.id,
+      dayOfWeek: template.dayOfWeek ?? null,
+      startDate: template.startDate ?? null,
+      endDate: template.endDate ?? null,
+      levelId: template.levelId ?? null,
+    }))
+  );
+}
+
+async function loadCoverageData(
+  tx: Prisma.TransactionClient,
+  params: { templates: CoverageTemplate[]; startDate: Date; endDate: Date }
+): Promise<CoverageData> {
+  const templateIds = params.templates.map((template) => template.id);
+  const levelIds = params.templates.map((template) => template.levelId ?? null);
+
+  const holidayStart = brisbaneStartOfDay(params.startDate);
+  const holidayEnd = brisbaneStartOfDay(params.endDate);
+
+  const [holidays, cancellations] = await Promise.all([
+    tx.holiday.findMany({
+      where: {
+        startDate: { lte: holidayEnd },
+        endDate: { gte: holidayStart },
+        ...buildHolidayScopeWhere({ templateIds, levelIds }),
+      },
+      select: { startDate: true, endDate: true, levelId: true, templateId: true },
+    }),
+    tx.classCancellation.findMany({
+      where: {
+        templateId: { in: templateIds },
+        date: { gte: normalizeDate(params.startDate), lte: normalizeDate(params.endDate) },
+      },
+      select: { templateId: true, date: true },
+    }),
+  ]);
+
+  const templatesById = new Map(
+    params.templates.map((template) => [template.id, { id: template.id, levelId: template.levelId ?? null }])
+  );
+
+  const missedOccurrencePredicate = buildMissedOccurrencePredicate({
+    templatesById,
+    holidays,
+    cancellations,
+  });
+
+  return { holidays, cancellations, missedOccurrencePredicate };
 }
 
 function nextOccurrenceOnOrAfter(start: Date, templateDayOfWeek: number | null | undefined) {
@@ -203,12 +280,13 @@ async function recordCreditEvent(
 async function ensureConsumptionEvents(
   tx: Prisma.TransactionClient,
   enrolment: EnrolmentWithPlanTemplate,
-  throughDate: Date
+  throughDate: Date,
+  options?: { templates?: CoverageTemplate[]; coverageData?: CoverageData }
 ) {
   if (!enrolment.plan || !enrolment.template) return;
   if (enrolment.plan.billingType !== BillingType.PER_CLASS) return;
 
-  const assignedTemplates = resolveAssignedTemplates(enrolment);
+  const assignedTemplates = options?.templates ?? buildCoverageTemplates(enrolment);
   if (!assignedTemplates.length) return;
 
   const windowEnd = enrolment.endDate && isAfter(normalizeDate(enrolment.endDate), normalizeDate(throughDate))
@@ -219,30 +297,13 @@ async function ensureConsumptionEvents(
 
   if (isAfter(normalizeDate(enrolment.startDate), windowEnd)) return;
 
-  const templateIds = assignedTemplates.map((template) => template.id);
-  const cancellations = await tx.classCancellation.findMany({
-    where: {
-      templateId: { in: templateIds },
-      date: { gte: normalizeDate(enrolment.startDate), lte: windowEnd },
-    },
-    select: { date: true, templateId: true },
-  });
-  const cancelledByTemplate = new Map<string, Set<string>>();
-  for (const cancellation of cancellations) {
-    const set = cancelledByTemplate.get(cancellation.templateId) ?? new Set<string>();
-    set.add(dateKey(cancellation.date));
-    cancelledByTemplate.set(cancellation.templateId, set);
-  }
-
-  const holidayStart = brisbaneStartOfDay(enrolment.startDate);
-  const holidayEnd = brisbaneStartOfDay(windowEnd);
-  const holidays = await tx.holiday.findMany({
-    where: {
-      startDate: { lte: holidayEnd },
-      endDate: { gte: holidayStart },
-    },
-    select: { startDate: true, endDate: true },
-  });
+  const coverageData =
+    options?.coverageData ??
+    (await loadCoverageData(tx, {
+      templates: assignedTemplates,
+      startDate: enrolment.startDate,
+      endDate: windowEnd,
+    }));
 
   const existing = await tx.enrolmentCreditEvent.findMany({
     where: {
@@ -258,24 +319,22 @@ async function ensureConsumptionEvents(
     existingCounts.set(key, (existingCounts.get(key) ?? 0) + 1);
   });
 
+  const scheduled = buildOccurrenceSchedule({
+    startDate: enrolment.startDate,
+    endDate: windowEnd,
+    templates: assignedTemplates,
+    cancellations: [],
+    occurrencesNeeded: 1,
+    sessionsPerWeek: sessionsPerWeek(enrolment.plan),
+    horizon: windowEnd,
+    shouldSkipOccurrence: ({ templateId, date }) =>
+      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+  });
+
   const occurrenceCounts = new Map<string, number>();
-  for (const template of assignedTemplates) {
-    const cancelledSet = cancelledByTemplate.get(template.id) ?? new Set<string>();
-    const scheduled = listScheduledOccurrences({
-      startDate: enrolment.startDate,
-      endDate: windowEnd,
-      classTemplate: {
-        dayOfWeek: template.dayOfWeek ?? null,
-        startTime: template.startTime ?? null,
-      },
-      holidays,
-      cancellations: cancellations.filter((c) => c.templateId === template.id).map((c) => c.date),
-    });
-    for (const occurrence of scheduled) {
-      const key = dateKey(occurrence);
-      if (cancelledSet.has(key)) continue;
-      occurrenceCounts.set(key, (occurrenceCounts.get(key) ?? 0) + 1);
-    }
+  for (const occurrence of scheduled) {
+    const key = dateKey(occurrence);
+    occurrenceCounts.set(key, (occurrenceCounts.get(key) ?? 0) + 1);
   }
 
   const toCreate: Date[] = [];
@@ -341,28 +400,43 @@ async function computeCreditPaidThroughInternal(
 ): Promise<EnrolmentBillingSnapshot> {
   const today = normalizeDate(asOfDate);
 
-  await ensureConsumptionEvents(tx, enrolment, today);
-
-  const balance = await updateCachedCreditBalance(tx, enrolment.id, today);
-
-  const explicitPaidThrough = asDate(enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed);
-  const explicitPaidThroughNormalized = explicitPaidThrough ? normalizeDate(explicitPaidThrough) : null;
-  const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
-  const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
-  const cadence = sessionsPerWeek(enrolment.plan);
-  const assignedTemplates = resolveAssignedTemplates(enrolment);
-  const anchorTemplate = assignedTemplates[0] ?? enrolment.template;
-  if (!anchorTemplate) {
+  const assignedTemplates = buildCoverageTemplates(enrolment);
+  if (!assignedTemplates.length) {
     return {
       enrolmentId: enrolment.id,
       billingType: enrolment.plan?.billingType ?? null,
       paidThroughDate: null,
       nextPaymentDueDate: null,
-      remainingCredits: balance,
+      remainingCredits: null,
       coveredOccurrences: 0,
       sessionsPerWeek: sessionsPerWeek(enrolment.plan),
     };
   }
+
+  const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
+  const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
+  const cadence = sessionsPerWeek(enrolment.plan);
+
+  const consumptionEnd =
+    enrolment.endDate && isAfter(normalizeDate(enrolment.endDate), today)
+      ? today
+      : enrolment.endDate
+        ? normalizeDate(enrolment.endDate)
+        : today;
+
+  const coverageDataForConsumption = await loadCoverageData(tx, {
+    templates: assignedTemplates,
+    startDate: enrolment.startDate,
+    endDate: consumptionEnd,
+  });
+
+  await ensureConsumptionEvents(tx, enrolment, today, {
+    templates: assignedTemplates,
+    coverageData: coverageDataForConsumption,
+  });
+
+  const balance = await updateCachedCreditBalance(tx, enrolment.id, today);
+
   const occurrencesNeeded = Math.max(balance + cadence, 1);
   const horizon = resolveOccurrenceHorizon({
     startDate: startWindow,
@@ -370,54 +444,37 @@ async function computeCreditPaidThroughInternal(
     occurrencesNeeded,
     sessionsPerWeek: cadence,
   });
-  const cancellations = await tx.classCancellation.findMany({
-    where: {
-      templateId: anchorTemplate.id,
-      date: {
-        gte: startWindow,
-        lte: horizon,
-      },
-    },
-    select: { templateId: true, date: true },
-  });
 
-  const holidayStart = brisbaneStartOfDay(startWindow);
-  const holidayEnd = brisbaneStartOfDay(horizon);
-  const holidays = await tx.holiday.findMany({
-    where: {
-      startDate: { lte: holidayEnd },
-      endDate: { gte: holidayStart },
-    },
-    select: { startDate: true, endDate: true },
-  });
+  const coverageData =
+    !isAfter(horizon, consumptionEnd)
+      ? coverageDataForConsumption
+      : await loadCoverageData(tx, {
+          templates: assignedTemplates,
+          startDate: enrolment.startDate,
+          endDate: horizon,
+        });
 
-  const calculation = calculatePaidThroughDate({
+  const occurrences = buildOccurrenceSchedule({
     startDate: startWindow,
-    endDate: horizon,
-    creditsToCover: balance,
-    classTemplate: {
-      dayOfWeek: anchorTemplate.dayOfWeek ?? null,
-      startTime: anchorTemplate.startTime ?? null,
-    },
-    holidays,
-    cancellations: cancellations.map((c) => c.date),
+    endDate: endWindow,
+    templates: assignedTemplates,
+    cancellations: [],
+    occurrencesNeeded: Math.max(balance + cadence, 1),
+    sessionsPerWeek: cadence,
+    horizon,
+    shouldSkipOccurrence: ({ templateId, date }) =>
+      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
   });
 
-  const paidThroughDate =
-    explicitPaidThroughNormalized &&
-    (!calculation.paidThroughDate || isAfter(explicitPaidThroughNormalized, calculation.paidThroughDate))
-      ? explicitPaidThroughNormalized
-      : calculation.paidThroughDate;
-
-  const nextPaymentDueDate = calculation.nextDueDate;
+  const walk = consumeOccurrencesForCredits({ occurrences, credits: balance });
 
   return {
     enrolmentId: enrolment.id,
     billingType: enrolment.plan?.billingType ?? null,
-    paidThroughDate,
-    nextPaymentDueDate,
-    remainingCredits: calculation.remainingCredits,
-    coveredOccurrences: calculation.coveredOccurrences,
+    paidThroughDate: walk.paidThrough ? brisbaneStartOfDay(walk.paidThrough) : null,
+    nextPaymentDueDate: walk.nextDue ? brisbaneStartOfDay(walk.nextDue) : null,
+    remainingCredits: walk.remaining,
+    coveredOccurrences: walk.covered,
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
   };
 }
@@ -469,6 +526,18 @@ async function persistSnapshot(tx: Prisma.TransactionClient, snapshot: Enrolment
         : {}),
     },
   });
+}
+
+export async function computeBillingSnapshotForEnrolment(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate,
+  asOfDate: Date
+) {
+  return computeBillingSnapshot(tx, enrolment, asOfDate);
+}
+
+export async function persistBillingSnapshot(tx: Prisma.TransactionClient, snapshot: EnrolmentBillingSnapshot) {
+  await persistSnapshot(tx, snapshot);
 }
 
 export async function recomputeEnrolmentComputedFields(

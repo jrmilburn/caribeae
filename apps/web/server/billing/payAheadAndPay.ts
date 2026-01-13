@@ -13,6 +13,7 @@ import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -48,8 +49,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       include: {
         plan: true,
         student: { select: { familyId: true, name: true } },
-        template: { select: { dayOfWeek: true, name: true, startTime: true } },
-        classAssignments: { include: { template: { select: { dayOfWeek: true, name: true, startTime: true } } } },
+        template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } },
+        classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } } } },
       },
     });
 
@@ -68,7 +69,6 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
     );
 
     const today = new Date();
-    const holidays = await tx.holiday.findMany({ select: { startDate: true, endDate: true } });
     const createdInvoices: { invoice: Invoice; enrolmentId: string }[] = [];
     const issuedAt = new Date();
     const dueAt = addDays(issuedAt, 7);
@@ -100,6 +100,12 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           : enrolment.template
             ? [enrolment.template]
             : [];
+        const templateIds = assignedTemplates.map((template) => template.id);
+        const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+        const holidays = await tx.holiday.findMany({
+          where: buildHolidayScopeWhere({ templateIds, levelIds }),
+          select: { startDate: true, endDate: true, levelId: true, templateId: true },
+        });
         const payAhead = resolveWeeklyPayAheadSequence({
           startDate: enrolment.startDate,
           endDate: enrolmentEnd,
@@ -152,6 +158,12 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         }
 
         const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
+        const templateIds = [anchorTemplate.id];
+        const levelIds = [anchorTemplate.levelId ?? null];
+        const holidays = await tx.holiday.findMany({
+          where: buildHolidayScopeWhere({ templateIds, levelIds }),
+          select: { startDate: true, endDate: true, levelId: true, templateId: true },
+        });
 
         const coverageRange = computeBlockPayAheadCoverage({
           currentPaidThroughDate: statusMap.get(enrolment.id)?.paidThroughDate ?? enrolment.paidThroughDate,
