@@ -6,37 +6,34 @@ export type MissedOccurrenceTemplate = {
   levelId?: string | null;
 };
 
-type NormalizedHoliday = {
-  startDayKey: BrisbaneDayKey;
-  endDayKey: BrisbaneDayKey;
-  levelId?: string | null;
-  templateId?: string | null;
-};
+type Cancellation = { templateId: string; date: Date };
+
+function toCancellationKey(templateId: string, dayKey: BrisbaneDayKey) {
+  return `${templateId}:${dayKey}`;
+}
 
 export function buildMissedOccurrencePredicate(params: {
   templatesById: Map<string, MissedOccurrenceTemplate>;
   holidays: HolidayRange[];
-  cancellations: Array<{ templateId: string; date: Date }>;
+  cancellations: Cancellation[];
 }) {
   const cancellationSet = new Set(
-    params.cancellations.map((c) => `${c.templateId}:${toBrisbaneDayKey(c.date)}`)
+    params.cancellations.map((c) => toCancellationKey(c.templateId, toBrisbaneDayKey(c.date)))
   );
 
-  const normalizedHolidays: NormalizedHoliday[] = params.holidays.map((holiday) => ({
-    startDayKey: toBrisbaneDayKey(holiday.startDate),
-    endDayKey: toBrisbaneDayKey(holiday.endDate),
-    levelId: holiday.levelId ?? null,
-    templateId: holiday.templateId ?? null,
-  }));
-
   return (templateId: string, dayKey: BrisbaneDayKey): boolean => {
-    if (cancellationSet.has(`${templateId}:${dayKey}`)) return true;
+    if (cancellationSet.has(toCancellationKey(templateId, dayKey))) return true;
+
     const template = params.templatesById.get(templateId);
     if (!template) return false;
 
-    return normalizedHolidays.some((holiday) => {
+    return params.holidays.some((holiday) => {
       if (!holidayAppliesToTemplate(holiday, template)) return false;
-      return brisbaneCompare(holiday.startDayKey, dayKey) <= 0 && brisbaneCompare(dayKey, holiday.endDayKey) <= 0;
+
+      const startDayKey = toBrisbaneDayKey(holiday.startDate);
+      const endDayKey = toBrisbaneDayKey(holiday.endDate);
+
+      return brisbaneCompare(startDayKey, dayKey) <= 0 && brisbaneCompare(dayKey, endDayKey) <= 0;
     });
   };
 }
