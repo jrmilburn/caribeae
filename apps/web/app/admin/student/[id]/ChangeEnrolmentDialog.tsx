@@ -297,7 +297,7 @@ export function ChangeEnrolmentDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={!canSubmit}>
+              <Button onClick={() => void handleSave()} disabled={!canSubmit}>
                 {saving ? "Saving..." : "Save changes"}
               </Button>
             </div>
