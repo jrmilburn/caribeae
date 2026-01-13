@@ -1,4 +1,3 @@
-import { isAfter } from "date-fns";
 import {
   BillingType,
   EnrolmentCreditEventType,
@@ -218,7 +217,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       });
     }
 
-    await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: null });
+    await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
 
     const updatedInvoice = await tx.invoice.update({
       where: { id: invoice.id },
