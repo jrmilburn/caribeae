@@ -38,6 +38,22 @@ function resolveAssignedTemplates(enrolment: {
   return enrolment.template ? [enrolment.template] : [];
 }
 
+function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }>(
+  templates: T[],
+  sessionsPerWeek: number
+) {
+  if (!sessionsPerWeek || sessionsPerWeek <= 0) return templates;
+  const seen = new Set<number>();
+  const unique = templates.filter((template) => {
+    if (template.dayOfWeek == null) return false;
+    if (seen.has(template.dayOfWeek)) return false;
+    seen.add(template.dayOfWeek);
+    return true;
+  });
+  if (unique.length <= sessionsPerWeek) return unique;
+  return [...unique].sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7)).slice(0, sessionsPerWeek);
+}
+
 function resolveHorizonDayKey(params: {
   enrolmentStartDayKey: BrisbaneDayKey;
   enrolmentEndDayKey: BrisbaneDayKey | null;
@@ -73,8 +89,11 @@ export async function recomputeEnrolmentCoverage(
       return null;
     }
 
+    const sessionsPerWeek =
+      enrolment.plan.sessionsPerWeek && enrolment.plan.sessionsPerWeek > 0 ? enrolment.plan.sessionsPerWeek : 1;
     const assignedTemplates = resolveAssignedTemplates(enrolment);
-    if (!assignedTemplates.length) return null;
+    const effectiveTemplates = limitWeeklyTemplates(assignedTemplates, sessionsPerWeek);
+    if (!effectiveTemplates.length) return null;
 
     const basePaidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate;
     if (!basePaidThrough) return null;
@@ -88,7 +107,7 @@ export async function recomputeEnrolmentCoverage(
     const entitlementSessions = countScheduledSessions({
       startDayKey: enrolmentStartDayKey,
       endDayKey: basePaidThroughDayKey,
-      assignedTemplates,
+      assignedTemplates: effectiveTemplates,
     });
 
     const horizonDayKey = resolveHorizonDayKey({
@@ -107,7 +126,7 @@ export async function recomputeEnrolmentCoverage(
 
     const coverageEndDayKey = computeCoverageEndDay({
       startDayKey: enrolmentStartDayKey,
-      assignedTemplates,
+      assignedTemplates: effectiveTemplates,
       holidays,
       entitlementSessions,
       endDayKey: enrolmentEndDayKey,
