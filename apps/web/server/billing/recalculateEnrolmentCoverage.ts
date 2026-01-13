@@ -162,13 +162,20 @@ export async function recalculateEnrolmentCoverage(
 
     if (enrolment.plan.billingType === BillingType.PER_CLASS) {
       const snapshot = await computeBillingSnapshotForEnrolment(tx, enrolment, new Date());
-      const nextPaidThrough = snapshot.paidThroughDate ? brisbaneStartOfDay(snapshot.paidThroughDate) : null;
+      const computedPaidThrough = snapshot.paidThroughDate ? brisbaneStartOfDay(snapshot.paidThroughDate) : null;
 
       const previousKey = previousPaidThrough ? toBrisbaneDayKey(previousPaidThrough) : null;
-      const nextKey = nextPaidThrough ? toBrisbaneDayKey(nextPaidThrough) : null;
+      const computedKey = computedPaidThrough ? toBrisbaneDayKey(computedPaidThrough) : null;
 
-      if (wouldShortenCoverage(previousPaidThrough, nextPaidThrough) && !opts?.confirmShorten) {
-        throw new CoverageWouldShortenError({ oldDateKey: previousKey, newDateKey: nextKey });
+      let nextPaidThrough = computedPaidThrough;
+      if (wouldShortenCoverage(previousPaidThrough, computedPaidThrough)) {
+        if (opts?.confirmShorten) {
+          nextPaidThrough = computedPaidThrough;
+        } else if (reason === "INVOICE_APPLIED") {
+          nextPaidThrough = previousPaidThrough;
+        } else {
+          throw new CoverageWouldShortenError({ oldDateKey: previousKey, newDateKey: computedKey });
+        }
       }
 
       await persistBillingSnapshot(tx, {
