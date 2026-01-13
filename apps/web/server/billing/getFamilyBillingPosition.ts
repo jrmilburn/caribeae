@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { differenceInCalendarDays, isAfter, startOfDay } from "date-fns";
+import { differenceInCalendarDays, isAfter } from "date-fns";
 import {
   BillingType,
   PaymentStatus,
@@ -16,6 +16,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -44,10 +45,10 @@ function evaluateEntitlement(params: {
    *   - DUE_SOON when creditsRemaining is positive but at or below one block’s worth of credits.
    *   - AHEAD when more than a block is available.
    */
-  const today = startOfDay(new Date());
+  const today = brisbaneStartOfDay(new Date());
 
   if (params.billingType === BillingType.PER_WEEK) {
-    const paidThrough = params.paidThroughDate ? startOfDay(params.paidThroughDate) : null;
+    const paidThrough = params.paidThroughDate ? brisbaneStartOfDay(params.paidThroughDate) : null;
     if (!paidThrough || isAfter(today, paidThrough)) return { status: "OVERDUE" as EntitlementStatus };
     const daysAhead = differenceInCalendarDays(paidThrough, today);
     if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };
@@ -55,7 +56,7 @@ function evaluateEntitlement(params: {
   }
 
   if (params.billingType === BillingType.PER_CLASS) {
-    const paidThrough = params.paidThroughDate ? startOfDay(params.paidThroughDate) : null;
+    const paidThrough = params.paidThroughDate ? brisbaneStartOfDay(params.paidThroughDate) : null;
     if (paidThrough && !isAfter(today, paidThrough)) {
       const daysAhead = differenceInCalendarDays(paidThrough, today);
       if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };

@@ -2,7 +2,7 @@ import getFamily from "@/server/family/getFamily";
 import FamilyForm from "./FamilyForm";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import { getLevels } from "@/server/level/getLevels";
-import { getUnpaidFamiliesSummary, maybeRunInvoicingSweep } from "@/server/invoicing";
+import { getUnpaidFamiliesSummary } from "@/server/invoicing";
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
@@ -21,7 +21,6 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const search = await searchParams;
 
-  await maybeRunInvoicingSweep();
   const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition, classTemplates, openingState] =
     await Promise.all([
       getFamily(id),

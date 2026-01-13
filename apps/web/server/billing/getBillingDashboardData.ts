@@ -1,12 +1,14 @@
 "use server";
 
 import { subDays } from "date-fns";
-import { InvoiceStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { PaymentStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
+import { isEnrolmentOverdue } from "@/server/billing/overdue";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 import type { BillingDashboardFilters } from "./types";
 
@@ -67,7 +69,7 @@ export async function getBillingDashboardData(filters: BillingDashboardFilters =
   const invoiceWhere = buildInvoiceWhere(filters);
   const paymentWhere = buildPaymentWhere(filters);
 
-  const [invoices, payments, families, openAgg, overdueCount, openCount, paidLast30] =
+  const [invoices, payments, families, openAgg, openCount, paidLast30, enrolments] =
     await Promise.all([
       prisma.invoice.findMany({
         where: invoiceWhere,
@@ -115,16 +117,26 @@ export async function getBillingDashboardData(filters: BillingDashboardFilters =
         where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
       }),
       prisma.invoice.count({
-        where: { status: InvoiceStatus.OVERDUE },
-      }),
-      prisma.invoice.count({
         where: { status: { in: [...OPEN_INVOICE_STATUSES] } },
       }),
       prisma.payment.aggregate({
         _sum: { amountCents: true },
         where: { paidAt: { gte: subDays(new Date(), 30) }, status: { not: PaymentStatus.VOID } },
       }),
+      prisma.enrolment.findMany({
+        where: { status: "ACTIVE", planId: { not: null }, isBillingPrimary: true },
+        select: {
+          status: true,
+          paidThroughDate: true,
+          creditsRemaining: true,
+          creditsBalanceCached: true,
+          plan: { select: { billingType: true } },
+        },
+      }),
     ]);
+
+  const nowBrisbane = brisbaneStartOfDay(new Date());
+  const overdueCount = enrolments.filter((enrolment) => isEnrolmentOverdue(enrolment, nowBrisbane)).length;
 
   const totalOwingCents =
     Math.max((openAgg._sum.amountCents ?? 0) - (openAgg._sum.amountPaidCents ?? 0), 0) ?? 0;

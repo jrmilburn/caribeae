@@ -69,7 +69,7 @@ export default async function DashboardPage() {
     { title: "Classes today", value: summary.classesToday, href: "/admin/schedule" },
     { title: "Active enrolments", value: summary.activeEnrolments, href: "/admin/enrolment" },
     { title: "Active class templates", value: summary.activeClassTemplates, href: "/admin/class" },
-    { title: "Outstanding invoices", value: summary.outstandingInvoices, href: "/admin/billing" },
+    { title: "Overdue enrolments", value: summary.overdueEnrolments, href: "/admin/billing" },
     { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: smsHref },
     { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: emailHref },
   ];

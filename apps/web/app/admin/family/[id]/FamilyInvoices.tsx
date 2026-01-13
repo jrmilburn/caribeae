@@ -43,10 +43,10 @@ import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
+import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
-import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 import { recordFamilyPayment } from "@/server/billing/recordFamilyPayment";
 import { undoPayment } from "@/server/billing/undoPayment";
@@ -57,7 +57,6 @@ type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 type Props = {
   family: FamilyWithStudentsAndInvoices;
   billing: BillingData;
-  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
   paymentSheetOpen?: boolean;
   onPaymentSheetChange?: (open: boolean) => void;
 };
@@ -101,13 +100,7 @@ type InvoiceAllocationItem = {
   amountCents: number;
 };
 
-export default function FamilyInvoices({
-  family,
-  billing,
-  openingState,
-  paymentSheetOpen,
-  onPaymentSheetChange,
-}: Props) {
+export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPaymentSheetChange }: Props) {
   const latestPaidThrough = family.students
     .flatMap((s) => s.enrolments ?? [])
     .map((e) => e.paidThroughDate)
@@ -119,49 +112,11 @@ export default function FamilyInvoices({
 
   const router = useRouter();
 
-  const paidThroughByEnrolmentId = React.useMemo(() => {
-    const map = new Map<string, Date>();
-    family.students.forEach((student) => {
-      student.enrolments?.forEach((enrolment) => {
-        if (!enrolment.paidThroughDate) return;
-        map.set(enrolment.id, enrolment.paidThroughDate);
-      });
-    });
-    return map;
-  }, [family.students]);
-
-  const openingPaidInvoiceIds = React.useMemo(() => {
-    if (!openingState) return new Set<string>();
-    const covered = new Set<string>();
-    for (const invoice of family.invoices) {
-      if (invoice.status !== "OVERDUE") continue;
-      if (!invoice.enrolmentId || !invoice.coverageEnd) continue;
-      const paidThrough = paidThroughByEnrolmentId.get(invoice.enrolmentId);
-      if (!paidThrough) continue;
-      if (paidThrough.getTime() >= invoice.coverageEnd.getTime()) {
-        covered.add(invoice.id);
-      }
-    }
-    return covered;
-  }, [family.invoices, openingState, paidThroughByEnrolmentId]);
-
-  const getDisplayStatus = React.useCallback(
-    (invoice: { id: string; status: string }) => {
-      if (invoice.status === "OVERDUE" && openingPaidInvoiceIds.has(invoice.id)) {
-        return "PAID";
-      }
-      return invoice.status;
-    },
-    [openingPaidInvoiceIds]
-  );
-
   // --- Open invoices (for payment allocation sheet + summary) ---
-  const openInvoices = billing.openInvoices
-    .filter((invoice) => !openingPaidInvoiceIds.has(invoice.id))
-    .map((invoice) => ({
-      ...invoice,
-      balanceCents: getInvoiceBalanceCents(invoice),
-    }));
+  const openInvoices = billing.openInvoices.map((invoice) => ({
+    ...invoice,
+    balanceCents: getInvoiceBalanceCents(invoice),
+  }));
 
   const totalOwingCents = openInvoices.reduce((sum, inv) => sum + inv.balanceCents, 0);
 
@@ -214,8 +169,8 @@ export default function FamilyInvoices({
     return all.sort((a, b) => {
       const aBal = getInvoiceBalanceCents(a);
       const bBal = getInvoiceBalanceCents(b);
-      const aStatus = getDisplayStatus(a);
-      const bStatus = getDisplayStatus(b);
+      const aStatus = a.status;
+      const bStatus = b.status;
 
       // open first
       const aIsOpen = aBal > 0 && aStatus !== "PAID";
@@ -237,7 +192,7 @@ export default function FamilyInvoices({
       const biss = b.issuedAt ? new Date(b.issuedAt).getTime() : 0;
       return biss - aiss;
     });
-  }, [family.invoices, getDisplayStatus]);
+  }, [family.invoices]);
 
   const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
   const [isUndoing, startUndo] = React.useTransition();
@@ -277,6 +232,7 @@ export default function FamilyInvoices({
         <div className="flex items-center gap-2">
           <PayAheadSheet familyId={family.id} />
           <RecordPaymentSheet
+            family={family}
             familyId={family.id}
             openInvoices={openInvoices}
             open={paymentSheetOpen}
@@ -342,9 +298,9 @@ export default function FamilyInvoices({
               <Accordion type="multiple" className="divide-y">
                 {invoicesSorted.map((invoice) => {
                   const balanceCents = getInvoiceBalanceCents(invoice);
-                  const displayStatus = getDisplayStatus(invoice);
-                  const displayPaidCents = displayStatus === "PAID" ? invoice.amountCents : invoice.amountPaidCents;
-                  const displayBalanceCents = displayStatus === "PAID" ? 0 : balanceCents;
+                  const displayStatus = resolveInvoiceDisplayStatus(invoice.status);
+                  const displayPaidCents = invoice.amountPaidCents;
+                  const displayBalanceCents = balanceCents;
                   const allocations = allocationsByInvoiceId.get(invoice.id) ?? [];
 
                   const coverageLabel =
@@ -692,11 +648,13 @@ function PayAheadSheet({ familyId }: { familyId: string }) {
 }
 
 function RecordPaymentSheet({
+  family,
   familyId,
   openInvoices,
   open,
   onOpenChange,
 }: {
+  family: FamilyWithStudentsAndInvoices;
   familyId: string;
   openInvoices: Array<
     BillingData["openInvoices"][number] & {
@@ -715,10 +673,23 @@ function RecordPaymentSheet({
   const setSheetOpen = onOpenChange ?? setInternalOpen;
   const [selected, setSelected] = React.useState<string[]>([]);
   const [allocations, setAllocations] = React.useState<Record<string, string>>({});
+  const [applyTarget, setApplyTarget] = React.useState<string>("ALLOCATE_INVOICES");
+  const [amount, setAmount] = React.useState<string>("");
   const [method, setMethod] = React.useState<PaymentMethod>("Cash");
   const [note, setNote] = React.useState("");
   const [paidDate, setPaidDate] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
   const [isSubmitting, startSubmit] = React.useTransition();
+
+  const enrolmentOptions = React.useMemo(() => {
+    return family.students.flatMap((student) =>
+      (student.enrolments ?? [])
+        .filter((enrolment) => enrolment.status === "ACTIVE" && enrolment.plan?.billingType)
+        .map((enrolment) => ({
+          id: enrolment.id,
+          label: `${student.name} · ${enrolment.plan?.name ?? "Plan"}`,
+        }))
+    );
+  }, [family.students]);
 
   React.useEffect(() => {
     if (!sheetOpen) return;
@@ -732,6 +703,8 @@ function RecordPaymentSheet({
         return acc;
       }, {})
     );
+    setApplyTarget("ALLOCATE_INVOICES");
+    setAmount("");
     setMethod("Cash");
     setNote("");
     setPaidDate(new Date().toISOString().slice(0, 10));
@@ -758,7 +731,9 @@ function RecordPaymentSheet({
     invoiceId: inv.id,
     cents: dollarsToCents(allocations[inv.id] ?? "0"),
   }));
-  const totalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
+  const allocatedTotalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
+  const explicitAmountCents = dollarsToCents(amount || "0");
+  const totalCents = applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents : explicitAmountCents;
 
   const toggleSelection = (invoiceId: string) => {
     setSelected((prev) => (prev.includes(invoiceId) ? prev.filter((id) => id !== invoiceId) : [...prev, invoiceId]));
@@ -767,18 +742,24 @@ function RecordPaymentSheet({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const allocationsPayload = allocationCents.filter((a) => a.cents > 0);
-    if (allocationsPayload.length === 0 || totalCents <= 0) {
+    if (totalCents <= 0) {
       toast.error("Enter a payment amount.");
       return;
     }
 
-    const exceedsBalance = allocationCents.some((allocation) => {
-      const invoice = selectedInvoices.find((inv) => inv.id === allocation.invoiceId);
-      return invoice ? allocation.cents > invoice.balanceCents : false;
-    });
-    if (exceedsBalance) {
-      toast.error("Allocation cannot exceed the invoice balance.");
-      return;
+    if (applyTarget === "ALLOCATE_INVOICES") {
+      if (allocationsPayload.length === 0) {
+        toast.error("Add at least one allocation.");
+        return;
+      }
+      const exceedsBalance = allocationCents.some((allocation) => {
+        const invoice = selectedInvoices.find((inv) => inv.id === allocation.invoiceId);
+        return invoice ? allocation.cents > invoice.balanceCents : false;
+      });
+      if (exceedsBalance) {
+        toast.error("Allocation cannot exceed the invoice balance.");
+        return;
+      }
     }
 
     const paidAtDate = paidDate ? new Date(paidDate) : new Date();
@@ -791,10 +772,15 @@ function RecordPaymentSheet({
           paidAt: paidAtDate,
           method: method.trim() || undefined,
           note: note.trim() || undefined,
-          allocations: allocationsPayload.map((a) => ({
-            invoiceId: a.invoiceId,
-            amountCents: a.cents,
-          })),
+          allocations:
+            applyTarget === "ALLOCATE_INVOICES"
+              ? allocationsPayload.map((a) => ({
+                  invoiceId: a.invoiceId,
+                  amountCents: a.cents,
+                }))
+              : undefined,
+          enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+          idempotencyKey: crypto.randomUUID(),
         });
         toast.success("Payment recorded.");
         setSheetOpen(false);
@@ -809,7 +795,7 @@ function RecordPaymentSheet({
   return (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>
-        <Button variant="secondary" size="sm" disabled={openInvoices.length === 0}>
+        <Button variant="secondary" size="sm">
           Record payment
         </Button>
       </SheetTrigger>
@@ -820,7 +806,26 @@ function RecordPaymentSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="rounded-lg border">
+          <div className="space-y-2">
+            <Label>Apply to</Label>
+            <Select value={applyTarget} onValueChange={setApplyTarget}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select apply target" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALLOCATE_INVOICES">Allocate to invoices</SelectItem>
+                <SelectItem value="UNALLOCATED">Unallocated credit</SelectItem>
+                {enrolmentOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {applyTarget === "ALLOCATE_INVOICES" ? (
+            <div className="rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -881,6 +886,21 @@ function RecordPaymentSheet({
               </TableBody>
             </Table>
           </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

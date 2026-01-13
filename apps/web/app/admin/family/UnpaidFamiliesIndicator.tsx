@@ -40,7 +40,7 @@ export function UnpaidFamiliesIndicator({ summary }: Props) {
           <SheetHeader>
             <SheetTitle>Unpaid families</SheetTitle>
             <SheetDescription>
-              Families with open invoices (draft, sent, or overdue). Click to open the family record.
+              Families with overdue enrolments based on paid-through dates or credits.
             </SheetDescription>
           </SheetHeader>
 
@@ -49,7 +49,7 @@ export function UnpaidFamiliesIndicator({ summary }: Props) {
               <p className="text-sm text-muted-foreground">All families are up to date.</p>
             ) : (
               summary.families.map((family) => {
-                const dueDate = family.dueAt ? new Date(family.dueAt) : null;
+                const dueDate = family.dueSince ? new Date(family.dueSince) : null;
                 return (
                   <Link
                     key={family.id}
@@ -59,8 +59,8 @@ export function UnpaidFamiliesIndicator({ summary }: Props) {
                     <div className="space-y-1">
                       <div className="font-medium">{family.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {family.latestStatus}
-                        {dueDate ? ` · Due ${format(dueDate, "d MMM yyyy")}` : ""}
+                        {family.overdueEnrolments} overdue enrolment{family.overdueEnrolments === 1 ? "" : "s"}
+                        {dueDate ? ` · Last paid through ${format(dueDate, "d MMM yyyy")}` : ""}
                       </div>
                     </div>
                     <div className="text-sm font-semibold">
