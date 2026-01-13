@@ -322,7 +322,12 @@ async function ensureConsumptionEvents(
   const scheduled = buildOccurrenceSchedule({
     startDate: enrolment.startDate,
     endDate: windowEnd,
-    templates: assignedTemplates,
+    templates: assignedTemplates.map((template) => ({
+      templateId: template.id,
+      dayOfWeek: template.dayOfWeek,
+      startDate: template.startDate ?? null,
+      endDate: template.endDate ?? null,
+    })),
     cancellations: [],
     occurrencesNeeded: 1,
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
@@ -457,7 +462,12 @@ async function computeCreditPaidThroughInternal(
   const occurrences = buildOccurrenceSchedule({
     startDate: startWindow,
     endDate: endWindow,
-    templates: assignedTemplates,
+    templates: assignedTemplates.map((template) => ({
+      templateId: template.id,
+      dayOfWeek: template.dayOfWeek,
+      startDate: template.startDate ?? null,
+      endDate: template.endDate ?? null,
+    })),
     cancellations: [],
     occurrencesNeeded: Math.max(balance + cadence, 1),
     sessionsPerWeek: cadence,
