@@ -116,7 +116,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
 
   const enrolmentIds = family.students.flatMap((s : any) => s.enrolments?.map((e : any) => e.id) ?? []);
 
-  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap] = await Promise.all([
+  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays] = await Promise.all([
     client.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       include: {
@@ -165,6 +165,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       },
     }),
     getBillingStatusForEnrolments(enrolmentIds, { client }),
+    client.holiday.findMany({ select: { startDate: true, endDate: true } }),
   ]);
 
   const latestCoverageMap = new Map<string, Date | null>(
@@ -215,6 +216,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         billingType: plan?.billingType ?? null,
         planPriceCents: plan?.priceCents ?? 0,
         durationWeeks: plan?.durationWeeks ?? null,
+        sessionsPerWeek: plan?.sessionsPerWeek ?? null,
         blockClassCount: plan?.blockClassCount ?? null,
         creditsRemaining,
         paidThroughDate,
@@ -280,6 +282,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     paidThroughLatest,
     creditsTotal,
     payments,
+    holidays,
   };
 }
 

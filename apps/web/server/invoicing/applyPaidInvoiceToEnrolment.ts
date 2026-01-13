@@ -1,8 +1,7 @@
-import { addWeeks, isAfter, max as maxDate } from "date-fns";
+import { isAfter } from "date-fns";
 import {
   BillingType,
   EnrolmentCreditEventType,
-  EnrolmentType,
   InvoiceLineItemKind,
   InvoiceStatus,
   type Prisma,
@@ -62,22 +61,8 @@ function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
   return enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
 }
 
-export function resolveBlockCoverageWindow(params: {
-  enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
-  plan: { durationWeeks: number | null; blockLength: number };
-  today?: Date;
-}) {
-  const today = normalizeDate(params.today ?? new Date());
-  const durationWeeks = params.plan.durationWeeks ?? params.plan.blockLength;
-  const baseline = maxDate([
-    today,
-    normalizeDate(params.enrolment.paidThroughDate ?? params.enrolment.startDate),
-  ]);
-  let coverageEnd = addWeeks(baseline, durationWeeks);
-  if (params.enrolment.endDate && isAfter(coverageEnd, params.enrolment.endDate)) {
-    coverageEnd = normalizeDate(params.enrolment.endDate);
-  }
-  return { coverageStart: baseline, coverageEnd: normalizeDate(coverageEnd) };
+export function normalizeCoverageEndForStorage(value: Date) {
+  return brisbaneStartOfDay(value);
 }
 
 export function hasAppliedEntitlements(invoice: { entitlementsAppliedAt: Date | null }) {
@@ -183,16 +168,8 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         });
       }
 
-      if (plan.enrolmentType === EnrolmentType.BLOCK) {
-        const { coverageEnd } = resolveBlockCoverageWindow({
-          enrolment: {
-            startDate: enrolment.startDate,
-            endDate: enrolment.endDate,
-            paidThroughDate: asDate(enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed),
-          },
-          plan: { durationWeeks: plan.durationWeeks ?? null, blockLength: plan.blockLength },
-          today: paidAt,
-        });
+      if (invoice.coverageEnd) {
+        const coverageEnd = normalizeCoverageEndForStorage(invoice.coverageEnd);
         updates.paidThroughDate = coverageEnd;
         updates.paidThroughDateComputed = coverageEnd;
       }

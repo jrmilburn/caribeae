@@ -12,6 +12,7 @@ import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolment
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -143,6 +144,30 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           throw new Error("Plan is missing block or class count details.");
         }
 
+        const anchorTemplate =
+          enrolment.classAssignments.find((assignment) => assignment.template?.dayOfWeek != null)?.template ??
+          enrolment.template;
+        if (anchorTemplate?.dayOfWeek == null) {
+          throw new Error("Class template missing for enrolment.");
+        }
+
+        const coverageRange = computeBlockPayAheadCoverage({
+          currentPaidThroughDate: statusMap.get(enrolment.id)?.paidThroughDate ?? enrolment.paidThroughDate,
+          enrolmentStartDate: enrolment.startDate,
+          enrolmentEndDate: enrolmentEnd,
+          classTemplate: {
+            dayOfWeek: anchorTemplate.dayOfWeek,
+            startTime: anchorTemplate.startTime ?? null,
+          },
+          blocksPurchased: item.quantity,
+          blockClassCount: creditsPerBlock,
+          holidays,
+        });
+
+        if (!coverageRange.coverageStart || !coverageRange.coverageEnd) {
+          throw new Error("Unable to calculate pay-ahead coverage for this enrolment.");
+        }
+
         const invoice = await createInvoiceWithLineItems({
           familyId: payload.familyId,
           enrolmentId: enrolment.id,
@@ -155,6 +180,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
             },
           ],
           status: InvoiceStatus.SENT,
+          coverageStart: coverageRange.coverageStart,
+          coverageEnd: coverageRange.coverageEnd,
           creditsPurchased: creditsPerBlock * item.quantity,
           issuedAt,
           dueAt,
