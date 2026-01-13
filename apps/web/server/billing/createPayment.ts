@@ -46,7 +46,7 @@ export async function createPayment(input: CreatePaymentInput) {
 
   const payload = paymentSchema.parse(input);
   if (payload.enrolmentId) {
-    return recordPayment({
+    const result = await recordPayment({
       familyId: payload.familyId,
       amountCents: payload.amountCents,
       paidAt: payload.paidAt,
@@ -55,6 +55,13 @@ export async function createPayment(input: CreatePaymentInput) {
       enrolmentId: payload.enrolmentId,
       idempotencyKey: payload.idempotencyKey,
     });
+    return {
+      payment: result.payment,
+      allocations: [],
+      allocatedCents: result.payment.amountCents,
+      unallocatedCents: 0,
+      receiptInvoiceId: result.receiptInvoiceId,
+    };
   }
   const strategy = payload.allocationMode === "AUTO" ? "oldest-open-first" : undefined;
 
