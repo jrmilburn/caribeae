@@ -57,6 +57,30 @@ export function countScheduledSessions(params: {
   return total;
 }
 
+export function countScheduledSessionsExcludingHolidays(params: {
+  startDayKey: BrisbaneDayKey;
+  endDayKey: BrisbaneDayKey;
+  assignedTemplates: AssignedTemplateDay[];
+  holidays: HolidayRange[];
+}): number {
+  if (brisbaneCompare(params.endDayKey, params.startDayKey) < 0) return 0;
+  const weekdayCounts = buildWeekdayCounts(params.assignedTemplates);
+  if (!weekdayCounts.size) return 0;
+  const holidaySet = buildHolidayDayKeySet(params.holidays);
+
+  let total = 0;
+  let cursor = params.startDayKey;
+  while (brisbaneCompare(cursor, params.endDayKey) <= 0) {
+    if (!holidaySet.has(cursor)) {
+      const weekday = brisbaneDayOfWeek(cursor);
+      const count = weekdayCounts.get(weekday) ?? 0;
+      total += count;
+    }
+    cursor = brisbaneAddDays(cursor, 1);
+  }
+  return total;
+}
+
 export function nextScheduledDayKey(params: {
   startDayKey: BrisbaneDayKey;
   assignedTemplates: AssignedTemplateDay[];
