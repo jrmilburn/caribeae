@@ -61,6 +61,10 @@ function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
   return enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
 }
 
+export function normalizeCoverageEndForStorage(value: Date) {
+  return brisbaneStartOfDay(value);
+}
+
 export function hasAppliedEntitlements(invoice: { entitlementsAppliedAt: Date | null }) {
   return Boolean(invoice.entitlementsAppliedAt);
 }
@@ -165,7 +169,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       }
 
       if (invoice.coverageEnd) {
-        const coverageEnd = normalizeDate(invoice.coverageEnd);
+        const coverageEnd = normalizeCoverageEndForStorage(invoice.coverageEnd);
         updates.paidThroughDate = coverageEnd;
         updates.paidThroughDateComputed = coverageEnd;
       }

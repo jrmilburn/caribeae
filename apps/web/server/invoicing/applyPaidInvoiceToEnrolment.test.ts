@@ -2,8 +2,10 @@ import assert from "node:assert";
 
 import { BillingType } from "@prisma/client";
 
-import { hasAppliedEntitlements } from "./applyPaidInvoiceToEnrolment";
+import { hasAppliedEntitlements, normalizeCoverageEndForStorage } from "./applyPaidInvoiceToEnrolment";
 import { resolveCoverageForPlan, resolveWeeklyPayAheadSequence } from "./coverage";
+
+process.env.TZ = "Australia/Brisbane";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -36,7 +38,13 @@ test("Scenario C: idempotency guard prevents double application", () => {
   );
 });
 
-test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends coverage", () => {
+test("Scenario D: coverageEnd stored as Brisbane day (inclusive)", () => {
+  const input = new Date("2026-05-04T00:00:00+10:00");
+  const normalized = normalizeCoverageEndForStorage(input);
+  assert.strictEqual(normalized.toISOString().slice(0, 10), "2026-05-04");
+});
+
+test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends coverage", () => {
   const start = dAest("2026-02-02");
   const plan = {
     billingType: BillingType.PER_CLASS as const,
@@ -70,7 +78,7 @@ test("Scenario D: PER_CLASS blocks purchase credits and pay-ahead extends covera
   assert.strictEqual(coverage.creditsPurchased, 8);
 });
 
-test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", () => {
+test("Scenario F: PER_WEEK pay-ahead invoices advance coverage sequentially", () => {
   const enrolment = {
     startDate: d("2026-06-01"),
     endDate: null,
@@ -95,7 +103,7 @@ test("Scenario E: PER_WEEK pay-ahead invoices advance coverage sequentially", ()
   assert.strictEqual(sequence.coverageEnd?.toISOString().slice(0, 10), "2026-06-15");
 });
 
-test("Scenario F: long weekly duration respects quantity and clamps to end date", () => {
+test("Scenario G: long weekly duration respects quantity and clamps to end date", () => {
   const start = d("2026-07-05");
   const plan = { durationWeeks: 26, sessionsPerWeek: 1 };
 
