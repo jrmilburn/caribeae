@@ -62,21 +62,21 @@ async function main() {
       data: {
         name: "Weekly Student A",
         family: { create: { name: "Weekly Family A" } },
-        levelId: levelA.id,
+        level: { connect: { id: levelA.id } },
       },
     });
     const studentInactive = await prisma.student.create({
       data: {
         name: "Weekly Student Inactive",
         family: { create: { name: "Weekly Family Inactive" } },
-        levelId: levelA.id,
+        level: { connect: { id: levelA.id } },
       },
     });
     const studentB = await prisma.student.create({
       data: {
         name: "Weekly Student B",
         family: { create: { name: "Weekly Family B" } },
-        levelId: levelB.id,
+        level: { connect: { id: levelB.id } },
       },
     });
     createdIds.studentIds.push(studentA.id, studentInactive.id, studentB.id);
