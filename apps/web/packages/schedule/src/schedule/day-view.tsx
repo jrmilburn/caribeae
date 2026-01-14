@@ -23,6 +23,7 @@ type DayViewProps = {
   dayDate: Date;
   dayOfWeek: number;
   holidays: Map<string, Holiday[]>;
+  showHeaderDates?: boolean;
   classes: Array<
     NormalizedScheduleClass & {
       laneIndex: number;
@@ -54,6 +55,7 @@ export default function DayView(props: DayViewProps) {
     dayDate,
     dayOfWeek,
     holidays,
+    showHeaderDates = true,
     classes,
     onSlotClick,
     onClassClick,
@@ -118,7 +120,7 @@ export default function DayView(props: DayViewProps) {
     <div className="flex h-full flex-col overflow-auto">
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="text-sm font-medium text-muted-foreground">
-          {dayName} • {format(dayDate, "MMM d, yyyy")}
+          {showHeaderDates ? `${dayName} • ${format(dayDate, "MMM d, yyyy")}` : dayName}
         </div>
 
       </div>
