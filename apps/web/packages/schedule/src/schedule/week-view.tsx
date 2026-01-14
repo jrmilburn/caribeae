@@ -48,6 +48,7 @@ type WeekViewProps = {
   TIME_SLOTS: TimeSlot[];
   weekDates: Date[];
   holidays: Map<string, Holiday[]>;
+  showHeaderDates?: boolean;
   classes: Array<
     NormalizedScheduleClass & {
       laneIndex: number;
@@ -80,6 +81,7 @@ export default function WeekView(props: WeekViewProps) {
     TIME_SLOTS,
     weekDates,
     holidays,
+    showHeaderDates = true,
     classes,
     onDayHeaderClick,
     onSlotClick,
@@ -173,7 +175,7 @@ export default function WeekView(props: WeekViewProps) {
               title={`Open ${day} day view`}
             >
               <div className="text-sm font-medium">
-                {day.slice(0, 3)}, {format(weekDates[index], "MMM d")}
+                {showHeaderDates ? `${day.slice(0, 3)}, ${format(weekDates[index], "MMM d")}` : day.slice(0, 3)}
               </div>
             </button>
           ))}

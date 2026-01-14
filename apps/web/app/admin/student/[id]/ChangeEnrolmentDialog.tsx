@@ -315,6 +315,7 @@ export function ChangeEnrolmentDialog({
                   onClassClick={onClassClick}
                   allowTemplateMoves={false}
                   defaultViewMode="week"
+                  mode="enrolmentChange"
                   selectedTemplateIds={selectedTemplateIds}
                   filters={{ levelId: effectiveLevelId, teacherId: null }}
                 />
