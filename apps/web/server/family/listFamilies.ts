@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
-import type { Family } from "@prisma/client";
+import type { Family, Prisma } from "@prisma/client";
 
 export type FamilyListEntry = Pick<
   Family,
@@ -20,18 +20,16 @@ export type FamilyListEntry = Pick<
   | "address"
 >;
 
-export async function listFamilies(params: {
-  q?: string | null;
-  pageSize: number;
-  cursor?: string | null;
-}) {
+export async function listFamilies(params: { q?: string | null; pageSize: number; cursor?: string | null }) {
   await getOrCreateUser();
 
-  const where = params.q
+  // ✅ Fix: type `where` as Prisma.FamilyWhereInput so `mode` is the correct enum (QueryMode),
+  // not inferred as a plain string.
+  const where: Prisma.FamilyWhereInput | undefined = params.q
     ? {
         name: {
           contains: params.q,
-          mode: "insensitive",
+          mode: "insensitive", // now properly typed as Prisma.QueryMode
         },
       }
     : undefined;
