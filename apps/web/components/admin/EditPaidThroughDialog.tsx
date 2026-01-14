@@ -22,7 +22,7 @@ import { updateEnrolmentPaidThroughDate } from "@/server/enrolment/updateEnrolme
 
 export type EditPaidThroughDialogProps = {
   enrolmentId: string;
-  currentPaidThrough?: Date | string | null;
+  currentPaidThrough?: Date | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onUpdated?: () => void;
