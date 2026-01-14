@@ -30,6 +30,7 @@ import { dayLabel } from "../../class/[id]/utils/time";
 import { ChangeEnrolmentDialog } from "./ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 import type { Level } from "@prisma/client";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
 type EnrolmentRow = ClientStudentWithRelations["enrolments"][number];
 
@@ -66,6 +67,7 @@ export function StudentEnrolmentsTable({
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
+  const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentRow | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
 
   if (!enrolments.length) {
@@ -169,6 +171,9 @@ export function StudentEnrolmentsTable({
                         >
                           Change
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditingPaidThrough(enrolment)}>
+                          Edit paid-through
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
@@ -201,6 +206,18 @@ export function StudentEnrolmentsTable({
           }
           onChanged={() => {
             setEditing(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {editingPaidThrough ? (
+        <EditPaidThroughDialog
+          enrolmentId={editingPaidThrough.id}
+          currentPaidThrough={editingPaidThrough.paidThroughDate ?? editingPaidThrough.paidThroughDateComputed ?? null}
+          open={Boolean(editingPaidThrough)}
+          onOpenChange={(open) => !open && setEditingPaidThrough(null)}
+          onUpdated={() => {
+            setEditingPaidThrough(null);
             router.refresh();
           }}
         />
