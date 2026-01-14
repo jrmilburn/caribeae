@@ -81,6 +81,8 @@ export function ClassFilter({ options, selectedIds }: ClassFilterProps) {
       const ordered = orderedIds.filter((id) => nextIds.has(id));
       const params = new URLSearchParams(searchParams.toString());
       params.delete("classIds");
+      params.delete("cursor");
+      params.delete("cursors");
       ordered.forEach((id) => params.append("classIds", id));
 
       const qs = params.toString();

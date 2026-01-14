@@ -13,3 +13,19 @@ export type ClientTemplate = {
 
   teacherId?: string | null;
 };
+
+export type TemplateModalTemplate = {
+  id: string;
+  name: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  levelId: string;
+  teacherId: string | null;
+  startDate: Date;
+  endDate: Date | null;
+  dayOfWeek: number | null;
+  startTime: number | null;
+  endTime: number | null;
+  capacity: number | null;
+  active: boolean;
+};

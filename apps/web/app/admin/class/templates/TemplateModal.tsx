@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { ClassTemplate, Level, Teacher } from "@prisma/client";
-import type { ClientTemplate } from "@/server/classTemplate/types";
+import type { Level, Teacher } from "@prisma/client";
+import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
 import { DAY_OF_WEEK_SHORT_LABELS } from "@/packages/schedule";
 import Link from "next/link";
 
@@ -46,7 +46,7 @@ type TemplateModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
-  template?: ClassTemplate | null;
+  template?: TemplateModalTemplate | null;
   levels: Level[];
   teachers: Teacher[];
 

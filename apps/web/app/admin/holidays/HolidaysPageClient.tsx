@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { ClassTemplate, Holiday, Level } from "@prisma/client";
+import type { ClassTemplate, Level } from "@prisma/client";
 import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -26,19 +26,27 @@ import {
 
 import { HolidayForm } from "./HolidayForm";
 import { deleteHoliday } from "@/server/holiday/deleteHoliday";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import type { HolidayListItem } from "@/server/holiday/listHolidays";
 
 export default function HolidaysPageClient({
   holidays,
+  totalCount,
+  nextCursor,
+  pageSize,
   levels,
   templates,
 }: {
-  holidays: Holiday[];
+  holidays: HolidayListItem[];
+  totalCount: number;
+  nextCursor: string | null;
+  pageSize: number;
   levels: Level[];
   templates: Array<ClassTemplate & { level?: Level | null }>;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<Holiday | null>(null);
+  const [editing, setEditing] = React.useState<HolidayListItem | null>(null);
 
   const levelMap = React.useMemo(() => new Map(levels.map((level) => [level.id, level])), [levels]);
   const templateMap = React.useMemo(
@@ -46,7 +54,7 @@ export default function HolidaysPageClient({
     [templates]
   );
 
-  const onDelete = async (holiday: Holiday) => {
+  const onDelete = async (holiday: HolidayListItem) => {
     const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
     if (!ok) return;
     await deleteHoliday(holiday.id);
@@ -54,7 +62,7 @@ export default function HolidaysPageClient({
   };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");
-  const scopeLabel = (holiday: Holiday) => {
+  const scopeLabel = (holiday: HolidayListItem) => {
     if (holiday.templateId) {
       const template = templateMap.get(holiday.templateId);
       return template?.name ? `Class: ${template.name}` : "Specific class";
@@ -152,6 +160,13 @@ export default function HolidaysPageClient({
           )}
         </CardContent>
       </Card>
+
+      <AdminPagination
+        totalCount={totalCount}
+        pageSize={pageSize}
+        currentCount={holidays.length}
+        nextCursor={nextCursor}
+      />
 
       <HolidayForm
         open={open}

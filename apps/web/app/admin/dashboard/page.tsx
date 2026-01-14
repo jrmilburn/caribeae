@@ -56,7 +56,7 @@ function StatCard({
 export default async function DashboardPage() {
   const [summary, recentCommunications] = await Promise.all([
     getDashboardSummary(),
-    listCommunications({ limit : 5 }),
+    listCommunications({ pageSize: 5 }),
   ]);
 
   const commsBase = "/admin/communications";
@@ -101,11 +101,11 @@ export default async function DashboardPage() {
           <CardTitle className="text-base">Recent communications</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {recentCommunications.length === 0 ? (
+          {recentCommunications.items.length === 0 ? (
             <div className="text-sm text-muted-foreground">No communications yet.</div>
           ) : (
             <div className="space-y-3">
-              {recentCommunications.map((comm) => (
+              {recentCommunications.items.map((comm) => (
                 <div
                   key={comm.id}
                   className="flex flex-col gap-1 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between"

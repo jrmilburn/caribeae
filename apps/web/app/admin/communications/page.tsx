@@ -6,6 +6,8 @@ import { listCommunications } from "@/server/communication/listCommunications";
 import { getClassFilterOptions } from "@/server/communication/getClassFilterOptions";
 import { ClassFilter } from "./ClassFilter";
 import { MessageChannel, MessageDirection, MessageStatus } from "@prisma/client";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { parsePaginationSearchParams } from "@/server/pagination";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -23,8 +25,13 @@ function asEnum<T extends string>(value: string | undefined, allowed: readonly T
   return allowed.includes(value as T) ? (value as T) : null;
 }
 
-function buildHref(base: string, next: Record<string, string | string[] | null | undefined>) {
+function buildHref(
+  base: string,
+  next: Record<string, string | string[] | null | undefined>,
+  pageSize?: number
+) {
   const sp = new URLSearchParams();
+  if (pageSize) sp.set("pageSize", String(pageSize));
   for (const [k, v] of Object.entries(next)) {
     if (Array.isArray(v)) {
       for (const val of v) {
@@ -70,7 +77,15 @@ function filtersEqual(a: CurrentFilters, b: CurrentFilters) {
   );
 }
 
-function FiltersRow({ current, base }: { current: CurrentFilters; base: string }) {
+function FiltersRow({
+  current,
+  base,
+  pageSize,
+}: {
+  current: CurrentFilters;
+  base: string;
+  pageSize: number;
+}) {
   const chips: Array<{ label: string; next: Partial<CurrentFilters> }> = [
     {
       label: "All",
@@ -90,14 +105,18 @@ function FiltersRow({ current, base }: { current: CurrentFilters; base: string }
     <div className="flex flex-wrap items-center gap-2">
       {chips.map((c) => {
         const merged = mergeFilters(current, c.next);
-        const href = buildHref(base, {
-          channel: merged.channel ?? null,
-          status: merged.status ?? null,
-          direction: merged.direction ?? null,
-          q: merged.q ?? null,
-          familyId: merged.familyId ?? null,
-          classIds: merged.classIds,
-        });
+        const href = buildHref(
+          base,
+          {
+            channel: merged.channel ?? null,
+            status: merged.status ?? null,
+            direction: merged.direction ?? null,
+            q: merged.q ?? null,
+            familyId: merged.familyId ?? null,
+            classIds: merged.classIds,
+          },
+          pageSize
+        );
 
         return (
           <Link key={c.label} href={href}>
@@ -109,7 +128,7 @@ function FiltersRow({ current, base }: { current: CurrentFilters; base: string }
       })}
 
       {current.channel || current.status || current.direction || current.q || current.familyId || current.classIds.length ? (
-        <Link href={base} className="ml-2 text-xs text-muted-foreground hover:underline">
+        <Link href={buildHref(base, {}, pageSize)} className="ml-2 text-xs text-muted-foreground hover:underline">
           Clear filters
         </Link>
       ) : null}
@@ -141,10 +160,12 @@ export default async function CommunicationsPage({ searchParams }: PageProps) {
   const normalizedClassIds = Array.from(new Set(classIds.map((id) => id.trim()).filter(Boolean)));
 
   const base = "/admin/communications";
+  const { pageSize, cursor } = parsePaginationSearchParams(sp);
 
   const [communications, classOptions] = await Promise.all([
     listCommunications({
-      limit: 200,
+      pageSize,
+      cursor,
       filters: {
         channel: channel ?? undefined,
         status: status ?? undefined,
@@ -173,14 +194,21 @@ export default async function CommunicationsPage({ searchParams }: PageProps) {
         <p className="text-xs text-muted-foreground">Recent emails and messages that have been sent.</p>
 
         <div className="mt-2 flex flex-col gap-3">
-          <FiltersRow current={currentFilters} base={base} />
+          <FiltersRow current={currentFilters} base={base} pageSize={pageSize} />
           <ClassFilter options={classOptions} selectedIds={normalizedClassIds} />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        <CommunicationsTable communications={communications} />
+        <CommunicationsTable communications={communications.items} />
       </div>
+
+      <AdminPagination
+        totalCount={communications.totalCount}
+        pageSize={pageSize}
+        currentCount={communications.items.length}
+        nextCursor={communications.nextCursor}
+      />
     </div>
   );
 }
