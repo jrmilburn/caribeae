@@ -23,14 +23,6 @@ export type PaidThroughTemplateChangeTemplate = {
   name?: string | null;
 };
 
-// Algorithm: preserve the number of entitled occurrences already covered by the old template(s),
-// then map that count onto the new template(s) by walking Brisbane day keys (skipping holidays).
-// - Count entitled occurrences on the CURRENT templates from enrolment start through paidThrough (inclusive).
-// - Walk occurrences on the NEW templates, skipping holidays/cancellations, until the same count is reached.
-// - The final occurrence date is the new paidThrough (inclusive).
-// Root cause note: the previous class-change recalculation capped the new coverage to the old paid-through
-// window (and limited holidays to that same window), which could back up the computed paid-through date when
-// the weekday shifted and produced under-counted occurrences.
 export async function computePaidThroughAfterTemplateChange(params: {
   enrolmentId: string;
   oldTemplateId: string | null;
@@ -88,8 +80,10 @@ export async function computePaidThroughAfterTemplateChange(params: {
   const newTemplateEnd = newTemplate.endDate ? brisbaneStartOfDay(newTemplate.endDate) : null;
   const enrolmentEnd = enrolment.endDate ? brisbaneStartOfDay(enrolment.endDate) : null;
 
-  const oldRangeStart = maxDate(startDate, oldTemplateStart);
-  const oldRangeEnd = minDate(paidThroughDate, oldTemplateEnd, enrolmentEnd);
+  // ✅ oldRangeStart is ALWAYS a Date
+  const oldRangeStart: Date = maxBrisbaneDate(startDate, oldTemplateStart);
+  const oldRangeEnd = minBrisbaneDate(paidThroughDate, oldTemplateEnd, enrolmentEnd);
+
   if (!oldRangeEnd || brisbaneCompare(toBrisbaneDayKey(oldRangeEnd), toBrisbaneDayKey(oldRangeStart)) < 0) {
     return null;
   }
@@ -154,8 +148,9 @@ export async function computePaidThroughAfterTemplateChange(params: {
 
   if (entitlementSessions <= 0) return null;
 
-  const newRangeStart = maxDate(startDate, newTemplateStart);
-  const newRangeEnd = minDate(horizonEndDate, newTemplateEnd, enrolmentEnd);
+  // ✅ newRangeStart is ALWAYS a Date
+  const newRangeStart: Date = maxBrisbaneDate(startDate, newTemplateStart);
+  const newRangeEnd = minBrisbaneDate(horizonEndDate, newTemplateEnd, enrolmentEnd);
   const newRangeStartKey = toBrisbaneDayKey(newRangeStart);
   const newRangeEndKey = newRangeEnd ? toBrisbaneDayKey(newRangeEnd) : null;
 
@@ -178,8 +173,6 @@ export function describeTemplate(template: PaidThroughTemplateChangeTemplate) {
     dayOfWeek: template.dayOfWeek ?? null,
   };
 }
-
-// (intentionally no additional helpers exported; keep computations centralized above)
 
 function buildCancellationSet(cancellations: Array<{ templateId: string; date: Date }>) {
   const set = new Set<string>();
@@ -246,17 +239,27 @@ function findNthOccurrence(params: {
   return lastCovered;
 }
 
-function maxDate(base: Date, ...candidates: Array<Date | null | undefined>) {
-  return candidates.reduce((current, candidate) => {
-    if (!candidate) return current;
-    return candidate > current ? candidate : current;
-  }, base);
+/**
+ * Avoid name collisions with other helpers (date-fns, shared utils, etc).
+ * Always returns a Date.
+ */
+function maxBrisbaneDate(base: Date, ...candidates: Array<Date | null | undefined>): Date {
+  let max = base;
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate > max) max = candidate;
+  }
+
+  return max;
 }
 
-function minDate(base: Date, ...candidates: Array<Date | null | undefined>) {
-  return candidates.reduce<Date | null>((current, candidate) => {
-    if (!candidate) return current;
-    if (!current) return candidate;
-    return candidate < current ? candidate : current;
-  }, base);
+
+/**
+ * Always returns Date or null (never undefined).
+ */
+function minBrisbaneDate(base: Date, ...candidates: Array<Date | null | undefined>): Date | null {
+  const all: Date[] = [base, ...candidates].filter((d): d is Date => d != null);
+  if (all.length === 0) return null;
+  return all.reduce((min, d) => (d < min ? d : min), all[0]);
 }

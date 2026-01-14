@@ -384,12 +384,6 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
   }
 
-  const baseStart = input.startDate ? normalizeStartDate(input.startDate) : startOfDay(enrolment.startDate);
-  const templateEndDates = templates.map((template) => template.endDate).filter(Boolean) as Date[];
-  const earliestEnd =
-    templateEndDates.length > 0 ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end)) : null;
-  const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
-
   const oldTemplates = enrolment.classAssignments.length
     ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
     : enrolment.template
