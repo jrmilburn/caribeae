@@ -1,11 +1,11 @@
-import type { ClassTemplate, EnrolmentPlan } from "@prisma/client";
+import { BillingType, type ClassTemplate, type EnrolmentPlan } from "@prisma/client";
 
 export function isSaturdayTemplate(template: Pick<ClassTemplate, "dayOfWeek">) {
   return template.dayOfWeek === 5;
 }
 
 export function assertPlanMatchesTemplate(
-  plan: Pick<EnrolmentPlan, "isSaturdayOnly" | "name">,
+  plan: Pick<EnrolmentPlan, "isSaturdayOnly" | "name" | "billingType">,
   template: Pick<ClassTemplate, "dayOfWeek" | "name">
 ) {
   if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") {
@@ -13,7 +13,7 @@ export function assertPlanMatchesTemplate(
   }
 
   const saturdayTemplate = isSaturdayTemplate(template);
-  if (saturdayTemplate && !plan.isSaturdayOnly) {
+  if (saturdayTemplate && !plan.isSaturdayOnly && plan.billingType !== BillingType.PER_WEEK) {
     throw new Error("Saturday classes require a Saturday-only enrolment plan.");
   }
 
@@ -23,7 +23,7 @@ export function assertPlanMatchesTemplate(
 }
 
 export function assertPlanMatchesTemplates(
-  plan: Pick<EnrolmentPlan, "isSaturdayOnly" | "name">,
+  plan: Pick<EnrolmentPlan, "isSaturdayOnly" | "name" | "billingType">,
   templates: Array<Pick<ClassTemplate, "dayOfWeek" | "name">>
 ) {
   templates.forEach((template) => assertPlanMatchesTemplate(plan, template));

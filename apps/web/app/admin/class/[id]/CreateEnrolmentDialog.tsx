@@ -69,10 +69,10 @@ export function CreateEnrolmentDialog({
 
   const availablePlans = React.useMemo(() => {
     if (templateDayOfWeek === 5) {
-      return enrolmentPlans.filter((plan) => plan.isSaturdayOnly);
+      return enrolmentPlans.filter((plan) => plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
     }
     if (typeof templateDayOfWeek === "number") {
-      return enrolmentPlans.filter((plan) => !plan.isSaturdayOnly);
+      return enrolmentPlans.filter((plan) => !plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
     }
     return enrolmentPlans;
   }, [enrolmentPlans, templateDayOfWeek]);
