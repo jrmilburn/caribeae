@@ -9,7 +9,7 @@ import { ScheduleView, type ScheduleViewHandle, type ScheduleFilters } from "@/p
 import { TemplateModal } from "../class/templates/TemplateModal";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
-import type { ClientTemplate } from "@/server/classTemplate/types";
+import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
 import type { NormalizedScheduleClass } from "@/packages/schedule";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  * This adapter converts the schedule template into a ClassTemplate shape.
  * If your schedule template already IS a ClassTemplate, this will still work.
  */
-function coerceToClassTemplate(input: unknown): ClassTemplate {
+function coerceToClassTemplate(input: unknown): TemplateModalTemplate {
   if (!input || typeof input !== "object") {
     throw new Error("Invalid template payload");
   }

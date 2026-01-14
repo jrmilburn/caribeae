@@ -1,16 +1,10 @@
 "use client";
 
-import * as React from "react";
-import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
-
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 import { useRouter } from "next/navigation";
 
-import type { Prisma, Level, Teacher } from "@prisma/client";
+import type { Level, Teacher } from "@prisma/client";
 
 import TemplateListItem from "./TemplateListItem";
 import { TemplateModal } from "./TemplateModal";
@@ -19,42 +13,33 @@ import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
 import { deleteTemplate } from "@/server/classTemplate/deleteTemplate";
 
-import type { ClientTemplate } from "@/server/classTemplate/types";
+import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
+import type { ClassTemplateListItem } from "@/server/classTemplate/listClassTemplates";
 
-export type TemplateWithLevel = Prisma.ClassTemplateGetPayload<{
-  include: { level: true; teacher: true };
-}>;
+import { AdminListHeader } from "@/components/admin/AdminListHeader";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+
+export type TemplateWithLevel = ClassTemplateListItem;
 
 export default function TemplateList({
   templates,
   levels,
   teachers,
+  totalCount,
+  nextCursor,
+  pageSize,
 }: {
   templates: TemplateWithLevel[];
   levels: Level[];
   teachers: Teacher[];
+  totalCount: number;
+  nextCursor: string | null;
+  pageSize: number;
 }) {
-  const [searchTerm, setSearchTerm] = useState("");
   const [newTemplateModal, setNewTemplateModal] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = React.useState<TemplateWithLevel | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateModalTemplate | null>(null);
 
   const router = useRouter();
-
-  const filteredTemplates = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return templates;
-
-    return templates.filter((t) => {
-      const name = t.name?.toLowerCase() ?? "";
-      const level = t.level?.name?.toLowerCase() ?? "";
-      const day = formatDay(t.dayOfWeek)?.toLowerCase() ?? "";
-
-      if (name.includes(q)) return true;
-      if (level.includes(q)) return true;
-      if (day.includes(q)) return true;
-      return false;
-    });
-  }, [templates, searchTerm]);
 
   const openEdit = (template: TemplateWithLevel) => {
     setSelectedTemplate(template);
@@ -81,16 +66,16 @@ export default function TemplateList({
 
   return (
     <div className="w-full">
-      <TemplateListHeader
+      <AdminListHeader
         title="Templates"
-        totalCount={templates.length}
-        filteredCount={filteredTemplates.length}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        setNewTemplateModal={(next) => {
-          if (next) setSelectedTemplate(null);
-          setNewTemplateModal(next);
+        totalCount={totalCount}
+        searchPlaceholder="Search templates…"
+        onNew={() => {
+          setSelectedTemplate(null);
+          setNewTemplateModal(true);
         }}
+        showFilters
+        sticky
       />
 
       <TemplateModal
@@ -106,7 +91,15 @@ export default function TemplateList({
       />
 
       <div>
-        {filteredTemplates.map((t) => (
+        <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
+          <div className="truncate flex-[1.2]">Template</div>
+          <div className="truncate flex-1">Schedule</div>
+          <div className="truncate flex-1">Level</div>
+          <div className="truncate flex-1">Capacity</div>
+          <div className="w-12 text-right">Actions</div>
+        </div>
+
+        {templates.map((t) => (
           <TemplateListItem
             key={t.id}
             template={t}
@@ -115,89 +108,19 @@ export default function TemplateList({
           />
         ))}
 
-        {filteredTemplates.length === 0 && (
+        {templates.length === 0 && (
           <div className="p-4 text-sm text-muted-foreground">
-            No templates found{searchTerm.trim() ? ` for “${searchTerm.trim()}”` : ""}.
+            No templates found.
           </div>
         )}
       </div>
+
+      <AdminPagination
+        totalCount={totalCount}
+        pageSize={pageSize}
+        currentCount={templates.length}
+        nextCursor={nextCursor}
+      />
     </div>
   );
-}
-
-function TemplateListHeader({
-  title,
-  totalCount,
-  filteredCount,
-  searchTerm,
-  setSearchTerm,
-  setNewTemplateModal,
-}: {
-  title: string;
-  totalCount: number;
-  filteredCount: number;
-  searchTerm: string;
-  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  setNewTemplateModal: React.Dispatch<React.SetStateAction<boolean>>;
-}) {
-  const hasQuery = searchTerm.trim().length > 0;
-
-  return (
-    <>
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4">
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-sm font-semibold">{title}</h2>
-            <span className="text-xs text-muted-foreground">
-              {hasQuery ? `${filteredCount} / ${totalCount}` : totalCount}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative w-full sm:w-[340px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setSearchTerm("");
-            }}
-            placeholder="Search templates…"
-            className={cn("pl-9 pr-10")}
-          />
-
-          {hasQuery && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setSearchTerm("")}
-              className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-              aria-label="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-
-        <Button onClick={() => setNewTemplateModal(true)}>New</Button>
-      </div>
-
-      {/* Column header row */}
-      <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 bg-gray-50">
-        <div className="truncate text-sm font-medium flex-1">Template</div>
-        <div className="truncate text-sm font-medium flex-1">Schedule</div>
-        <div className="truncate text-sm font-medium flex-1">Level</div>
-        <div className="truncate text-sm font-medium flex-1">Capacity</div>
-        <div className="w-12 text-sm font-medium text-muted-foreground text-right">Actions</div>
-      </div>
-    </>
-  );
-}
-
-function formatDay(dayOfWeek?: number | null) {
-  if (dayOfWeek === null || dayOfWeek === undefined) return null;
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return days[dayOfWeek] ?? null;
 }

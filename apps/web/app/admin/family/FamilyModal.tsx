@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ClientFamilyWithStudents, FamilyActionResult, FamilyStudentPayload } from "@/server/family/types";
-import type { Family, Level } from "@prisma/client";
+import type { Level } from "@prisma/client";
+import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
@@ -32,7 +33,7 @@ type FamilyModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 
-  family?: Family | null;
+  family?: FamilyListEntry | null;
   levels: Level[];
 
   onSave: (payload: ClientFamilyWithStudents) => Promise<FamilyActionResult>;
