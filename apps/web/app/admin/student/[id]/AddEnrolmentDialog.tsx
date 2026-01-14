@@ -92,10 +92,10 @@ export function AddEnrolmentDialog({
   const availablePlans = React.useMemo(() => {
     const levelFiltered = enrolmentPlans.filter((p) => !selectedLevelId || p.levelId === selectedLevelId);
     if (selectionDayType === "saturday") {
-      return levelFiltered.filter((plan) => plan.isSaturdayOnly);
+      return levelFiltered.filter((plan) => plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
     }
     if (selectionDayType === "weekday") {
-      return levelFiltered.filter((plan) => !plan.isSaturdayOnly);
+      return levelFiltered.filter((plan) => !plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
     }
     return levelFiltered;
   }, [enrolmentPlans, selectedLevelId, selectionDayType]);
@@ -124,7 +124,13 @@ export function AddEnrolmentDialog({
     [availablePlans, planId]
   );
   const planIsWeekly = selectedPlan?.billingType === "PER_WEEK";
-  const planDay = selectedPlan ? (selectedPlan.isSaturdayOnly ? "saturday" : "weekday") : null;
+  const planDay = selectedPlan
+    ? selectedPlan.isSaturdayOnly
+      ? "saturday"
+      : planIsWeekly
+        ? "any"
+        : "weekday"
+    : null;
 
   const selectionRequirement = React.useMemo(
     () =>
@@ -164,15 +170,19 @@ export function AddEnrolmentDialog({
 
     const occurrenceIsSaturday = isSaturdayOccurrence(occurrence);
     const currentDayType = resolveSelectionDay(selectedTemplates);
-    if (planDay === "saturday" && !occurrenceIsSaturday) {
+    if (!planIsWeekly && planDay === "saturday" && !occurrenceIsSaturday) {
       toast.error("Saturday-only plans can only be used for Saturday classes.");
       return;
     }
-    if (planDay === "weekday" && occurrenceIsSaturday) {
+    if (!planIsWeekly && planDay === "weekday" && occurrenceIsSaturday) {
       toast.error("Use a Saturday-only plan for Saturday classes.");
       return;
     }
-    if (currentDayType && currentDayType !== (occurrenceIsSaturday ? "saturday" : "weekday")) {
+    if (
+      !planIsWeekly &&
+      currentDayType &&
+      currentDayType !== (occurrenceIsSaturday ? "saturday" : "weekday")
+    ) {
       toast.error("Select classes that match the plan's day.");
       return;
     }
