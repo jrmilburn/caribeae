@@ -43,6 +43,7 @@ export type ScheduleViewProps = {
   defaultViewMode?: "week" | "day";
   showHeader?: boolean;
   allowTemplateMoves?: boolean;
+  mode?: "default" | "enrolmentChange";
 
   // ✅ NEW
   filters?: ScheduleFilters;
@@ -63,6 +64,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       defaultViewMode = "week",
       showHeader = true,
       allowTemplateMoves = true,
+      mode = "default",
       filters,
       headerActions,
       selectedTemplateIds,
@@ -266,9 +268,12 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       [adapter, classes, softRefresh]
     );
 
+    const isEnrolmentChange = mode === "enrolmentChange";
+    const showScheduleHeader = showHeader && !isEnrolmentChange;
+
     return (
       <div className="flex h-full w-full min-h-0 flex-col">
-        {showHeader && (
+        {showScheduleHeader && (
           <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2">
               <Button
@@ -331,6 +336,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             setSelectedDay={setSelectedDay}
             levels={levels}
             selectedTemplateIds={selectedTemplateIds}
+            showHeaderDates={!isEnrolmentChange}
+            showDayDate={!isEnrolmentChange}
           />
         </div>
       </div>

@@ -25,7 +25,7 @@ import {
   type ScheduleClassClickContext,
 } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
-import { changeEnrolment } from "@/server/enrolment/changeEnrolment";
+import { changeEnrolment, previewChangeEnrolment } from "@/server/enrolment/changeEnrolment";
 import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
 
@@ -52,9 +52,13 @@ export function ChangeEnrolmentDialog({
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>({});
   const [startDate, setStartDate] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
-  const [confirming, setConfirming] = React.useState<{ oldDateKey: string | null; newDateKey: string | null } | null>(
-    null
-  );
+  const [confirming, setConfirming] = React.useState<{
+    oldDateKey: string | null;
+    newDateKey: string | null;
+    oldTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
+    newTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
+    wouldShorten: boolean;
+  } | null>(null);
 
   const selectionRequirement = React.useMemo(
     () => getSelectionRequirement(enrolment.plan),
@@ -195,6 +199,9 @@ export function ChangeEnrolmentDialog({
           setConfirming({
             oldDateKey: result.error.oldDateKey,
             newDateKey: result.error.newDateKey,
+            oldTemplates: [],
+            newTemplates: [],
+            wouldShorten: true,
           });
           return;
         }
@@ -210,6 +217,47 @@ export function ChangeEnrolmentDialog({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePreview = async () => {
+    if (!effectiveLevelId) {
+      toast.error("Set the student's level first.");
+      return;
+    }
+    if (!canSubmit) {
+      toast.error(selectionRequirement.helper);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const preview = await previewChangeEnrolment({
+        enrolmentId: enrolment.id,
+        templateIds: selectedTemplateIds,
+        startDate: `${startDate}T00:00:00`,
+        effectiveLevelId,
+      });
+
+      if (preview.ok) {
+        setConfirming({
+          oldDateKey: preview.data.oldPaidThroughDateKey,
+          newDateKey: preview.data.newPaidThroughDateKey,
+          oldTemplates: preview.data.oldTemplates,
+          newTemplates: preview.data.newTemplates,
+          wouldShorten: preview.data.wouldShorten,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to preview enrolment changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatTemplateLabel = (template: { name: string; dayOfWeek: number | null }) => {
+    const dayLabel = template.dayOfWeek === null ? "—" : dayOfWeekToName(template.dayOfWeek);
+    return `${template.name} · ${dayLabel}`;
   };
 
   return (
@@ -267,6 +315,7 @@ export function ChangeEnrolmentDialog({
                   onClassClick={onClassClick}
                   allowTemplateMoves={false}
                   defaultViewMode="week"
+                  mode="enrolmentChange"
                   selectedTemplateIds={selectedTemplateIds}
                   filters={{ levelId: effectiveLevelId, teacherId: null }}
                 />
@@ -304,7 +353,7 @@ export function ChangeEnrolmentDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => void handleSave()} disabled={!canSubmit}>
+              <Button onClick={() => void handlePreview()} disabled={!canSubmit}>
                 {saving ? "Saving..." : "Save changes"}
               </Button>
             </div>
@@ -318,10 +367,24 @@ export function ChangeEnrolmentDialog({
           <DialogHeader>
             <DialogTitle>Confirm paid-through change</DialogTitle>
             <DialogDescription>
-              This class change will shorten the paid-through date.
+              {confirming?.wouldShorten
+                ? "This class change will shorten the paid-through date."
+                : "Review the paid-through update before confirming."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 text-sm">
+            <div>
+              <span className="font-medium">Current templates:</span>{" "}
+              {confirming?.oldTemplates.length
+                ? confirming.oldTemplates.map(formatTemplateLabel).join(", ")
+                : "—"}
+            </div>
+            <div>
+              <span className="font-medium">New templates:</span>{" "}
+              {confirming?.newTemplates.length
+                ? confirming.newTemplates.map(formatTemplateLabel).join(", ")
+                : "—"}
+            </div>
             <div>
               <span className="font-medium">Current paid-through:</span>{" "}
               {confirming?.oldDateKey ?? "—"}
