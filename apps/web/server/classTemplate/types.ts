@@ -17,6 +17,8 @@ export type ClientTemplate = {
 export type TemplateModalTemplate = {
   id: string;
   name: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   levelId: string;
   teacherId: string | null;
   startDate: Date;
