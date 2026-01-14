@@ -9,6 +9,7 @@ import { brisbaneAddDays, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { normalizeCoverageEndForStorage } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -35,6 +36,7 @@ export type RecordPaymentInput = {
   method?: string;
   note?: string;
   enrolmentId?: string;
+  customBlockLength?: number | null;
   idempotencyKey?: string;
   client?: PrismaClientOrTx;
 };
@@ -63,18 +65,18 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
     }
 
     const paidAt = input.paidAt ?? new Date();
-    const payment = await tx.payment.create({
-      data: {
-        familyId: input.familyId,
-        amountCents: input.amountCents,
-        paidAt,
-        method: input.method?.trim() || undefined,
-        note: input.note?.trim() || undefined,
-        idempotencyKey: input.idempotencyKey ?? null,
-      },
-    });
 
     if (!input.enrolmentId) {
+      const payment = await tx.payment.create({
+        data: {
+          familyId: input.familyId,
+          amountCents: input.amountCents,
+          paidAt,
+          method: input.method?.trim() || undefined,
+          note: input.note?.trim() || undefined,
+          idempotencyKey: input.idempotencyKey ?? null,
+        },
+      });
       return { payment };
     }
 
@@ -96,6 +98,37 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
     }
 
     const plan = enrolment.plan;
+    const planBlockLength = resolveBlockLength(plan.blockClassCount);
+    const customBlockLength = input.customBlockLength ?? null;
+    if (customBlockLength != null) {
+      if (plan.billingType !== BillingType.PER_CLASS) {
+        throw new Error("Custom block length is only allowed for block-based plans.");
+      }
+      if (!Number.isInteger(customBlockLength)) {
+        throw new Error("Custom block length must be an integer.");
+      }
+      if (customBlockLength < planBlockLength) {
+        throw new Error("Custom block length must be at least the plan block length.");
+      }
+    }
+    const pricing = calculateBlockPricing({
+      priceCents: plan.priceCents,
+      blockLength: planBlockLength,
+      customBlockLength: customBlockLength ?? undefined,
+    });
+    const paymentAmountCents =
+      plan.billingType === BillingType.PER_CLASS && customBlockLength ? pricing.totalCents : input.amountCents;
+
+    const payment = await tx.payment.create({
+      data: {
+        familyId: input.familyId,
+        amountCents: paymentAmountCents,
+        paidAt,
+        method: input.method?.trim() || undefined,
+        note: input.note?.trim() || undefined,
+        idempotencyKey: input.idempotencyKey ?? null,
+      },
+    });
     let coverageStart: Date | null = null;
     let coverageEnd: Date | null = null;
     let coverageEndBase: Date | null = null;
@@ -183,7 +216,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
 
       await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
     } else if (plan.billingType === BillingType.PER_CLASS) {
-      const creditsToAdd = plan.blockClassCount ?? 1;
+      const creditsToAdd = customBlockLength ?? planBlockLength;
       if (creditsToAdd <= 0) {
         throw new Error("PER_CLASS plans require blockClassCount to be greater than zero when provided.");
       }
