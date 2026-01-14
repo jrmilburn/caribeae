@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
 import { useRouter } from "next/navigation";
-
 import type { Level, Teacher } from "@prisma/client";
 
 import TemplateListItem from "./TemplateListItem";
@@ -19,7 +17,16 @@ import type { ClassTemplateListItem } from "@/server/classTemplate/listClassTemp
 import { AdminListHeader } from "@/components/admin/AdminListHeader";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
-export type TemplateWithLevel = ClassTemplateListItem;
+/**
+ * Fix:
+ * Your list type (ClassTemplateListItem) is missing createdAt/updatedAt in its TS shape,
+ * but your modal state expects TemplateModalTemplate which includes those fields.
+ *
+ * This type asserts that list items ALSO include createdAt/updatedAt, matching what the modal expects.
+ * (If your DB query already returns them, this is purely a typing fix.)
+ */
+export type TemplateWithLevel = ClassTemplateListItem &
+  Pick<TemplateModalTemplate, "createdAt" | "updatedAt">;
 
 export default function TemplateList({
   templates,
@@ -100,18 +107,11 @@ export default function TemplateList({
         </div>
 
         {templates.map((t) => (
-          <TemplateListItem
-            key={t.id}
-            template={t}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-          />
+          <TemplateListItem key={t.id} template={t} onEdit={openEdit} onDelete={handleDelete} />
         ))}
 
         {templates.length === 0 && (
-          <div className="p-4 text-sm text-muted-foreground">
-            No templates found.
-          </div>
+          <div className="p-4 text-sm text-muted-foreground">No templates found.</div>
         )}
       </div>
 
