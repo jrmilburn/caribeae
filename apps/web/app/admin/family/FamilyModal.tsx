@@ -11,6 +11,8 @@ import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
+import { SmartPhoneInput } from "@/components/SmartPhoneInput";
+import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -68,6 +70,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
   const [touched, setTouched] = React.useState<{ name?: boolean }>({});
   const [studentTouched, setStudentTouched] = React.useState<Record<string, { name?: boolean; levelId?: boolean }>>({});
   const [serverError, setServerError] = React.useState<string | null>(null);
+  const [phoneErrors, setPhoneErrors] = React.useState<{ primaryPhone?: string; secondaryPhone?: string }>({});
   const dialogContentRef = React.useRef<HTMLDivElement>(null);
 
   // Prefill when opening in edit mode
@@ -96,6 +99,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
     setStudentTouched({});
     setSubmitting(false);
     setServerError(null);
+    setPhoneErrors({});
     setStep(1);
   }, [open, family]);
 
@@ -103,6 +107,50 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
 
   const setField = <K extends keyof ClientFamilyWithStudents>(key: K, value: ClientFamilyWithStudents[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setPhoneError = (key: "primaryPhone" | "secondaryPhone", message?: string) => {
+    setPhoneErrors((prev) => ({ ...prev, [key]: message }));
+  };
+
+  const validatePhoneField = (key: "primaryPhone" | "secondaryPhone") => {
+    const raw = form[key] ?? "";
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      setPhoneError(key, undefined);
+      return true;
+    }
+
+    const normalized = normalizeAuMobileToE164(trimmed);
+    if (!normalized) {
+      setPhoneError(key, "Enter an AU mobile like 0412 345 678");
+      return false;
+    }
+
+    setPhoneError(key, undefined);
+    if (normalized !== raw) {
+      setField(key, normalized);
+    }
+    return true;
+  };
+
+  const validatePhones = () => {
+    const primaryOk = validatePhoneField("primaryPhone");
+    const secondaryOk = validatePhoneField("secondaryPhone");
+    return primaryOk && secondaryOk;
+  };
+
+  const applyServerPhoneError = (message: string) => {
+    if (message.includes("Primary contact phone")) {
+      setPhoneError("primaryPhone", message);
+      return true;
+    }
+    if (message.includes("Secondary contact phone")) {
+      setPhoneError("secondaryPhone", message);
+      return true;
+    }
+    return false;
   };
 
   const nameError = touched.name && !form.name.trim() ? "Family name is required." : "";
@@ -195,6 +243,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
     setTouched({ name: true });
     setServerError(null);
     if (!form.name.trim()) return;
+    if (!validatePhones()) return;
 
     try {
       setSubmitting(true);
@@ -203,7 +252,10 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
         toast.success("Family updated.");
         close();
       } else {
-        setServerError(res?.error ?? "Unable to save family.");
+        const message = res?.error ?? "Unable to save family.";
+        if (!applyServerPhoneError(message)) {
+          setServerError(message);
+        }
       }
     } finally {
       setSubmitting(false);
@@ -217,6 +269,7 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
       setStep(1);
       return;
     }
+    if (!validatePhones()) return;
 
     const studentsOk = validateStudents();
     if (!studentsOk) return;
@@ -233,7 +286,10 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
         toast.success("Family created.");
         close();
       } else {
-        setServerError(res?.error ?? "Unable to create family.");
+        const message = res?.error ?? "Unable to create family.";
+        if (!applyServerPhoneError(message)) {
+          setServerError(message);
+        }
       }
     } finally {
       setSubmitting(false);
@@ -342,9 +398,16 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
                 />
               </FieldRow>
               <FieldRow label="Phone">
-                <Input
+                <SmartPhoneInput
+                  label="Phone"
+                  hideLabel
                   value={form.primaryPhone ?? ""}
-                  onChange={(e) => setField("primaryPhone", e.target.value)}
+                  onChange={(next) => {
+                    setField("primaryPhone", next);
+                    setPhoneError("primaryPhone", undefined);
+                  }}
+                  onBlur={() => validatePhoneField("primaryPhone")}
+                  error={phoneErrors.primaryPhone}
                 />
               </FieldRow>
             </div>
@@ -364,9 +427,16 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
                 />
               </FieldRow>
               <FieldRow label="Phone">
-                <Input
+                <SmartPhoneInput
+                  label="Phone"
+                  hideLabel
                   value={form.secondaryPhone ?? ""}
-                  onChange={(e) => setField("secondaryPhone", e.target.value)}
+                  onChange={(next) => {
+                    setField("secondaryPhone", next);
+                    setPhoneError("secondaryPhone", undefined);
+                  }}
+                  onBlur={() => validatePhoneField("secondaryPhone")}
+                  error={phoneErrors.secondaryPhone}
                 />
               </FieldRow>
             </div>

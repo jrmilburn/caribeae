@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 import type { ClientFamilyWithStudents, FamilyActionResult } from "./types";
 import { parseFamilyPayload, parseFamilyStudents } from "./types";
+import { normalizeFamilyContactPhones } from "./normalizeFamilyContacts";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 
@@ -20,10 +21,21 @@ export async function createFamily(payload: ClientFamilyWithStudents): Promise<F
         return { success: false, error: parsedStudents.error };
     }
 
+    const normalizedContacts = normalizeFamilyContactPhones({
+        primaryPhone: parsed.data.primaryPhone,
+        secondaryPhone: parsed.data.secondaryPhone,
+    });
+    if (!normalizedContacts.success) {
+        return { success: false, error: normalizedContacts.error };
+    }
+
     try {
         const newFamily = await prisma.$transaction(async (tx) => {
             const family = await tx.family.create({
-                data: parsed.data,
+                data: {
+                    ...parsed.data,
+                    ...normalizedContacts.data,
+                },
             });
 
             if (parsedStudents.data.length > 0) {
