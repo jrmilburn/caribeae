@@ -20,19 +20,36 @@ export type FamilyListEntry = Pick<
   | "address"
 >;
 
-export async function listFamilies(params: { q?: string | null; pageSize: number; cursor?: string | null }) {
+export async function listFamilies(params: {
+  q?: string | null;
+  pageSize: number;
+  cursor?: string | null;
+  levelId?: string | null;
+}) {
   await getOrCreateUser();
 
-  // ✅ Fix: type `where` as Prisma.FamilyWhereInput so `mode` is the correct enum (QueryMode),
-  // not inferred as a plain string.
-  const where: Prisma.FamilyWhereInput | undefined = params.q
-    ? {
-        name: {
-          contains: params.q,
-          mode: "insensitive", // now properly typed as Prisma.QueryMode
+  const filters: Prisma.FamilyWhereInput[] = [];
+
+  if (params.q) {
+    filters.push({
+      name: {
+        contains: params.q,
+        mode: "insensitive",
+      },
+    });
+  }
+
+  if (params.levelId) {
+    filters.push({
+      students: {
+        some: {
+          levelId: params.levelId,
         },
-      }
-    : undefined;
+      },
+    });
+  }
+
+  const where: Prisma.FamilyWhereInput | undefined = filters.length ? { AND: filters } : undefined;
 
   const [totalCount, families] = await prisma.$transaction([
     prisma.family.count({ where }),

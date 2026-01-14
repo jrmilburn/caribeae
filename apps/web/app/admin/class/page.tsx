@@ -18,9 +18,12 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
 
   const sp = await Promise.resolve(searchParams ?? {});
   const { q, pageSize, cursor } = parsePaginationSearchParams(sp);
+  const levelId = typeof sp.levelId === "string" ? sp.levelId : null;
+  const teacherId = typeof sp.teacherId === "string" ? sp.teacherId : null;
+  const status = typeof sp.status === "string" ? sp.status : null;
 
   const [templates, levels, teachers] = await Promise.all([
-    listClassTemplates({ q, pageSize, cursor }),
+    listClassTemplates({ q, pageSize, cursor, levelId, teacherId, status }),
     getLevels(),
     getTeachers(),
   ]);

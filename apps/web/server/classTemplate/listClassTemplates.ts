@@ -40,6 +40,9 @@ export async function listClassTemplates(params: {
   q?: string | null;
   pageSize: number;
   cursor?: string | null;
+  levelId?: string | null;
+  teacherId?: string | null;
+  status?: "active" | "inactive" | "all" | null;
 }) {
   const trimmed = params.q?.trim().toLowerCase() ?? "";
   const dayKey = trimmed.slice(0, 3);
@@ -58,8 +61,13 @@ export async function listClassTemplates(params: {
     }
   }
 
+  const activeFilter =
+    params.status === "inactive" ? false : params.status === "all" ? undefined : true;
+
   const where: Prisma.ClassTemplateWhereInput = {
-    active: true,
+    ...(activeFilter === undefined ? {} : { active: activeFilter }),
+    ...(params.levelId ? { levelId: params.levelId } : {}),
+    ...(params.teacherId ? { teacherId: params.teacherId } : {}),
     ...(searchFilters.length ? { OR: searchFilters } : {}),
   };
 

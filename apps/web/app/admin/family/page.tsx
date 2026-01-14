@@ -12,9 +12,10 @@ type PageProps = {
 export default async function FamilyPage({ searchParams }: PageProps) {
   const sp = await Promise.resolve(searchParams ?? {});
   const { q, pageSize, cursor } = parsePaginationSearchParams(sp);
+  const levelId = typeof sp.levelId === "string" ? sp.levelId : null;
 
   const [families, levels] = await Promise.all([
-    listFamilies({ q, pageSize, cursor }),
+    listFamilies({ q, pageSize, cursor, levelId }),
     getLevels(),
   ]);
 

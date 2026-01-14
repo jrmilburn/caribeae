@@ -1,11 +1,19 @@
 "use client";
 
 import type { Level } from "@prisma/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MoreVerticalIcon } from "lucide-react";
 
 import FamilyListItem from "./FamilyListItem";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { FamilyModal } from "./FamilyModal"
 
@@ -19,7 +27,8 @@ import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { AdminListHeader } from "@/components/admin/AdminListHeader";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
-import { useRouter } from "next/navigation";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export default function FamilyList({
   families,
@@ -36,8 +45,16 @@ export default function FamilyList({
 }) {
   const [newFamilyModal, setNewFamilyModal] = useState(false);
   const [selected, setSelected] = useState<FamilyListEntry | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [levelFilter, setLevelFilter] = useState("all");
 
-  const router = useRouter()
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const currentLevelId = searchParams.get("levelId") ?? "all";
+
+  const hasActiveFilters = useMemo(() => currentLevelId !== "all", [currentLevelId]);
 
   const openEdit = (family: FamilyListEntry) => {
     setSelected(family);
@@ -49,6 +66,10 @@ export default function FamilyList({
       setSelected(null);
     }
   }, [newFamilyModal]);
+
+  useEffect(() => {
+    setLevelFilter(currentLevelId);
+  }, [currentLevelId]);
 
   const handleSave = async (payload: ClientFamilyWithStudents) => {
     if (selected) {
@@ -69,6 +90,31 @@ export default function FamilyList({
     router.refresh();
   };
 
+  const applyFilters = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (levelFilter && levelFilter !== "all") {
+      params.set("levelId", levelFilter);
+    } else {
+      params.delete("levelId");
+    }
+    params.delete("cursor");
+    params.delete("cursors");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    setFiltersOpen(false);
+  };
+
+  const clearFilters = () => {
+    setLevelFilter("all");
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("levelId");
+    params.delete("cursor");
+    params.delete("cursors");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    setFiltersOpen(false);
+  };
+
   return (
     <div className="w-full">
       <AdminListHeader
@@ -80,9 +126,51 @@ export default function FamilyList({
           setNewFamilyModal(true);
         }}
         showFilters
+        onFiltersClick={() => setFiltersOpen(true)}
         sticky
       />
 
+      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter families</DialogTitle>
+            <DialogDescription>Refine the list by student level.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <span className="text-sm font-medium text-foreground">Level</span>
+              <Select value={levelFilter} onValueChange={setLevelFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All levels</SelectItem>
+                  {levels.map((level) => (
+                    <SelectItem key={level.id} value={level.id}>
+                      {level.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <Button type="button" variant="ghost" onClick={clearFilters} disabled={!hasActiveFilters}>
+              Clear filters
+            </Button>
+            <div className="flex w-full gap-2 sm:w-auto sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setFiltersOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={applyFilters}>
+                Apply filters
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FamilyModal
         open={newFamilyModal}

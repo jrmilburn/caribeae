@@ -18,6 +18,7 @@ type AdminListHeaderProps = {
   newLabel?: string;
   onNew: () => void;
   showFilters?: boolean;
+  onFiltersClick?: () => void;
   sticky?: boolean;
 };
 
@@ -39,6 +40,7 @@ export function AdminListHeader({
   newLabel = "New",
   onNew,
   showFilters,
+  onFiltersClick,
   sticky,
 }: AdminListHeaderProps) {
   const router = useRouter();
@@ -145,7 +147,7 @@ export function AdminListHeader({
         </Select>
 
         {showFilters ? (
-          <Button variant="outline" size="sm" type="button">
+          <Button variant="outline" size="sm" type="button" onClick={onFiltersClick}>
             <SlidersHorizontal className="mr-2 h-4 w-4" />
             Filters
           </Button>
