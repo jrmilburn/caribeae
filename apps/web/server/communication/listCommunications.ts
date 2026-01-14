@@ -29,15 +29,16 @@ export type CommunicationFilters = {
 };
 
 export async function listCommunications(args?: {
-  limit?: number;
+  pageSize?: number;
+  cursor?: string | null;
   filters?: CommunicationFilters;
-}): Promise<CommunicationSummary[]> {
+}): Promise<{ items: CommunicationSummary[]; totalCount: number; nextCursor: string | null }> {
   noStore();
 
   await getOrCreateUser();
   await requireAdmin();
 
-  const limit = args?.limit ?? 200;
+  const pageSize = args?.pageSize ?? 25;
   const f = args?.filters;
 
   const filters: Prisma.MessageWhereInput[] = [];
@@ -75,7 +76,11 @@ export async function listCommunications(args?: {
     const verifiedClassIds = validClassIds.map((c) => c.id);
 
     if (!verifiedClassIds.length) {
-      return [];
+      return {
+        items: [],
+        totalCount: 0,
+        nextCursor: null,
+      };
     }
 
     filters.push({
@@ -101,36 +106,49 @@ export async function listCommunications(args?: {
   const where: Prisma.MessageWhereInput =
     filters.length === 0 ? {} : { AND: filters };
 
-  const messages = await prisma.message.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      createdAt: true,
-      channel: true,
-      direction: true,
-      status: true,
-      subject: true,
-      body: true,
-      toEmail: true,
-      fromEmail: true,
-      toNumber: true,
-      fromNumber: true,
-      family: { select: { id: true, name: true } },
-    },
-  });
+  const [totalCount, messages] = await prisma.$transaction([
+    prisma.message.count({ where }),
+    prisma.message.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      cursor: args?.cursor ? { id: args.cursor } : undefined,
+      skip: args?.cursor ? 1 : 0,
+      take: pageSize + 1,
+      select: {
+        id: true,
+        createdAt: true,
+        channel: true,
+        direction: true,
+        status: true,
+        subject: true,
+        body: true,
+        toEmail: true,
+        fromEmail: true,
+        toNumber: true,
+        fromNumber: true,
+        family: { select: { id: true, name: true } },
+      },
+    }),
+  ]);
 
-  return messages.map((message) => ({
-    id: message.id,
-    createdAt: message.createdAt,
-    channel: message.channel,
-    direction: message.direction,
-    status: message.status,
-    subject: message.subject,
-    body: message.body,
-    to: message.toEmail ?? message.toNumber ?? null,
-    from: message.fromEmail ?? message.fromNumber ?? null,
-    family: message.family,
-  }));
+  const hasNext = messages.length > pageSize;
+  const items = hasNext ? messages.slice(0, pageSize) : messages;
+  const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
+
+  return {
+    items: items.map((message) => ({
+      id: message.id,
+      createdAt: message.createdAt,
+      channel: message.channel,
+      direction: message.direction,
+      status: message.status,
+      subject: message.subject,
+      body: message.body,
+      to: message.toEmail ?? message.toNumber ?? null,
+      from: message.fromEmail ?? message.fromNumber ?? null,
+      family: message.family,
+    })),
+    totalCount,
+    nextCursor,
+  };
 }

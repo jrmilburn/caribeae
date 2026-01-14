@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { ClassTemplate, Holiday, Level } from "@prisma/client";
+import type { ClassTemplate, Level } from "@prisma/client";
+import type { HolidayListItem } from "@/server/holiday/listHolidays";
 
 import {
   Dialog,
@@ -49,7 +50,7 @@ export function HolidayForm({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  holiday: Holiday | null;
+  holiday: HolidayListItem | null;
   onSaved?: () => void;
   levels: Level[];
   templates: TemplateOption[];

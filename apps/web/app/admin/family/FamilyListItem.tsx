@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { Family } from "@prisma/client";
+import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { MoreVerticalIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,9 @@ export default function FamilyListItem({
   onEdit,
   onDelete,
 }: {
-  family: Family;
-  onEdit: (family: Family) => void;
-  onDelete: (family: Family) => void;
+  family: FamilyListEntry;
+  onEdit: (family: FamilyListEntry) => void;
+  onDelete: (family: FamilyListEntry) => void;
 }) {
   const router = useRouter();
 
