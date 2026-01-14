@@ -24,93 +24,117 @@ function test(name: string, fn: () => Promise<void> | void) {
 test("Monday -> Wednesday shifts paid-through forward within the same week", async () => {
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-1",
-    enrolmentStartDate: d("2026-03-02"),
-    oldPaidThroughDate: d("2026-05-11"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 2, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [] },
-    cancellationOverrides: { old: [], new: [] },
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2026-05-11"),
+    overrides: {
+      enrolment: { startDate: d("2026-03-02") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 2, levelId: "lvl" },
+      holidays: { old: [], new: [] },
+      cancellations: { old: [], new: [] },
+    },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2026-05-13");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2026-05-13");
 });
 
 test("Monday -> Tuesday shifts paid-through forward by one day", async () => {
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-2",
-    enrolmentStartDate: d("2026-03-02"),
-    oldPaidThroughDate: d("2026-05-11"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 1, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [] },
-    cancellationOverrides: { old: [], new: [] },
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2026-05-11"),
+    overrides: {
+      enrolment: { startDate: d("2026-03-02") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 1, levelId: "lvl" },
+      holidays: { old: [], new: [] },
+      cancellations: { old: [], new: [] },
+    },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2026-05-12");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2026-05-12");
 });
 
 test("Holiday on new template extends mapped paid-through", async () => {
   const holiday: HolidayRange = { startDate: d("2026-01-27"), endDate: d("2026-01-27") };
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-3",
-    enrolmentStartDate: d("2026-01-12"),
-    oldPaidThroughDate: d("2026-02-02"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 1, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [holiday] },
-    cancellationOverrides: { old: [], new: [] },
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2026-02-02"),
+    overrides: {
+      enrolment: { startDate: d("2026-01-12") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 1, levelId: "lvl" },
+      holidays: { old: [], new: [holiday] },
+      cancellations: { old: [], new: [] },
+    },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2026-02-10");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2026-02-10");
 });
 
 test("Far-future paid-through maps across templates", async () => {
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-4",
-    enrolmentStartDate: d("2026-01-05"),
-    oldPaidThroughDate: d("2026-12-28"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 2, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [] },
-    cancellationOverrides: { old: [], new: [] },
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2026-12-28"),
+    overrides: {
+      enrolment: { startDate: d("2026-01-05") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 2, levelId: "lvl" },
+      holidays: { old: [], new: [] },
+      cancellations: { old: [], new: [] },
+    },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2026-12-30");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2026-12-30");
 });
 
 test("Past paid-through still maps using entitlement count", async () => {
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-5",
-    enrolmentStartDate: d("2024-02-05"),
-    oldPaidThroughDate: d("2024-03-04"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 3, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [] },
-    cancellationOverrides: { old: [], new: [] },
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2024-03-04"),
+    overrides: {
+      enrolment: { startDate: d("2024-02-05") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 3, levelId: "lvl" },
+      holidays: { old: [], new: [] },
+      cancellations: { old: [], new: [] },
+    },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2024-03-07");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2024-03-07");
 });
 
 test("Cancellation on new template pushes paid-through to next valid occurrence", async () => {
   const result = await computePaidThroughAfterTemplateChange({
     enrolmentId: "enrol-6",
-    enrolmentStartDate: d("2026-03-02"),
-    oldPaidThroughDate: d("2026-03-23"),
-    oldTemplates: [{ id: "old", dayOfWeek: 0, levelId: "lvl" }],
-    newTemplates: [{ id: "new", dayOfWeek: 2, levelId: "lvl" }],
-    holidayOverrides: { old: [], new: [] },
-    cancellationOverrides: {
-      old: [],
-      new: [{ templateId: "new", date: d("2026-03-18") }],
+    oldTemplateId: "old",
+    newTemplateId: "new",
+    paidThroughDate: d("2026-03-23"),
+    overrides: {
+      enrolment: { startDate: d("2026-03-02") },
+      oldTemplate: { id: "old", dayOfWeek: 0, levelId: "lvl" },
+      newTemplate: { id: "new", dayOfWeek: 2, levelId: "lvl" },
+      holidays: { old: [], new: [] },
+      cancellations: {
+        old: [],
+        new: [{ templateId: "new", date: d("2026-03-18") }],
+      },
     },
   });
 
-  assert.ok(result.newPaidThroughDate);
-  assert.strictEqual(toBrisbaneDayKey(result.newPaidThroughDate), "2026-04-01");
+  assert.ok(result);
+  assert.strictEqual(toBrisbaneDayKey(result), "2026-04-01");
 });

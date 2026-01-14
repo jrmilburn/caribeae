@@ -199,14 +199,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       });
     }
 
-    const anchorTemplate = templates
-      .slice()
-      .sort((a, b) => {
-        const dayA = a.dayOfWeek ?? 7;
-        const dayB = b.dayOfWeek ?? 7;
-        if (dayA !== dayB) return dayA - dayB;
-        return a.id.localeCompare(b.id);
-      })[0];
+    const anchorTemplate = resolveAnchorTemplate(templates);
 
     const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
     const oldTemplates = enrolment.classAssignments.length
@@ -214,6 +207,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       : enrolment.template
         ? [enrolment.template]
         : [];
+    const oldAnchorTemplate = resolveAnchorTemplate(oldTemplates);
 
     // Compute the earliest template end date (if any) to cap the planned end date.
     const templateEndDates = windows.map((w) => w.endDate).filter(Boolean) as Date[];
@@ -242,19 +236,16 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
     if (!updated) throw new Error("Enrolment not found after update.");
 
     if (updated.plan?.billingType === "PER_WEEK") {
-      const paidThroughChange = oldPaidThrough
-        ? await computePaidThroughAfterTemplateChange({
-            enrolmentId: updated.id,
-            enrolmentStartDate: baseStart,
-            enrolmentEndDate: plannedEndDate,
-            oldPaidThroughDate: oldPaidThrough,
-            oldTemplates,
-            newTemplates: templates,
-            tx,
-          })
-        : null;
-
-      const nextPaidThrough = paidThroughChange?.newPaidThroughDate ?? oldPaidThrough ?? null;
+      const nextPaidThrough =
+        oldPaidThrough && oldAnchorTemplate?.id && anchorTemplate?.id
+          ? await computePaidThroughAfterTemplateChange({
+              enrolmentId: updated.id,
+              oldTemplateId: oldAnchorTemplate.id,
+              newTemplateId: anchorTemplate.id,
+              paidThroughDate: oldPaidThrough,
+              tx,
+            })
+          : oldPaidThrough ?? null;
       const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
 
       if (!input.confirmShorten && wouldShortenCoverage(currentPaidThrough, nextPaidThrough)) {
@@ -371,6 +362,7 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       dayOfWeek: true,
     },
   });
+  const anchorTemplate = resolveAnchorTemplate(templates);
 
   assertPlanMatchesTemplates(enrolment.plan, templates);
 
@@ -403,22 +395,19 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     : enrolment.template
       ? [enrolment.template]
       : [];
+  const oldAnchorTemplate = resolveAnchorTemplate(oldTemplates);
 
   const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
 
-  const paidThroughPreview =
-    enrolment.plan.billingType === "PER_WEEK" && oldPaidThrough && oldTemplates.length
+  const newPaidThroughDate =
+    enrolment.plan.billingType === "PER_WEEK" && oldPaidThrough && oldAnchorTemplate?.id && anchorTemplate?.id
       ? await computePaidThroughAfterTemplateChange({
           enrolmentId: enrolment.id,
-          enrolmentStartDate: baseStart,
-          enrolmentEndDate: plannedEndDate,
-          oldPaidThroughDate: oldPaidThrough,
-          oldTemplates,
-          newTemplates: templates,
+          oldTemplateId: oldAnchorTemplate.id,
+          newTemplateId: anchorTemplate.id,
+          paidThroughDate: oldPaidThrough,
         })
-      : null;
-
-  const newPaidThroughDate = paidThroughPreview?.newPaidThroughDate ?? oldPaidThrough ?? null;
+      : oldPaidThrough ?? null;
   const wouldShorten = wouldShortenCoverage(oldPaidThrough, newPaidThroughDate);
 
   return {
@@ -431,4 +420,19 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       wouldShorten,
     },
   };
+}
+
+function resolveAnchorTemplate<T extends { id: string; dayOfWeek: number | null }>(
+  templates: T[]
+): T | null {
+  return (
+    templates
+      .slice()
+      .sort((a, b) => {
+        const dayA = a.dayOfWeek ?? 7;
+        const dayB = b.dayOfWeek ?? 7;
+        if (dayA !== dayB) return dayA - dayB;
+        return a.id.localeCompare(b.id);
+      })[0] ?? null
+  );
 }
