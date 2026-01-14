@@ -95,7 +95,7 @@ export function EditPaidThroughDialog({
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent>
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit paid-through date</DialogTitle>
           <DialogDescription>
