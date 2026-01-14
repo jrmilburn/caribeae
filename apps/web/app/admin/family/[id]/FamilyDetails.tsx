@@ -9,6 +9,8 @@ import { updateFamily } from "@/server/family/updateFamily";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { SmartPhoneInput } from "@/components/SmartPhoneInput";
+import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
 
 
 type Props = {
@@ -35,13 +37,57 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
   });
 
   const [saving, setSaving] = React.useState(false);
+  const [phoneErrors, setPhoneErrors] = React.useState<{ primaryPhone?: string; secondaryPhone?: string }>({});
 
   const onChange =
     (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
+  const setPhoneError = (key: "primaryPhone" | "secondaryPhone", message?: string) => {
+    setPhoneErrors((prev) => ({ ...prev, [key]: message }));
+  };
+
+  const normalizePhoneField = (key: "primaryPhone" | "secondaryPhone") => {
+    const raw = form[key];
+    const trimmed = raw.trim();
+
+    if (!trimmed) {
+      setPhoneError(key, undefined);
+      return { ok: true, value: "" };
+    }
+
+    const normalized = normalizeAuMobileToE164(trimmed);
+    if (!normalized) {
+      setPhoneError(key, "Enter an AU mobile like 0412 345 678");
+      return { ok: false, value: raw };
+    }
+
+    setPhoneError(key, undefined);
+    if (normalized !== raw) {
+      setForm((prev) => ({ ...prev, [key]: normalized }));
+    }
+    return { ok: true, value: normalized };
+  };
+
+  const applyServerPhoneError = (message: string) => {
+    if (message.includes("Primary contact phone")) {
+      setPhoneError("primaryPhone", message);
+      return true;
+    }
+    if (message.includes("Secondary contact phone")) {
+      setPhoneError("secondaryPhone", message);
+      return true;
+    }
+    return false;
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const primary = normalizePhoneField("primaryPhone");
+    const secondary = normalizePhoneField("secondaryPhone");
+
+    if (!primary.ok || !secondary.ok) return;
+
     setSaving(true);
 
     try {
@@ -49,10 +95,10 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
         name: form.name.trim(),
         primaryContactName: form.primaryContactName.trim() || undefined,
         primaryEmail: form.primaryEmail.trim() || undefined,
-        primaryPhone: form.primaryPhone.trim() || undefined,
+        primaryPhone: primary.value.trim() || undefined,
         secondaryContactName: form.secondaryContactName.trim() || undefined,
         secondaryEmail: form.secondaryEmail.trim() || undefined,
-        secondaryPhone: form.secondaryPhone.trim() || undefined,
+        secondaryPhone: secondary.value.trim() || undefined,
         medicalContactName: form.medicalContactName.trim() || undefined,
         medicalContactPhone: form.medicalContactPhone.trim() || undefined,
         address: form.address.trim() || undefined,
@@ -60,14 +106,20 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
 
       const result = await updateFamily(payload, family.id);
       if (!result.success) {
-        throw new Error(result.error ?? "Unable to update family.");
+        const message = result.error ?? "Unable to update family.";
+        if (!applyServerPhoneError(message)) {
+          toast.error(message);
+        }
+        return;
       }
       toast.success("Family updated.");
       router.refresh();
       onSaved?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to update family.";
-      toast.error(message);
+      if (!applyServerPhoneError(message)) {
+        toast.error(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -102,7 +154,17 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
             />
           </Field>
           <Field label="Primary phone">
-            <Input value={form.primaryPhone} onChange={onChange("primaryPhone")} placeholder="04xx xxx xxx" />
+            <SmartPhoneInput
+              label="Primary phone"
+              hideLabel
+              value={form.primaryPhone}
+              onChange={(next) => {
+                setForm((prev) => ({ ...prev, primaryPhone: next }));
+                setPhoneError("primaryPhone", undefined);
+              }}
+              onBlur={() => normalizePhoneField("primaryPhone")}
+              error={phoneErrors.primaryPhone}
+            />
           </Field>
           <Field label="Primary email" className="sm:col-span-2">
             <Input value={form.primaryEmail} onChange={onChange("primaryEmail")} placeholder="name@email.com" />
@@ -125,7 +187,17 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
               <Input value={form.secondaryContactName} onChange={onChange("secondaryContactName")} />
             </Field>
             <Field label="Phone">
-              <Input value={form.secondaryPhone} onChange={onChange("secondaryPhone")} />
+              <SmartPhoneInput
+                label="Secondary phone"
+                hideLabel
+                value={form.secondaryPhone}
+                onChange={(next) => {
+                  setForm((prev) => ({ ...prev, secondaryPhone: next }));
+                  setPhoneError("secondaryPhone", undefined);
+                }}
+                onBlur={() => normalizePhoneField("secondaryPhone")}
+                error={phoneErrors.secondaryPhone}
+              />
             </Field>
             <Field label="Email" className="sm:col-span-2">
               <Input value={form.secondaryEmail} onChange={onChange("secondaryEmail")} />
