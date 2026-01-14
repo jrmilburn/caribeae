@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrencyFromCents } from "@/lib/currency";
@@ -8,6 +9,8 @@ import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPos
 import { cn } from "@/lib/utils";
 import { dayLabel } from "../../class/[id]/utils/time";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { Pencil } from "lucide-react";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
 type Props = {
   billing: FamilyBillingPosition;
@@ -150,8 +153,25 @@ export function FamilyBillingPositionCard({ billing }: Props) {
                             </Badge>
                           ) : null}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          Paid to {formatDate(enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)}
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>
+                            Paid to {formatDate(enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)}
+                          </span>
+                          <EditPaidThroughDialog
+                            enrolmentId={enrolment.id}
+                            currentPaidThrough={enrolment.paidThroughDate ?? enrolment.projectedCoverageEnd ?? enrolment.latestCoverageEnd}
+                            trigger={(
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground/70 hover:text-foreground"
+                                aria-label="Edit paid-through date"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          />
                         </div>
                       </div>
 

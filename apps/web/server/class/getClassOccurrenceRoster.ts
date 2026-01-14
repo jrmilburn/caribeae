@@ -103,7 +103,7 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
     if (isWeekly && enrolment.student.levelId !== levelId) continue;
 
     if (isWeekly) {
-      const paidThrough = enrolment.paidThroughDateComputed ?? enrolment.paidThroughDate ?? null;
+      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
       if (paidThrough && isAfter(date, paidThrough)) continue;
     }
 

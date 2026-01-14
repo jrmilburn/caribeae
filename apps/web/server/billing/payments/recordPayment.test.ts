@@ -238,3 +238,33 @@ test("holiday handling extends paidThrough for weekly payments", async () => {
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
 });
+
+test("manual paid-through forward uses updated baseline for weekly payments", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "manual-forward",
+    client: db,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-19");
+});
+
+test("manual paid-through backward stays aligned for weekly payments", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-05") });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "manual-backward",
+    client: db,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
+});
