@@ -58,30 +58,38 @@ export default function Loading() {
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="space-y-4">
-                <div className="flex justify-end">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-16 ml-auto" />
-                    <Skeleton className="h-12 w-64 rounded-2xl" />
+            {/* Messages (fade out towards bottom) */}
+            <div className="relative min-h-0 flex-1 overflow-hidden">
+              <div className="h-full overflow-y-auto p-4">
+                <div className="space-y-4">
+                  <div className="flex justify-end">
+                    <div className="space-y-2">
+                      <Skeleton className="ml-auto h-3 w-16" />
+                      <Skeleton className="h-12 w-64 rounded-2xl" />
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex justify-start">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-14 w-72 rounded-2xl" />
+                  <div className="flex justify-start">
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-14 w-72 rounded-2xl" />
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex justify-end">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-14 ml-auto" />
-                    <Skeleton className="h-10 w-56 rounded-2xl" />
+                  <div className="flex justify-end">
+                    <div className="space-y-2">
+                      <Skeleton className="ml-auto h-3 w-14" />
+                      <Skeleton className="h-10 w-56 rounded-2xl" />
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* Fade-out overlay */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-background"
+              />
             </div>
 
             {/* Composer */}
