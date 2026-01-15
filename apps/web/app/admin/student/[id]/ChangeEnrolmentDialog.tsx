@@ -28,6 +28,8 @@ import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment, previewChangeEnrolment } from "@/server/enrolment/changeEnrolment";
 import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
+import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
+import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
 type EnrolmentWithPlan = Enrolment & { plan: EnrolmentPlan; templateId: string };
 
@@ -58,6 +60,10 @@ export function ChangeEnrolmentDialog({
     oldTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
     newTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
     wouldShorten: boolean;
+  } | null>(null);
+  const [capacityWarning, setCapacityWarning] = React.useState<{
+    details: CapacityExceededDetails;
+    confirmShorten?: boolean;
   } | null>(null);
 
   const selectionRequirement = React.useMemo(
@@ -175,7 +181,7 @@ export function ChangeEnrolmentDialog({
     });
   };
 
-  const handleSave = async (confirmShorten?: boolean) => {
+  const handleSave = async (confirmShorten?: boolean, allowOverload?: boolean) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -193,6 +199,7 @@ export function ChangeEnrolmentDialog({
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
         confirmShorten,
+        allowOverload,
       });
       if (!result.ok) {
         if (result.error.code === "COVERAGE_WOULD_SHORTEN") {
@@ -213,6 +220,11 @@ export function ChangeEnrolmentDialog({
       }
     } catch (err) {
       console.error(err);
+      const details = parseCapacityError(err);
+      if (details) {
+        setCapacityWarning({ details, confirmShorten });
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Unable to change enrolment.");
     } finally {
       setSaving(false);
@@ -414,6 +426,18 @@ export function ChangeEnrolmentDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CapacityOverloadDialog
+        open={Boolean(capacityWarning)}
+        details={capacityWarning?.details ?? null}
+        busy={saving}
+        onCancel={() => setCapacityWarning(null)}
+        onConfirm={() => {
+          const pending = capacityWarning;
+          setCapacityWarning(null);
+          void handleSave(pending?.confirmShorten, true);
+        }}
+      />
     </>
   );
 }

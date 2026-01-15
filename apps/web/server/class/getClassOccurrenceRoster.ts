@@ -65,8 +65,47 @@ async function resolveContext(templateId: string, dateKey: string, options?: Con
   return { date, template };
 }
 
-async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: string, date: Date) {
-  const candidates = await prisma.enrolment.findMany({
+export type EligibleEnrolmentCandidate = Awaited<ReturnType<typeof fetchEnrolmentCandidates>>[number];
+
+export function filterEligibleEnrolmentsForOccurrence(
+  candidates: EligibleEnrolmentCandidate[],
+  templateId: string,
+  levelId: string,
+  date: Date
+) {
+  const roster = new Map<string, EligibleEnrolmentCandidate>();
+
+  for (const enrolment of candidates) {
+    if (enrolment.status === EnrolmentStatus.CANCELLED) continue;
+    if (isAfter(enrolment.startDate, date)) continue;
+    if (enrolment.endDate && isAfter(date, enrolment.endDate)) continue;
+    const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
+    const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
+    const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
+    if (!hasAssignment) continue;
+    if (isWeekly && enrolment.student.levelId !== levelId) continue;
+
+    if (isWeekly) {
+      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+      if (paidThrough && isAfter(date, paidThrough)) continue;
+    }
+
+    const existing = roster.get(enrolment.studentId);
+    const isDirect = enrolment.templateId === templateId;
+    const existingDirect = existing?.templateId === templateId;
+
+    if (!existing || (isDirect && !existingDirect)) {
+      roster.set(enrolment.studentId, enrolment);
+    }
+  }
+
+  return Array.from(roster.values()).sort((a, b) =>
+    (a.student.name ?? "").localeCompare(b.student.name ?? "")
+  );
+}
+
+async function fetchEnrolmentCandidates(templateId: string, date: Date, client = prisma) {
+  return client.enrolment.findMany({
     where: {
       status: { not: EnrolmentStatus.CANCELLED },
       startDate: { lte: date },
@@ -92,31 +131,14 @@ async function getEligibleEnrolmentsForOccurrence(templateId: string, levelId: s
     },
     orderBy: [{ student: { name: "asc" } }],
   });
+}
 
-  const roster = new Map<string, (typeof candidates)[number]>();
-
-  for (const enrolment of candidates) {
-    const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
-    const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
-    const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
-    if (!hasAssignment) continue;
-    if (isWeekly && enrolment.student.levelId !== levelId) continue;
-
-    if (isWeekly) {
-      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
-      if (paidThrough && isAfter(date, paidThrough)) continue;
-    }
-
-    const existing = roster.get(enrolment.studentId);
-    const isDirect = enrolment.templateId === templateId;
-    const existingDirect = existing?.templateId === templateId;
-
-    if (!existing || (isDirect && !existingDirect)) {
-      roster.set(enrolment.studentId, enrolment);
-    }
-  }
-
-  return Array.from(roster.values()).sort((a, b) =>
-    (a.student.name ?? "").localeCompare(b.student.name ?? "")
-  );
+export async function getEligibleEnrolmentsForOccurrence(
+  templateId: string,
+  levelId: string,
+  date: Date,
+  options?: { client?: typeof prisma }
+) {
+  const candidates = await fetchEnrolmentCandidates(templateId, date, options?.client ?? prisma);
+  return filterEligibleEnrolmentsForOccurrence(candidates, templateId, levelId, date);
 }

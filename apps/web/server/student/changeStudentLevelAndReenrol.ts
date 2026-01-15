@@ -27,6 +27,11 @@ import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolm
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import {
+  assertCapacityAvailable,
+  getCapacitySnapshot,
+  resolveOccurrenceDateOnOrAfter,
+} from "@/server/class/capacity";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -35,6 +40,7 @@ type ChangeStudentLevelInput = {
   templateIds: string[];
   planId: string;
   note?: string | null;
+  allowOverload?: boolean;
 };
 
 type EnrolmentWithRelations = Prisma.EnrolmentGetPayload<{
@@ -172,6 +178,8 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
         endDate: true,
         name: true,
         dayOfWeek: true,
+        startTime: true,
+        capacity: true,
       },
     });
     if (templates.length !== templateIds.length) {
@@ -300,6 +308,28 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
       }
       return { templateId: template.id, startDate, endDate: templateEnd };
     });
+
+    for (const window of windows) {
+      const template = templates.find((item) => item.id === window.templateId);
+      if (!template) continue;
+      const occurrenceDate = resolveOccurrenceDateOnOrAfter({
+        template: {
+          ...template,
+          startTime: template.startTime ?? null,
+          capacity: template.capacity ?? null,
+        },
+        startDate: window.startDate,
+      });
+      if (!occurrenceDate) continue;
+      const snapshot = await getCapacitySnapshot({
+        templateId: template.id,
+        occurrenceDate,
+        client: tx,
+      });
+      if (snapshot) {
+        assertCapacityAvailable(snapshot, input.allowOverload);
+      }
+    }
 
     const anchorTemplate = templates.sort((a, b) => {
       const dayA = a.dayOfWeek ?? 7;

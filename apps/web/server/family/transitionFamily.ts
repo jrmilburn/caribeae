@@ -8,6 +8,11 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate } from "@/server/enrolment/planRules";
 import { resolveAnchorTemplate, resolveTransitionTemplates } from "@/server/family/transitionFamilyUtils";
+import {
+  assertCapacityAvailable,
+  getCapacitySnapshot,
+  resolveOccurrenceDateOnOrAfter,
+} from "@/server/class/capacity";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
@@ -26,6 +31,7 @@ const transitionFamilySchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   batchId: z.string().trim().max(200).optional(),
   force: z.boolean().optional(),
+  allowOverload: z.boolean().optional(),
   students: z.array(studentTransitionSchema).nonempty(),
 });
 
@@ -87,6 +93,17 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     const templateMap = new Map(templates.map((template) => [template.id, template]));
 
     const enrolmentIds: string[] = [];
+    const capacityRequests = new Map<
+      string,
+      { templateId: string; occurrenceDate: Date; seats: number }
+    >();
+    const enrolmentSelections: Array<{
+      selection: (typeof payload.students)[number];
+      plan: (typeof plans)[number];
+      normalizedStart: Date;
+      templatesForSelection: (typeof templates)[number][];
+      anchorTemplate: (typeof templates)[number];
+    }> = [];
 
     for (const selection of payload.students) {
       const plan = planMap.get(selection.planId);
@@ -128,6 +145,53 @@ export async function transitionFamily(input: TransitionFamilyInput) {
         throw new Error("Select at least one class template.");
       }
 
+      for (const template of templatesForSelection) {
+        const occurrenceDate = resolveOccurrenceDateOnOrAfter({
+          template: {
+            id: template.id,
+            name: template.name ?? null,
+            dayOfWeek: template.dayOfWeek ?? null,
+            startDate: template.startDate,
+            endDate: template.endDate ?? null,
+            capacity: template.capacity ?? null,
+            levelId: template.levelId ?? null,
+            startTime: template.startTime ?? null,
+          },
+          startDate: normalizedStart,
+        });
+        if (!occurrenceDate) continue;
+        const key = `${template.id}:${occurrenceDate.toISOString()}`;
+        const entry = capacityRequests.get(key) ?? {
+          templateId: template.id,
+          occurrenceDate,
+          seats: 0,
+        };
+        entry.seats += 1;
+        capacityRequests.set(key, entry);
+      }
+
+      enrolmentSelections.push({
+        selection,
+        plan,
+        normalizedStart,
+        templatesForSelection,
+        anchorTemplate,
+      });
+    }
+
+    for (const request of capacityRequests.values()) {
+      const snapshot = await getCapacitySnapshot({
+        templateId: request.templateId,
+        occurrenceDate: request.occurrenceDate,
+        additionalSeats: request.seats,
+        client: tx,
+      });
+      if (snapshot) {
+        assertCapacityAvailable(snapshot, payload.allowOverload);
+      }
+    }
+
+    for (const { selection, plan, normalizedStart, templatesForSelection, anchorTemplate } of enrolmentSelections) {
       const enrolment = await tx.enrolment.create({
         data: {
           studentId: selection.studentId,

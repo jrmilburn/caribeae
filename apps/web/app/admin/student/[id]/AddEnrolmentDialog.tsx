@@ -30,6 +30,7 @@ import {
   type NormalizedScheduleClass,
   type ScheduleClassClickContext,
 } from "@/packages/schedule";
+import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ import { isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
 export function AddEnrolmentDialog({
   open,
@@ -63,6 +65,7 @@ export function AddEnrolmentDialog({
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
   const [customBlockLength, setCustomBlockLength] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [capacityWarning, setCapacityWarning] = React.useState<CapacityExceededDetails | null>(null);
 
   React.useEffect(() => {
     if (!open) {
@@ -261,7 +264,7 @@ export function AddEnrolmentDialog({
     });
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (allowOverload?: boolean) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
@@ -284,12 +287,18 @@ export function AddEnrolmentDialog({
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
         customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
+        allowOverload,
       });
 
       onOpenChange(false);
       router.refresh();
     } catch (err) {
       console.error(err);
+      const details = parseCapacityError(err);
+      if (details) {
+        setCapacityWarning(details);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Unable to enrol student. Please check the plan.");
     } finally {
       setSaving(false);
@@ -297,8 +306,9 @@ export function AddEnrolmentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
           <DialogHeader>
             <DialogTitle>Add enrolment</DialogTitle>
             <DialogDescription>
@@ -471,8 +481,20 @@ export function AddEnrolmentDialog({
           </div>
         </div>
 
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <CapacityOverloadDialog
+        open={Boolean(capacityWarning)}
+        details={capacityWarning}
+        busy={saving}
+        onCancel={() => setCapacityWarning(null)}
+        onConfirm={() => {
+          setCapacityWarning(null);
+          void handleCreate(true);
+        }}
+      />
+    </>
   );
 }
 

@@ -34,6 +34,8 @@ import { changeStudentLevelAndReenrol } from "@/server/student/changeStudentLeve
 import { getTemplatesForLevelAndDate } from "@/server/classTemplate/getTemplatesForLevelAndDate";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import { BillingType } from "@prisma/client";
+import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
+import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
 type StudentWithHistory = FamilyWithStudentsAndInvoices["students"][number];
 
@@ -65,6 +67,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
   const [availabilityCount, setAvailabilityCount] = React.useState<number | null>(null);
   const [checkingAvailability, startCheckingAvailability] = React.useTransition();
   const [submitting, setSubmitting] = React.useState(false);
+  const [capacityWarning, setCapacityWarning] = React.useState<CapacityExceededDetails | null>(null);
 
   const selectedTemplateIds = React.useMemo(() => Object.keys(selectedTemplates), [selectedTemplates]);
   const weekAnchor = React.useMemo(
@@ -171,7 +174,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
   const canContinue = selectedTemplateIds.length > 0 && hasAvailableTemplates;
   const canSubmit = Boolean(selectedPlan) && canContinue && selectionMeetsPlan && !submitting;
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (allowOverload?: boolean) => {
     if (!selectedPlan) {
       toast.error("Select an enrolment plan for the new level.");
       return;
@@ -189,12 +192,18 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
         templateIds: selectedTemplateIds,
         planId: selectedPlan.id,
         note,
+        allowOverload,
       });
       toast.success("Level updated and enrolments created.");
       onOpenChange(false);
       router.refresh();
     } catch (err) {
       console.error(err);
+      const details = parseCapacityError(err);
+      if (details) {
+        setCapacityWarning(details);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Unable to change level.");
     } finally {
       setSubmitting(false);
@@ -202,8 +211,9 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>Change level for {student.name}</DialogTitle>
         </DialogHeader>
@@ -420,8 +430,20 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
             </div>
           ) : null}
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <CapacityOverloadDialog
+        open={Boolean(capacityWarning)}
+        details={capacityWarning}
+        busy={submitting}
+        onCancel={() => setCapacityWarning(null)}
+        onConfirm={() => {
+          setCapacityWarning(null);
+          void handleSubmit(true);
+        }}
+      />
+    </>
   );
 }
 
