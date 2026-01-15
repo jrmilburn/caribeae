@@ -78,6 +78,40 @@ test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends covera
   assert.strictEqual(coverage.creditsPurchased, 8);
 });
 
+test("Scenario E2: PER_CLASS custom block length advances coverage", () => {
+  const start = dAest("2026-02-02");
+  const plan = {
+    billingType: BillingType.PER_CLASS,
+    blockClassCount: 8,
+    durationWeeks: null,
+    name: "8 classes over 8 weeks",
+    priceCents: 1000,
+    levelId: "lvl",
+    sessionsPerWeek: 1,
+  };
+  const enrolment = {
+    id: "enrol",
+    startDate: start,
+    endDate: null,
+    paidThroughDate: null,
+    student: { familyId: "fam" },
+    plan,
+    template: { dayOfWeek: 0, name: "Monday" },
+    classAssignments: [],
+  };
+
+  const coverage = resolveCoverageForPlan({
+    enrolment,
+    plan,
+    holidays: noHolidays,
+    today: start,
+    customBlockLength: 11,
+  });
+
+  assert.strictEqual(coverage.coverageEnd?.toISOString().slice(0, 10), "2026-04-13");
+  assert.strictEqual(coverage.creditsPurchased, 11);
+});
+
 test("Scenario F: PER_WEEK pay-ahead invoices advance coverage sequentially", () => {
   const enrolment = {
     startDate: d("2026-06-01"),

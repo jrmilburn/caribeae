@@ -20,6 +20,7 @@ import { validateSelection } from "./validateSelection";
 import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
+import { resolveBlockLength } from "@/lib/billing/blockPricing";
 
 type TemplateSummary = {
   id: string;
@@ -67,6 +68,7 @@ const payloadSchema = z.object({
   endDate: z.string().optional().nullable(),
   status: z.nativeEnum(EnrolmentStatus).optional(),
   effectiveLevelId: z.string().optional().nullable(),
+  customBlockLength: z.number().int().positive().optional(),
 });
 
 export async function createEnrolmentsFromSelection(
@@ -103,6 +105,18 @@ export async function createEnrolmentsFromSelection(
   }
   if (plan.billingType === BillingType.PER_CLASS && plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans require a positive class count when blockClassCount is set.");
+  }
+  const planBlockLength = resolveBlockLength(plan.blockClassCount);
+  if (payload.customBlockLength != null) {
+    if (plan.billingType !== BillingType.PER_CLASS) {
+      throw new Error("Custom block length is only available for per-class plans.");
+    }
+    if (!Number.isInteger(payload.customBlockLength)) {
+      throw new Error("Custom block length must be an integer.");
+    }
+    if (payload.customBlockLength < planBlockLength) {
+      throw new Error("Custom block length must be at least the plan block length.");
+    }
   }
 
   let templateIds = templateIdsInput;
@@ -274,7 +288,11 @@ export async function createEnrolmentsFromSelection(
       });
     }
 
-    await createInitialInvoiceForEnrolment(enrolment.id, { prismaClient: tx, skipAuth: true });
+    await createInitialInvoiceForEnrolment(enrolment.id, {
+      prismaClient: tx,
+      skipAuth: true,
+      customBlockLength: payload.customBlockLength ?? null,
+    });
     await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: undefined });
     return [enrolment];
   });

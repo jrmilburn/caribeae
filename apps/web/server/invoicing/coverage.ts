@@ -11,6 +11,7 @@ import {
   brisbaneCompare,
   toBrisbaneDayKey,
 } from "@/server/dates/brisbaneDay";
+import { resolveBlockLength } from "@/lib/billing/blockPricing";
 
 export const enrolmentWithPlanInclude = {
   include: {
@@ -236,6 +237,7 @@ export function resolveCoverageForPlan(params: {
   plan: Prisma.EnrolmentPlanUncheckedCreateInput | Prisma.EnrolmentPlanGetPayload<{ include: { level: true } }>;
   holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
+  customBlockLength?: number | null;
 }) {
   const { enrolment, plan } = params;
   const today = params.today ?? new Date();
@@ -261,10 +263,19 @@ export function resolveCoverageForPlan(params: {
     return { coverageStart, coverageEnd, coverageEndBase, creditsPurchased: null };
   }
 
-  const creditsPurchased = plan.blockClassCount ?? 1;
+  const planBlockLength = resolveBlockLength(plan.blockClassCount ?? null);
   if (plan.blockClassCount != null && plan.blockClassCount <= 0) {
     throw new Error("PER_CLASS plans with blockClassCount must be > 0.");
   }
+  if (params.customBlockLength != null) {
+    if (!Number.isInteger(params.customBlockLength)) {
+      throw new Error("Custom block length must be an integer.");
+    }
+    if (params.customBlockLength < planBlockLength) {
+      throw new Error("Custom block length must be at least the plan block length.");
+    }
+  }
+  const creditsPurchased = params.customBlockLength ?? planBlockLength;
 
   const assignedTemplates = resolveAssignedTemplates(enrolment);
 
@@ -283,7 +294,7 @@ export function resolveCoverageForPlan(params: {
       dayOfWeek: anchorTemplate.dayOfWeek,
       startTime: anchorTemplate.startTime ?? null,
     },
-    blockClassCount: plan.blockClassCount ?? 1,
+    blockClassCount: planBlockLength,
     blocksPurchased: 1,
     creditsPurchased,
     holidays: params.holidays,
