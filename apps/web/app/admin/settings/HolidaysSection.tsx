@@ -67,8 +67,8 @@ export function HolidaysSection({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+    <div className="">
+      <div className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Holidays</h2>
           <p className="text-sm text-muted-foreground">
@@ -87,15 +87,15 @@ export function HolidaysSection({
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="border-l-0! pb-0 shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4">
           <CardTitle className="text-base">Holiday list</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 py-0">
           {holidays.length === 0 ? (
             <p className="text-sm text-muted-foreground">No holidays yet.</p>
           ) : (
-            <div className="rounded-lg border">
+            <div className="">
               <Table>
                 <TableHeader>
                   <TableRow>
