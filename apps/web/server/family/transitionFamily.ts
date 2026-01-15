@@ -6,8 +6,18 @@ import { BillingType, EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { normalizeStartDate } from "@/server/enrolment/planRules";
-import { resolveAnchorTemplate, resolveTransitionTemplates } from "@/server/family/transitionFamilyUtils";
+import { normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
+import { formatDateKey, parseDateKey } from "@/lib/dateKey";
+import {
+  resolveAnchorTemplate,
+  resolveTransitionTemplates,
+  type TemplateSummary,
+} from "@/server/family/transitionFamilyUtils";
+import {
+  assertCapacityAvailable,
+  getCapacityIssueForOccurrences,
+  listCapacityOccurrencesForTemplate,
+} from "@/server/class/capacity";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
@@ -26,6 +36,7 @@ const transitionFamilySchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   batchId: z.string().trim().max(200).optional(),
   force: z.boolean().optional(),
+  allowOverload: z.boolean().optional(),
   students: z.array(studentTransitionSchema).nonempty(),
 });
 
@@ -87,6 +98,15 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     const templateMap = new Map(templates.map((template) => [template.id, template]));
 
     const enrolmentIds: string[] = [];
+    const capacityRequests = new Map<string, Map<string, number>>();
+    const enrolmentSelections: Array<{
+      selection: (typeof payload.students)[number];
+      plan: (typeof plans)[number];
+      normalizedStart: Date;
+      paidThrough: Date;
+      templatesForSelection: TemplateSummary[];
+      anchorTemplate: TemplateSummary;
+    }> = [];
 
     for (const selection of payload.students) {
       const plan = planMap.get(selection.planId);
@@ -127,7 +147,81 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       if (!anchorTemplate) {
         throw new Error("Select at least one class template.");
       }
+      const anchorTemplateFull = templatesForSelection.find((template) => template.id === anchorTemplate.id);
+      if (!anchorTemplateFull) {
+        throw new Error("Anchor template not found.");
+      }
 
+      for (const template of templatesForSelection) {
+        const templateForCapacity = {
+          id: template.id,
+          name: template.name ?? null,
+          dayOfWeek: template.dayOfWeek ?? null,
+          startDate: template.startDate,
+          endDate: template.endDate ?? null,
+          capacity: template.capacity ?? null,
+          levelId: template.levelId ?? null,
+          startTime: template.startTime ?? null,
+        };
+        const plannedEnd = resolvePlannedEndDate(
+          plan,
+          normalizedStart,
+          null,
+          template.endDate ?? null
+        );
+        const occurrences = listCapacityOccurrencesForTemplate({
+          template: templateForCapacity,
+          plan,
+          windowStart: normalizedStart,
+          windowEnd: plannedEnd,
+        });
+        if (!occurrences.length) continue;
+        const templateMap = capacityRequests.get(template.id) ?? new Map<string, number>();
+        for (const occurrence of occurrences) {
+          const key = formatDateKey(occurrence);
+          templateMap.set(key, (templateMap.get(key) ?? 0) + 1);
+        }
+        capacityRequests.set(template.id, templateMap);
+      }
+
+      enrolmentSelections.push({
+        selection,
+        plan,
+        normalizedStart,
+        paidThrough,
+        templatesForSelection,
+        anchorTemplate: anchorTemplateFull,
+      });
+    }
+
+    let earliestIssue = null as null | Awaited<ReturnType<typeof getCapacityIssueForOccurrences>>;
+    for (const [templateId, seatMap] of capacityRequests.entries()) {
+      const occurrenceDates = Array.from(seatMap.keys())
+        .map((key) => parseDateKey(key))
+        .filter((date): date is Date => Boolean(date));
+      const issue = await getCapacityIssueForOccurrences({
+        templateId,
+        occurrenceDates,
+        additionalSeatsByDate: seatMap,
+        client: tx,
+      });
+      if (issue) {
+        if (!earliestIssue) {
+          earliestIssue = issue;
+        } else {
+          const currentDate = parseDateKey(issue.occurrenceDateKey);
+          const earliestDate = parseDateKey(earliestIssue.occurrenceDateKey);
+          if (currentDate && earliestDate && currentDate < earliestDate) {
+            earliestIssue = issue;
+          }
+        }
+      }
+    }
+    if (earliestIssue) {
+      assertCapacityAvailable(earliestIssue, payload.allowOverload);
+    }
+
+    for (const { selection, plan, normalizedStart, paidThrough, templatesForSelection, anchorTemplate } of enrolmentSelections) {
       const enrolment = await tx.enrolment.create({
         data: {
           studentId: selection.studentId,
