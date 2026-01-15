@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import type { ClassTemplate, Level, Teacher } from "@prisma/client";
 import { SlidersHorizontal } from "lucide-react";
 
-import { ScheduleView, type ScheduleViewHandle, type ScheduleFilters } from "@/packages/schedule";
+import { ScheduleView, type ScheduleViewHandle, type ScheduleFilters, type ScheduleClassClickContext } from "@/packages/schedule";
 import { TemplateModal } from "../class/templates/TemplateModal";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
@@ -231,7 +231,7 @@ export default function ScheduleWithTemplateModal({
     setModalOpen(true);
   };
 
-  const handleClassClick = (occurrence: NormalizedScheduleClass) => {
+  const handleClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     if (!occurrence.template) return;
 
     // ✅ convert schedule template -> ClassTemplate for TemplateModal + selectedTemplate.id usage
@@ -245,8 +245,10 @@ export default function ScheduleWithTemplateModal({
 
     const minutes = occurrence.startTime.getHours() * 60 + occurrence.startTime.getMinutes();
 
+    const prefillDate = context?.columnDate ?? occurrence.startTime;
+
     setPrefill({
-      date: occurrence.startTime,
+      date: prefillDate,
       startMinutes: minutes,
       dayOfWeek: occurrence.dayOfWeek,
       levelId: occurrence.levelId ?? undefined,
