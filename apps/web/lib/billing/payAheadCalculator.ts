@@ -15,6 +15,7 @@ type PayAheadCoverageParams = {
   classTemplate: PaidThroughTemplate;
   blocksPurchased: number;
   blockClassCount: number;
+  creditsPurchased?: number;
   holidays: HolidayRange[];
 };
 
@@ -26,6 +27,7 @@ export function computeBlockPayAheadCoverage(params: PayAheadCoverageParams): Co
     classTemplate: params.classTemplate,
     blockClassCount: params.blockClassCount,
     blocksPurchased: params.blocksPurchased,
+    creditsPurchased: params.creditsPurchased,
     holidays: params.holidays,
   });
 
