@@ -21,6 +21,7 @@ const recordPaymentSchema = z
     note: z.string().trim().max(1000).optional(),
     allocations: z.array(allocationSchema).optional(),
     enrolmentId: z.string().min(1).optional(),
+    customBlockLength: z.number().int().positive().optional(),
     idempotencyKey: z.string().trim().min(1).optional(),
   })
   .superRefine((data, ctx) => {
@@ -52,6 +53,7 @@ export async function recordFamilyPayment(input: RecordFamilyPaymentInput) {
       method: payload.method,
       note: payload.note,
       enrolmentId: payload.enrolmentId,
+      customBlockLength: payload.customBlockLength,
       idempotencyKey: payload.idempotencyKey,
     });
     return result.payment;

@@ -52,7 +52,7 @@ export async function getFamilyBillingData(familyId: string) {
       select: {
         id: true,
         student: { select: { name: true } },
-        plan: { select: { name: true, billingType: true } },
+        plan: { select: { name: true, billingType: true, priceCents: true, blockClassCount: true } },
       },
       orderBy: { startDate: "asc" },
     }),

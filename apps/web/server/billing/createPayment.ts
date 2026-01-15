@@ -23,6 +23,7 @@ const paymentSchema = z
     allocationMode: z.enum(["AUTO", "MANUAL"]).optional(),
     idempotencyKey: z.string().trim().min(1).optional(),
     enrolmentId: z.string().min(1).optional(),
+    customBlockLength: z.number().int().positive().optional(),
   })
   .superRefine((data, ctx) => {
     const mode = data.allocationMode ?? "MANUAL";
@@ -53,6 +54,7 @@ export async function createPayment(input: CreatePaymentInput) {
       method: payload.method,
       note: payload.note,
       enrolmentId: payload.enrolmentId,
+      customBlockLength: payload.customBlockLength,
       idempotencyKey: payload.idempotencyKey,
     });
     return {

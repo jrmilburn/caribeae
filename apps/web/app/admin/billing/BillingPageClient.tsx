@@ -162,6 +162,9 @@ export default function BillingPageClient({
         // If your payload might have allocations: null, then:
         // allocations: nullToUndefined(payload.allocations),
       };
+      if (payload.customBlockLength) {
+        normalized.customBlockLength = payload.customBlockLength;
+      }
 
       if (editingPayment) {
         await updatePayment(editingPayment.id, normalized);
