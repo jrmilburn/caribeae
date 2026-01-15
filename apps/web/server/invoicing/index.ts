@@ -14,6 +14,7 @@ import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility"
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -51,7 +52,7 @@ function inTransaction<T>(client: PrismaClientOrTx | undefined, fn: (tx: Prisma.
 
 export async function createInitialInvoiceForEnrolment(
   enrolmentId: string,
-  options?: { prismaClient?: PrismaClientOrTx; skipAuth?: boolean }
+  options?: { prismaClient?: PrismaClientOrTx; skipAuth?: boolean; customBlockLength?: number | null }
 ) {
   await ensureAdminAccess(options?.skipAuth);
 
@@ -71,6 +72,18 @@ export async function createInitialInvoiceForEnrolment(
       throw new Error("Class template missing for enrolment.");
     }
     assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
+    const planBlockLength = resolveBlockLength(enrolment.plan.blockClassCount ?? null);
+    if (options?.customBlockLength != null) {
+      if (enrolment.plan.billingType !== BillingType.PER_CLASS) {
+        throw new Error("Custom block length is only available for per-class plans.");
+      }
+      if (!Number.isInteger(options.customBlockLength)) {
+        throw new Error("Custom block length must be an integer.");
+      }
+      if (options.customBlockLength < planBlockLength) {
+        throw new Error("Custom block length must be at least the plan block length.");
+      }
+    }
 
     const existingOpen = await tx.invoice.findFirst({
       where: { enrolmentId, status: { in: [...OPEN_INVOICE_STATUSES] } },
@@ -93,7 +106,20 @@ export async function createInitialInvoiceForEnrolment(
       plan: enrolment.plan,
       holidays,
       today: enrolment.startDate,
+      customBlockLength: options?.customBlockLength ?? null,
     });
+    const blockPricing =
+      enrolment.plan.billingType === BillingType.PER_CLASS
+        ? calculateBlockPricing({
+            priceCents: enrolment.plan.priceCents,
+            blockLength: planBlockLength,
+            customBlockLength: options?.customBlockLength ?? undefined,
+          })
+        : null;
+    const enrolmentUnitPrice =
+      enrolment.plan.billingType === BillingType.PER_CLASS && blockPricing
+        ? blockPricing.totalCents
+        : enrolment.plan.priceCents;
 
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
@@ -103,7 +129,7 @@ export async function createInitialInvoiceForEnrolment(
           kind: InvoiceLineItemKind.ENROLMENT,
           description: enrolment.plan.name,
           quantity: 1,
-          unitPriceCents: enrolment.plan.priceCents,
+          unitPriceCents: enrolmentUnitPrice,
         },
       ],
       status: InvoiceStatus.SENT,

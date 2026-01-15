@@ -37,6 +37,7 @@ function createFakeClient() {
   const invoices: any[] = [];
   const invoiceLineItems: any[] = [];
   const holidays: { startDate: Date; endDate: Date }[] = [];
+  const classCancellations: { templateId: string; date: Date }[] = [];
 
   const nextId = () => `id-${(idCounter += 1)}`;
 
@@ -72,16 +73,55 @@ function createFakeClient() {
     holiday: {
       findMany: async () => holidays,
     },
+    classCancellation: {
+      findMany: async ({ where }: any) => {
+        const start = where?.date?.gte ? new Date(where.date.gte) : null;
+        const end = where?.date?.lte ? new Date(where.date.lte) : null;
+        return classCancellations.filter((cancellation) => {
+          if (where?.templateId?.in && !where.templateId.in.includes(cancellation.templateId)) return false;
+          if (start && cancellation.date < start) return false;
+          if (end && cancellation.date > end) return false;
+          return true;
+        });
+      },
+    },
     enrolmentCreditEvent: {
       create: async ({ data }: any) => {
         enrolmentCreditEvents.push({ id: nextId(), ...data });
         return data;
+      },
+      createMany: async ({ data }: any) => {
+        data.forEach((entry: any) => {
+          enrolmentCreditEvents.push({ id: nextId(), ...entry });
+        });
+        return { count: data.length };
       },
       aggregate: async ({ where }: any) => {
         const sum = enrolmentCreditEvents
           .filter((event) => event.enrolmentId === where.enrolmentId)
           .reduce((acc, event) => acc + event.creditsDelta, 0);
         return { _sum: { creditsDelta: sum } };
+      },
+      findMany: async ({ where }: any) => {
+        return enrolmentCreditEvents.filter((event) => {
+          if (where?.enrolmentId && event.enrolmentId !== where.enrolmentId) return false;
+          if (where?.type && event.type !== where.type) return false;
+          const start = where?.occurredOn?.gte ? new Date(where.occurredOn.gte) : null;
+          const end = where?.occurredOn?.lte ? new Date(where.occurredOn.lte) : null;
+          if (start && event.occurredOn < start) return false;
+          if (end && event.occurredOn > end) return false;
+          return true;
+        });
+      },
+      deleteMany: async ({ where }: any) => {
+        const before = enrolmentCreditEvents.length;
+        for (let i = enrolmentCreditEvents.length - 1; i >= 0; i -= 1) {
+          const event = enrolmentCreditEvents[i];
+          if (where?.enrolmentId && event.enrolmentId !== where.enrolmentId) continue;
+          if (where?.adjustmentId && event.adjustmentId !== where.adjustmentId) continue;
+          enrolmentCreditEvents.splice(i, 1);
+        }
+        return { count: before - enrolmentCreditEvents.length };
       },
     },
     enrolmentCoverageAudit: {
@@ -112,6 +152,7 @@ function createFakeClient() {
       invoices,
       invoiceLineItems,
       holidays,
+      classCancellations,
     },
   };
 
@@ -267,4 +308,43 @@ test("manual paid-through backward stays aligned for weekly payments", async () 
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
+});
+
+test("custom block length uses prorated payment and credits", async () => {
+  const db = createFakeClient();
+  const enrolment = seedCreditEnrolment(db, { creditsRemaining: 0 });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 1,
+    enrolmentId: enrolment.id,
+    customBlockLength: 6,
+    idempotencyKey: "custom-block",
+    client: db,
+  });
+
+  assert.strictEqual(db.__data.payments[0].amountCents, 6000);
+  assert.strictEqual(enrolment.creditsRemaining, 6);
+  assert.strictEqual(db.__data.invoices[0].creditsPurchased, 6);
+});
+
+test("custom block length cannot be below plan block length", async () => {
+  const db = createFakeClient();
+  const enrolment = seedCreditEnrolment(db, { creditsRemaining: 0 });
+
+  let error: unknown = null;
+  try {
+    await recordPayment({
+      familyId: "family-1",
+      amountCents: 1,
+      enrolmentId: enrolment.id,
+      customBlockLength: 2,
+      idempotencyKey: "invalid-block",
+      client: db,
+    });
+  } catch (err) {
+    error = err;
+  }
+
+  assert.ok(error instanceof Error);
 });

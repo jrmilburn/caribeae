@@ -26,6 +26,8 @@ import { Badge } from "@/components/ui/badge";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { formatCurrencyFromCents } from "@/lib/currency";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -55,6 +57,8 @@ export function CreateEnrolmentDialog({
   const [endDate, setEndDate] = React.useState<string>("");
   const [planId, setPlanId] = React.useState<string>("");
   const [status, setStatus] = React.useState<EnrolmentStatus>("ACTIVE");
+  const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
+  const [customBlockLength, setCustomBlockLength] = React.useState("");
 
   React.useEffect(() => {
     if (!open) {
@@ -63,6 +67,8 @@ export function CreateEnrolmentDialog({
       setEndDate("");
       setPlanId("");
       setStatus("ACTIVE");
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
       setSaving(false);
     }
   }, [open]);
@@ -80,6 +86,18 @@ export function CreateEnrolmentDialog({
     () => availablePlans.find((p) => p.id === planId) ?? null,
     [availablePlans, planId]
   );
+  const planIsBlock = selectedPlan?.billingType === "PER_CLASS";
+  const planBlockLength = selectedPlan ? resolveBlockLength(selectedPlan.blockClassCount) : 1;
+  const parsedCustomBlockLength = Number(customBlockLength);
+  const customBlockValue = Number.isInteger(parsedCustomBlockLength) ? parsedCustomBlockLength : null;
+  const blockPricing =
+    selectedPlan && planIsBlock
+      ? calculateBlockPricing({
+          priceCents: selectedPlan.priceCents,
+          blockLength: planBlockLength,
+          customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
+        })
+      : null;
   const selectionRequirement = React.useMemo(
     () =>
       selectedPlan
@@ -95,12 +113,27 @@ export function CreateEnrolmentDialog({
   const requiresMultipleTemplates = selectionRequirement.maxCount > 1;
   const canSubmit = studentId && startDate && planId && !saving && !requiresMultipleTemplates;
 
+  React.useEffect(() => {
+    if (!selectedPlan || !planIsBlock) {
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
+      return;
+    }
+    if (!customBlockEnabled) {
+      setCustomBlockLength(String(planBlockLength));
+    }
+  }, [selectedPlan, planIsBlock, planBlockLength, customBlockEnabled]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) {
       if (requiresMultipleTemplates) {
         toast.error(selectionRequirement.helper);
       }
+      return;
+    }
+    if (customBlockEnabled && planIsBlock && (!customBlockValue || customBlockValue < planBlockLength)) {
+      toast.error(`Custom block length must be at least ${planBlockLength} classes.`);
       return;
     }
 
@@ -118,6 +151,7 @@ export function CreateEnrolmentDialog({
         startDate: start.toISOString(),
         endDate: end?.toISOString() ?? undefined,
         status,
+        customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
       });
 
       onOpenChange(false);
@@ -176,6 +210,48 @@ export function CreateEnrolmentDialog({
               <p className="text-xs text-destructive">
                 {selectionRequirement.helper} Use the student schedule to select multiple classes.
               </p>
+            ) : null}
+            {planIsBlock && selectedPlan ? (
+              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>
+                    {planBlockLength} classes · {formatCurrencyFromCents(selectedPlan.priceCents)}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      if (!customBlockEnabled) {
+                        setCustomBlockLength(String(planBlockLength));
+                      }
+                      setCustomBlockEnabled((prev) => !prev);
+                    }}
+                  >
+                    {customBlockEnabled ? "Use default" : "Customize"}
+                  </button>
+                </div>
+                {customBlockEnabled ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="custom-block-length-class">Number of classes</Label>
+                      <Input
+                        id="custom-block-length-class"
+                        type="number"
+                        min={planBlockLength}
+                        value={customBlockLength}
+                        onChange={(e) => setCustomBlockLength(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
+                    </div>
+                    {blockPricing ? (
+                      <div className="text-xs text-muted-foreground">
+                        <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
+                        <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
           </div>
 

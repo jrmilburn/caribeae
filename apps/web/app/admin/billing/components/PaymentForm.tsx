@@ -24,6 +24,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents, dollarsToCents, centsToDollarString } from "@/lib/currency";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { BillingPayment } from "@/server/billing/types";
@@ -42,6 +43,7 @@ type Props = {
     note?: string | null;
     allocations?: Array<{ invoiceId: string; amountCents: number }>;
     enrolmentId?: string;
+    customBlockLength?: number;
     idempotencyKey?: string;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -73,10 +75,14 @@ export function PaymentForm({
   );
   const [allocations, setAllocations] = React.useState<Record<string, string>>({});
   const [invoiceOptions, setInvoiceOptions] = React.useState<InvoiceOption[]>([]);
-  const [enrolmentOptions, setEnrolmentOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [enrolmentOptions, setEnrolmentOptions] = React.useState<
+    Array<{ id: string; label: string; plan?: { billingType: string; priceCents: number; blockClassCount: number | null } }>
+  >([]);
   const [applyTarget, setApplyTarget] = React.useState<string>("ALLOCATE_INVOICES");
   const [loadingInvoices, setLoadingInvoices] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
+  const [customBlockLength, setCustomBlockLength] = React.useState("");
 
   React.useEffect(() => {
     if (!open) return;
@@ -86,6 +92,8 @@ export function PaymentForm({
     setNote(payment?.note ?? "");
     setPaidOn(payment?.paidAt ? format(payment.paidAt, "yyyy-MM-dd") : new Date().toISOString().slice(0, 10));
     setApplyTarget("ALLOCATE_INVOICES");
+    setCustomBlockEnabled(false);
+    setCustomBlockLength("");
 
     const existingAllocations: Record<string, string> = {};
     payment?.allocations?.forEach((allocation) => {
@@ -112,6 +120,7 @@ export function PaymentForm({
           res.enrolments?.map((enrolment) => ({
             id: enrolment.id,
             label: `${enrolment.student.name} · ${enrolment.plan?.name ?? "Plan"}`,
+            plan: enrolment.plan ?? undefined,
           })) ?? [];
         setEnrolmentOptions(enrolments);
         const openInvoices =
@@ -165,6 +174,32 @@ export function PaymentForm({
   }));
 
   const totalCents = allocationCents.reduce((sum, a) => sum + a.amountCents, 0);
+  const selectedEnrolment = enrolmentOptions.find((option) => option.id === applyTarget) ?? null;
+  const isBlockPlan = selectedEnrolment?.plan?.billingType === "PER_CLASS";
+  const planBlockLength = selectedEnrolment?.plan ? resolveBlockLength(selectedEnrolment.plan.blockClassCount) : 1;
+  const parsedCustomBlockLength = Number(customBlockLength);
+  const customBlockValue = Number.isInteger(parsedCustomBlockLength) ? parsedCustomBlockLength : null;
+  const blockPricing =
+    selectedEnrolment?.plan && isBlockPlan
+      ? calculateBlockPricing({
+          priceCents: selectedEnrolment.plan.priceCents,
+          blockLength: planBlockLength,
+          customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
+        })
+      : null;
+  const amountCents = customBlockEnabled && blockPricing ? blockPricing.totalCents : dollarsToCents(amount || "0");
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (!isBlockPlan) {
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
+      return;
+    }
+    if (!customBlockEnabled) {
+      setCustomBlockLength(String(planBlockLength));
+    }
+  }, [applyTarget, open, isBlockPlan, planBlockLength, customBlockEnabled]);
 
   const handleToggle = (invoiceId: string) => {
     setAllocations((prev) => {
@@ -185,7 +220,6 @@ export function PaymentForm({
       toast.error("Choose a family first.");
       return;
     }
-    const amountCents = dollarsToCents(amount || "0");
     if (amountCents <= 0) {
       toast.error("Enter a payment amount.");
       return;
@@ -220,6 +254,13 @@ export function PaymentForm({
       return;
     }
 
+    const invalidCustomBlock =
+      customBlockEnabled && isBlockPlan && (!customBlockValue || customBlockValue < planBlockLength);
+    if (invalidCustomBlock) {
+      toast.error(`Custom block length must be at least ${planBlockLength} classes.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
       await onSubmit({
@@ -230,6 +271,7 @@ export function PaymentForm({
         note: note.trim() || undefined,
         allocations: applyTarget === "ALLOCATE_INVOICES" ? allocationsPayload : undefined,
         enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+        customBlockLength: customBlockEnabled && isBlockPlan && customBlockValue ? customBlockValue : undefined,
         idempotencyKey: crypto.randomUUID(),
       });
       onOpenChange(false);
@@ -276,10 +318,53 @@ export function PaymentForm({
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                value={amount}
+                value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
                 onChange={(e) => setAmount(e.target.value)}
+                disabled={customBlockEnabled && isBlockPlan}
                 placeholder="0.00"
               />
+              {isBlockPlan && selectedEnrolment?.plan ? (
+                <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {planBlockLength} classes · {formatCurrencyFromCents(selectedEnrolment.plan.priceCents)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      onClick={() => {
+                        if (!customBlockEnabled) {
+                          setCustomBlockLength(String(planBlockLength));
+                        }
+                        setCustomBlockEnabled((prev) => !prev);
+                      }}
+                    >
+                      {customBlockEnabled ? "Use default" : "Customize"}
+                    </button>
+                  </div>
+                  {customBlockEnabled ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="custom-block-length">Number of classes</Label>
+                        <Input
+                          id="custom-block-length"
+                          type="number"
+                          min={planBlockLength}
+                          value={customBlockLength}
+                          onChange={(e) => setCustomBlockLength(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
+                      </div>
+                      {blockPricing ? (
+                        <div className="text-xs text-muted-foreground">
+                          <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
+                          <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
