@@ -19,6 +19,7 @@ import type { FamilyBillingSummary } from "@/server/billing/getFamilyBillingSumm
 import { payAheadAndPay } from "@/server/billing/payAheadAndPay";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -45,7 +46,7 @@ function formatDate(value?: Date | string | null) {
 }
 
 function blockSize(enrolment: Enrolment) {
-  const size = enrolment.blockClassCount ?? 1;
+  const size = resolveBlockLength(enrolment.blockClassCount);
   return size > 0 ? size : 0;
 }
 
@@ -67,7 +68,12 @@ function resolveCurrentPaidThrough(enrolment: Enrolment) {
   );
 }
 
-function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: HolidayRange[]) {
+function projectPaidAhead(
+  enrolment: Enrolment,
+  quantity: number,
+  holidays: HolidayRange[],
+  customBlockLength?: number | null
+) {
   const today = new Date();
   const paidThrough = resolveCurrentPaidThrough(enrolment);
 
@@ -103,6 +109,7 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: Holi
       return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + blockSize(enrolment) * quantity };
     }
 
+    const effectiveBlockLength = customBlockLength ?? blockSize(enrolment);
     const range = computeBlockPayAheadCoverage({
       currentPaidThroughDate: paidThrough,
       enrolmentStartDate: asDate(enrolment.startDate) ?? today,
@@ -113,6 +120,7 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: Holi
       },
       blocksPurchased: quantity,
       blockClassCount: blockSize(enrolment),
+      creditsPurchased: effectiveBlockLength * quantity,
       holidays: normalizeHolidays(holidays),
     });
 
@@ -129,6 +137,8 @@ function projectPaidAhead(enrolment: Enrolment, quantity: number, holidays: Holi
 export function PayAheadCard({ summary, onRefresh }: Props) {
   const [selected, setSelected] = React.useState<string[]>([]);
   const [quantities, setQuantities] = React.useState<Record<string, number>>({});
+  const [customBlockLengths, setCustomBlockLengths] = React.useState<Record<string, string>>({});
+  const [customBlockEnabled, setCustomBlockEnabled] = React.useState<Record<string, boolean>>({});
   const [method, setMethod] = React.useState("Cash");
   const [note, setNote] = React.useState("");
   const [paidOn, setPaidOn] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -146,6 +156,8 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         return acc;
       }, {})
     );
+    setCustomBlockLengths({});
+    setCustomBlockEnabled({});
   }, [summary, enrolments]);
 
   const handleToggle = (id: string) => {
@@ -158,10 +170,32 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
       return;
     }
 
+    const invalidCustom = selected.find((id) => {
+      const enrolment = enrolments.find((entry : any) => entry.id === id);
+      if (!enrolment || enrolment.billingType !== "PER_CLASS") return false;
+      if (!customBlockEnabled[id]) return false;
+      const blockSizeValue = blockSize(enrolment);
+      const parsedCustom = Number(customBlockLengths[id]);
+      const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
+      return !customLength || customLength < blockSizeValue;
+    });
+    if (invalidCustom) {
+      const enrolment = enrolments.find((entry : any) => entry.id === invalidCustom);
+      const minValue = enrolment ? blockSize(enrolment) : 1;
+      toast.error(`Custom block length must be at least ${minValue} classes.`);
+      return;
+    }
+
     const items = selected
       .map((id) => {
         const qty = quantities[id] ?? 1;
-        return { enrolmentId: id, quantity: qty > 0 ? qty : 1 };
+        const parsedCustom = Number(customBlockLengths[id]);
+        const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
+        return {
+          enrolmentId: id,
+          quantity: qty > 0 ? qty : 1,
+          customBlockLength: customBlockEnabled[id] && customLength ? customLength : undefined,
+        };
       })
       .filter((item) => item.quantity > 0);
 
@@ -190,10 +224,20 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
   };
 
   const selectedEnrolments = enrolments.filter((e : any) => selected.includes(e.id));
-  const totalCents = selectedEnrolments.reduce(
-    (sum : any, enrolment : any) => sum + enrolment.planPriceCents * (quantities[enrolment.id] ?? 1),
-    0
-  );
+    const totalCents = selectedEnrolments.reduce((sum : any, enrolment : any) => {
+    const qty = quantities[enrolment.id] ?? 1;
+    if (enrolment.billingType === "PER_CLASS" && customBlockEnabled[enrolment.id]) {
+      const parsed = Number(customBlockLengths[enrolment.id]);
+      const customLength = Number.isInteger(parsed) ? parsed : null;
+      const pricing = calculateBlockPricing({
+        priceCents: enrolment.planPriceCents,
+        blockLength: blockSize(enrolment),
+        customBlockLength: customLength ?? undefined,
+      });
+      return sum + pricing.totalCents * qty;
+    }
+    return sum + enrolment.planPriceCents * qty;
+  }, 0);
 
   return (
     <Card>
@@ -247,8 +291,25 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
             <div className="space-y-2">
               {enrolments.map((enrolment : any) => {
                 const qty = quantities[enrolment.id] ?? 1;
-                const projection = projectPaidAhead(enrolment, qty, summary.holidays ?? []);
+                const parsedCustom = Number(customBlockLengths[enrolment.id]);
+                const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
+                const projection = projectPaidAhead(
+                  enrolment,
+                  qty,
+                  summary.holidays ?? [],
+                  customBlockEnabled[enrolment.id] ? customLength : null
+                );
                 const isWeekly = enrolment.billingType === "PER_WEEK";
+                const isBlock = enrolment.billingType === "PER_CLASS";
+                const planBlockLength = blockSize(enrolment);
+                const pricing =
+                  isBlock && customBlockEnabled[enrolment.id]
+                    ? calculateBlockPricing({
+                        priceCents: enrolment.planPriceCents,
+                        blockLength: planBlockLength,
+                        customBlockLength: customLength ?? undefined,
+                      })
+                    : null;
                 const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
                 const currentLabel = isWeekly
                   ? `Paid to ${formatDate(currentPaidThrough)}`
@@ -299,10 +360,63 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                           }
                         />
                         <Badge variant="secondary" className="text-xs">
-                          {formatCurrencyFromCents(enrolment.planPriceCents * qty)}
+                          {formatCurrencyFromCents(
+                            pricing ? pricing.totalCents * qty : enrolment.planPriceCents * qty
+                          )}
                         </Badge>
                       </div>
                     </div>
+                    {isBlock ? (
+                      <div className="mt-2 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          {planBlockLength} classes · {formatCurrencyFromCents(enrolment.planPriceCents)}
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                          onClick={() =>
+                            setCustomBlockEnabled((prev) => {
+                              const next = !prev[enrolment.id];
+                              if (next) {
+                                setCustomBlockLengths((current) => ({
+                                  ...current,
+                                  [enrolment.id]: current[enrolment.id] ?? String(planBlockLength),
+                                }));
+                              }
+                              return { ...prev, [enrolment.id]: next };
+                            })
+                          }
+                        >
+                          {customBlockEnabled[enrolment.id] ? "Use default" : "Customize"}
+                        </button>
+                      </div>
+                    ) : null}
+                    {isBlock && customBlockEnabled[enrolment.id] ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`custom-block-${enrolment.id}`}>Classes</Label>
+                          <Input
+                            id={`custom-block-${enrolment.id}`}
+                            type="number"
+                            min={planBlockLength}
+                            className="w-20"
+                            value={customBlockLengths[enrolment.id] ?? String(planBlockLength)}
+                            onChange={(e) =>
+                              setCustomBlockLengths((prev) => ({
+                                ...prev,
+                                [enrolment.id]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        {pricing ? (
+                          <span>
+                            Per class {formatCurrencyFromCents(pricing.perClassPriceCents)} · Total{" "}
+                            {formatCurrencyFromCents(pricing.totalCents)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

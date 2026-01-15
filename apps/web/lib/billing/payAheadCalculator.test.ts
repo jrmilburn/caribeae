@@ -93,3 +93,19 @@ test("Holiday on a class date extends coverage by a week", () => {
   assert.strictEqual(result.coverageStart?.toISOString().slice(0, 10), "2026-03-16");
   assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-05-11");
 });
+
+test("Custom credits extend pay-ahead coverage", () => {
+  const result = computeBlockPayAheadCoverage({
+    currentPaidThroughDate: null,
+    enrolmentStartDate: d("2026-01-12"),
+    enrolmentEndDate: null,
+    classTemplate: mondayTemplate,
+    blocksPurchased: 1,
+    blockClassCount: 8,
+    creditsPurchased: 11,
+    holidays: [],
+  });
+
+  assert.ok(result.coverageEnd);
+  assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-03-23");
+});

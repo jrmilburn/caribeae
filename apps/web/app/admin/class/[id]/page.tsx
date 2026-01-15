@@ -13,6 +13,9 @@ export default async function ClassPage({ params, searchParams }: PageProps) {
   const search = await searchParams;
   const date = search?.date
 
+  console.log("DATE", date);
+  console.log("SEARCH", search);
+
   const pageData = await getClassPageData(id, date);
   if (!pageData) return null;
 
