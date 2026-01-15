@@ -5,7 +5,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 function DayColumnSkeleton() {
   return (
-    <div className="relative h-[640px]">
+    <div className="relative h-full">
       {/* faint background */}
       <div className="absolute inset-0 bg-muted/10" />
 
@@ -67,7 +67,7 @@ export default function Loading() {
             >
               {/* Time gutter */}
               <div className="border-r border-border">
-                {Array.from({ length: 50 }).map((_, i) => (
+                {Array.from({ length: 20 }).map((_, i) => (
                   <div
                     key={i}
                     className="flex h-8 items-center border-b border-border bg-muted/20"
