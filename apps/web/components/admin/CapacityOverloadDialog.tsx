@@ -61,6 +61,10 @@ export function CapacityOverloadDialog({
             <span className="font-medium">Class:</span> {classLabel}
           </div>
           <div>
+            <span className="font-medium">Overload date:</span>{" "}
+            {details.occurrenceDateKey}
+          </div>
+          <div>
             <span className="font-medium">Capacity:</span> {details.capacity}
           </div>
           <div>

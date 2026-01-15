@@ -27,11 +27,7 @@ import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolm
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
-import {
-  assertCapacityAvailable,
-  getCapacitySnapshot,
-  resolveOccurrenceDateOnOrAfter,
-} from "@/server/class/capacity";
+import { assertCapacityForTemplateRange } from "@/server/class/capacity";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -312,23 +308,18 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
     for (const window of windows) {
       const template = templates.find((item) => item.id === window.templateId);
       if (!template) continue;
-      const occurrenceDate = resolveOccurrenceDateOnOrAfter({
+      await assertCapacityForTemplateRange({
         template: {
           ...template,
           startTime: template.startTime ?? null,
           capacity: template.capacity ?? null,
         },
-        startDate: window.startDate,
-      });
-      if (!occurrenceDate) continue;
-      const snapshot = await getCapacitySnapshot({
-        templateId: template.id,
-        occurrenceDate,
+        plan,
+        windowStart: window.startDate,
+        windowEnd: window.endDate ?? null,
+        allowOverload: input.allowOverload,
         client: tx,
       });
-      if (snapshot) {
-        assertCapacityAvailable(snapshot, input.allowOverload);
-      }
     }
 
     const anchorTemplate = templates.sort((a, b) => {

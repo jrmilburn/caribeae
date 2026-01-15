@@ -21,11 +21,7 @@ import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { resolveBlockLength } from "@/lib/billing/blockPricing";
-import {
-  assertCapacityAvailable,
-  getCapacitySnapshot,
-  resolveOccurrenceDateOnOrAfter,
-} from "@/server/class/capacity";
+import { assertCapacityForTemplateRange } from "@/server/class/capacity";
 
 type TemplateSummary = {
   id: string;
@@ -259,19 +255,14 @@ export async function createEnrolmentsFromSelection(
     for (const window of windows) {
       const template = templates.find((item) => item.id === window.templateId);
       if (!template) continue;
-      const occurrenceDate = resolveOccurrenceDateOnOrAfter({
+      await assertCapacityForTemplateRange({
         template,
-        startDate: window.startDate,
-      });
-      if (!occurrenceDate) continue;
-      const snapshot = await getCapacitySnapshot({
-        templateId: template.id,
-        occurrenceDate,
+        plan,
+        windowStart: window.startDate,
+        windowEnd: window.endDate ?? null,
+        allowOverload: payload.allowOverload,
         client: tx,
       });
-      if (snapshot) {
-        assertCapacityAvailable(snapshot, payload.allowOverload);
-      }
     }
 
     const earliestStart = windows.reduce(

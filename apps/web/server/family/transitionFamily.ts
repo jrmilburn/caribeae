@@ -6,7 +6,8 @@ import { BillingType, EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { normalizeStartDate } from "@/server/enrolment/planRules";
+import { normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
+import { formatDateKey, parseDateKey } from "@/lib/dateKey";
 import {
   resolveAnchorTemplate,
   resolveTransitionTemplates,
@@ -14,8 +15,8 @@ import {
 } from "@/server/family/transitionFamilyUtils";
 import {
   assertCapacityAvailable,
-  getCapacitySnapshot,
-  resolveOccurrenceDateOnOrAfter,
+  getCapacityIssueForOccurrences,
+  listCapacityOccurrencesForTemplate,
 } from "@/server/class/capacity";
 
 const studentTransitionSchema = z.object({
@@ -97,10 +98,7 @@ export async function transitionFamily(input: TransitionFamilyInput) {
     const templateMap = new Map(templates.map((template) => [template.id, template]));
 
     const enrolmentIds: string[] = [];
-    const capacityRequests = new Map<
-      string,
-      { templateId: string; occurrenceDate: Date; seats: number }
-    >();
+    const capacityRequests = new Map<string, Map<string, number>>();
     const enrolmentSelections: Array<{
       selection: (typeof payload.students)[number];
       plan: (typeof plans)[number];
@@ -155,28 +153,35 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       }
 
       for (const template of templatesForSelection) {
-        const occurrenceDate = resolveOccurrenceDateOnOrAfter({
-          template: {
-            id: template.id,
-            name: template.name ?? null,
-            dayOfWeek: template.dayOfWeek ?? null,
-            startDate: template.startDate,
-            endDate: template.endDate ?? null,
-            capacity: template.capacity ?? null,
-            levelId: template.levelId ?? null,
-            startTime: template.startTime ?? null,
-          },
-          startDate: normalizedStart,
-        });
-        if (!occurrenceDate) continue;
-        const key = `${template.id}:${occurrenceDate.toISOString()}`;
-        const entry = capacityRequests.get(key) ?? {
-          templateId: template.id,
-          occurrenceDate,
-          seats: 0,
+        const templateForCapacity = {
+          id: template.id,
+          name: template.name ?? null,
+          dayOfWeek: template.dayOfWeek ?? null,
+          startDate: template.startDate,
+          endDate: template.endDate ?? null,
+          capacity: template.capacity ?? null,
+          levelId: template.levelId ?? null,
+          startTime: template.startTime ?? null,
         };
-        entry.seats += 1;
-        capacityRequests.set(key, entry);
+        const plannedEnd = resolvePlannedEndDate(
+          plan,
+          normalizedStart,
+          null,
+          template.endDate ?? null
+        );
+        const occurrences = listCapacityOccurrencesForTemplate({
+          template: templateForCapacity,
+          plan,
+          windowStart: normalizedStart,
+          windowEnd: plannedEnd,
+        });
+        if (!occurrences.length) continue;
+        const templateMap = capacityRequests.get(template.id) ?? new Map<string, number>();
+        for (const occurrence of occurrences) {
+          const key = formatDateKey(occurrence);
+          templateMap.set(key, (templateMap.get(key) ?? 0) + 1);
+        }
+        capacityRequests.set(template.id, templateMap);
       }
 
       enrolmentSelections.push({
@@ -189,16 +194,31 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       });
     }
 
-    for (const request of capacityRequests.values()) {
-      const snapshot = await getCapacitySnapshot({
-        templateId: request.templateId,
-        occurrenceDate: request.occurrenceDate,
-        additionalSeats: request.seats,
+    let earliestIssue = null as null | Awaited<ReturnType<typeof getCapacityIssueForOccurrences>>;
+    for (const [templateId, seatMap] of capacityRequests.entries()) {
+      const occurrenceDates = Array.from(seatMap.keys())
+        .map((key) => parseDateKey(key))
+        .filter((date): date is Date => Boolean(date));
+      const issue = await getCapacityIssueForOccurrences({
+        templateId,
+        occurrenceDates,
+        additionalSeatsByDate: seatMap,
         client: tx,
       });
-      if (snapshot) {
-        assertCapacityAvailable(snapshot, payload.allowOverload);
+      if (issue) {
+        if (!earliestIssue) {
+          earliestIssue = issue;
+        } else {
+          const currentDate = parseDateKey(issue.occurrenceDateKey);
+          const earliestDate = parseDateKey(earliestIssue.occurrenceDateKey);
+          if (currentDate && earliestDate && currentDate < earliestDate) {
+            earliestIssue = issue;
+          }
+        }
       }
+    }
+    if (earliestIssue) {
+      assertCapacityAvailable(earliestIssue, payload.allowOverload);
     }
 
     for (const { selection, plan, normalizedStart, paidThrough, templatesForSelection, anchorTemplate } of enrolmentSelections) {

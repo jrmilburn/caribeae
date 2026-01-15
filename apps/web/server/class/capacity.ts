@@ -1,5 +1,5 @@
-import { addDays, isAfter, startOfDay } from "date-fns";
-import type { Prisma } from "@prisma/client";
+import { addDays, addWeeks, isAfter, startOfDay } from "date-fns";
+import { BillingType, type EnrolmentPlan, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { formatDateKey } from "@/lib/dateKey";
@@ -42,8 +42,10 @@ type TemplateOccurrenceInput = {
   startDate: Date;
 };
 
-// Capacity enforcement is anchored to the first scheduled occurrence on/after the effective start date
-// for each template, which avoids scanning long ranges while matching enrolment start semantics.
+const DEFAULT_WEEKLY_HORIZON_WEEKS = 8;
+
+// Capacity enforcement scans scheduled occurrences from the effective start date through the planned
+// end (or a bounded horizon for open-ended weekly plans), so later overages are still caught.
 export function resolveOccurrenceDateOnOrAfter({ template, startDate }: TemplateOccurrenceInput) {
   if (template.dayOfWeek === null || template.dayOfWeek === undefined) return null;
   const templateStart = startOfDay(template.startDate);
@@ -58,6 +60,69 @@ export function resolveOccurrenceDateOnOrAfter({ template, startDate }: Template
   }
   if (templateEnd && isAfter(cursor, templateEnd)) return null;
   return cursor;
+}
+
+function resolveCapacityCheckEndDate(params: {
+  plan: EnrolmentPlan;
+  startDate: Date;
+  windowEndDate: Date | null;
+  templateEndDate: Date | null;
+}) {
+  let endDate = params.windowEndDate ?? null;
+
+  if (params.plan.billingType === BillingType.PER_WEEK && !endDate) {
+    const weeks =
+      params.plan.durationWeeks && params.plan.durationWeeks > 0
+        ? params.plan.durationWeeks
+        : DEFAULT_WEEKLY_HORIZON_WEEKS;
+    endDate = addWeeks(params.startDate, weeks);
+  }
+
+  if (!endDate && params.templateEndDate) {
+    endDate = params.templateEndDate;
+  }
+
+  if (endDate && params.templateEndDate && isAfter(endDate, params.templateEndDate)) {
+    endDate = params.templateEndDate;
+  }
+
+  return endDate ?? params.startDate;
+}
+
+function listOccurrenceDates(params: {
+  template: TemplateOccurrenceInput["template"];
+  startDate: Date;
+  endDate: Date;
+}) {
+  const first = resolveOccurrenceDateOnOrAfter({
+    template: params.template,
+    startDate: params.startDate,
+  });
+  if (!first) return [] as Date[];
+  const dates: Date[] = [];
+  for (let cursor = first; !isAfter(cursor, params.endDate); cursor = addDays(cursor, 7)) {
+    dates.push(cursor);
+  }
+  return dates;
+}
+
+export function listCapacityOccurrencesForTemplate(params: {
+  template: TemplateOccurrenceInput["template"];
+  plan: EnrolmentPlan;
+  windowStart: Date;
+  windowEnd: Date | null;
+}) {
+  const endDate = resolveCapacityCheckEndDate({
+    plan: params.plan,
+    startDate: params.windowStart,
+    windowEndDate: params.windowEnd,
+    templateEndDate: params.template.endDate,
+  });
+  return listOccurrenceDates({
+    template: params.template,
+    startDate: params.windowStart,
+    endDate,
+  });
 }
 
 export function buildCapacityDetails(params: {
@@ -139,4 +204,62 @@ export async function getCapacitySnapshot(params: {
     currentCount,
     additionalSeats,
   });
+}
+
+export async function getCapacityIssueForOccurrences(params: {
+  templateId: string;
+  occurrenceDates: Date[];
+  additionalSeats?: number;
+  additionalSeatsByDate?: Map<string, number>;
+  existingEnrolmentId?: string;
+  client?: Prisma.TransactionClient;
+}) {
+  const occurrences = params.occurrenceDates
+    .slice()
+    .sort((a, b) => a.getTime() - b.getTime());
+  for (const occurrenceDate of occurrences) {
+    const key = formatDateKey(occurrenceDate);
+    const additionalSeats =
+      params.additionalSeatsByDate?.get(key) ?? params.additionalSeats ?? 1;
+    const snapshot = await getCapacitySnapshot({
+      templateId: params.templateId,
+      occurrenceDate,
+      additionalSeats,
+      existingEnrolmentId: params.existingEnrolmentId,
+      client: params.client,
+    });
+    if (snapshot && snapshot.projectedCount > snapshot.capacity) {
+      return snapshot;
+    }
+  }
+  return null;
+}
+
+export async function assertCapacityForTemplateRange(params: {
+  template: TemplateOccurrenceInput["template"];
+  plan: EnrolmentPlan;
+  windowStart: Date;
+  windowEnd: Date | null;
+  additionalSeats?: number;
+  existingEnrolmentId?: string;
+  allowOverload?: boolean;
+  client?: Prisma.TransactionClient;
+}) {
+  const occurrences = listCapacityOccurrencesForTemplate({
+    template: params.template,
+    plan: params.plan,
+    windowStart: params.windowStart,
+    windowEnd: params.windowEnd,
+  });
+  if (!occurrences.length) return;
+  const issue = await getCapacityIssueForOccurrences({
+    templateId: params.template.id,
+    occurrenceDates: occurrences,
+    additionalSeats: params.additionalSeats ?? 1,
+    existingEnrolmentId: params.existingEnrolmentId,
+    client: params.client,
+  });
+  if (issue) {
+    assertCapacityAvailable(issue, params.allowOverload);
+  }
 }
