@@ -70,7 +70,7 @@ function resolveCapacityCheckEndDate(params: {
 }) {
   let endDate = params.windowEndDate ?? null;
 
-  if (params.plan.billingType === BillingType.PER_WEEK && !endDate) {
+  if (!endDate) {
     const weeks =
       params.plan.durationWeeks && params.plan.durationWeeks > 0
         ? params.plan.durationWeeks

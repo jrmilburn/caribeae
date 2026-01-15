@@ -25,7 +25,19 @@ export function parseCapacityErrorMessage(message: string) {
   }
 }
 
+function extractErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return null;
+}
+
 export function parseCapacityError(error: unknown) {
-  if (!error || !(error instanceof Error)) return null;
-  return parseCapacityErrorMessage(error.message);
+  const message = extractErrorMessage(error);
+  if (!message) return null;
+  return parseCapacityErrorMessage(message);
 }
