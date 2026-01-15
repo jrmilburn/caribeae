@@ -33,7 +33,7 @@ function CommunicationRowSkeleton() {
 
 export default function Loading() {
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
+    <div className="relative flex h-full flex-col gap-4 overflow-hidden p-4">
       {/* Header */}
       <div className="flex flex-wrap justify-between gap-3">
         <div className="space-y-2">
@@ -62,6 +62,12 @@ export default function Loading() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Fade/blur towards bottom */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-background backdrop-blur-sm"
+      />
     </div>
   );
 }
