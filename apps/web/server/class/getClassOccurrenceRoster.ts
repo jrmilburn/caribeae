@@ -1,5 +1,3 @@
-"use server";
-
 import { BillingType, EnrolmentStatus } from "@prisma/client";
 import { isAfter } from "date-fns";
 
