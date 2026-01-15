@@ -85,7 +85,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
 
   const selectedDayName = dayOfWeekToName(selectedDay);
 
-  if (loading) return <ScheduleGridSkeleton days={DAYS_OF_WEEK} />;
+  if (loading) return <ScheduleGridSkeleton />;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">

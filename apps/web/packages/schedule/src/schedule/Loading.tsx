@@ -1,60 +1,78 @@
+// app/(protected)/admin/schedule/loading.tsx
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function ScheduleGridSkeleton({ days }: { days: string[] }) {
-  return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto">
-        <div className="min-w-[800px]">
-          {/* Week header row */}
-          <div
-            className="grid border-b border-r border-border bg-card sticky top-0 z-40 min-h-[60px]"
-            style={{
-              gridTemplateColumns:
-                "minmax(32px,1fr) repeat(7, minmax(64px,2fr))",
-            }}
-          >
-            <div className="p-4 flex items-center border-r border-border" />
-            {days.map((day) => (
-              <div
-                key={day}
-                className="p-4 text-center border-l border-border flex items-center justify-center"
-              >
-                <Skeleton className="h-4 w-24" />
-              </div>
-            ))}
-          </div>
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
-          {/* Grid */}
-          <div
-            className="grid relative border-r border-b"
-            style={{
-              gridTemplateColumns:
-                "minmax(32px,1fr) repeat(7, minmax(64px,2fr))",
-            }}
-          >
-            {/* Time gutter */}
-            <div className="border-r border-border">
-              {Array.from({ length: 22 }).map((_, i) => (
+function DayColumnSkeleton() {
+  return (
+    <div className="relative h-[640px]">
+      {/* faint background */}
+      <div className="absolute inset-0 bg-muted/10" />
+
+      {/* a few “class blocks” */}
+      <Skeleton className="absolute left-1 right-1 top-[8%] h-14 rounded-md" />
+      <Skeleton className="absolute left-1 right-1 top-[28%] h-20 rounded-md" />
+      <Skeleton className="absolute left-1 right-1 top-[55%] h-16 rounded-md" />
+    </div>
+  );
+}
+
+export default function ScheduleGridSkeleton() {
+  return (
+    <div className="flex h-full w-full flex-col">
+
+      {/* Grid area */}
+      <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
+        <div className="h-full overflow-auto">
+          <div className="min-w-[800px]">
+            {/* Week header row skeleton (like WeekView) */}
+            <div
+              className="sticky top-0 z-40 grid min-h-[60px] border-b border-r border-border bg-card"
+              style={{
+                gridTemplateColumns:
+                  "minmax(32px,1fr) repeat(7, minmax(64px,2fr))",
+              }}
+            >
+              <div className="border-r border-border p-4" />
+              {DAYS.map((d) => (
                 <div
-                  key={i}
-                  className="h-8 border-b border-border bg-muted/20 flex items-center"
+                  key={d}
+                  className="flex items-center justify-center border-l border-border p-4"
                 >
-                  <div className="pl-2">
-                    <Skeleton className="h-3 w-14" />
-                  </div>
+                  <Skeleton className="h-4 w-24" />
                 </div>
               ))}
             </div>
 
-            {/* Day columns */}
-            {days.map((day) => (
-              <div key={day} className="relative border-l border-border h-[704px]">
-                <div className="absolute inset-0 bg-muted/10" />
-                <Skeleton className="absolute left-1 right-1 top-[10%] h-14 rounded-md" />
-                <Skeleton className="absolute left-1 right-1 top-[30%] h-20 rounded-md" />
-                <Skeleton className="absolute left-1 right-1 top-[56%] h-16 rounded-md" />
+            {/* Main grid skeleton */}
+            <div
+              className="grid border-r border-b"
+              style={{
+                gridTemplateColumns:
+                  "minmax(32px,1fr) repeat(7, minmax(64px,2fr))",
+              }}
+            >
+              {/* Time gutter */}
+              <div className="border-r border-border">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex h-8 items-center border-b border-border bg-muted/20"
+                  >
+                    <div className="pl-2">
+                      <Skeleton className="h-3 w-14" />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+
+              {/* Day columns */}
+              {DAYS.map((d) => (
+                <div key={d} className="border-l border-border">
+                  <DayColumnSkeleton />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
