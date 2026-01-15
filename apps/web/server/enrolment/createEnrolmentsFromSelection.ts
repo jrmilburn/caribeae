@@ -21,6 +21,7 @@ import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { resolveBlockLength } from "@/lib/billing/blockPricing";
+import { assertCapacityForTemplateRange } from "@/server/class/capacity";
 
 type TemplateSummary = {
   id: string;
@@ -31,6 +32,7 @@ type TemplateSummary = {
   name: string | null;
   dayOfWeek: number | null;
   startTime?: number | null;
+  capacity: number | null;
 };
 
 function resolveAnchorTemplate(templates: TemplateSummary[]) {
@@ -69,6 +71,7 @@ const payloadSchema = z.object({
   status: z.nativeEnum(EnrolmentStatus).optional(),
   effectiveLevelId: z.string().optional().nullable(),
   customBlockLength: z.number().int().positive().optional(),
+  allowOverload: z.boolean().optional(),
 });
 
 export async function createEnrolmentsFromSelection(
@@ -139,11 +142,12 @@ export async function createEnrolmentsFromSelection(
             active: true,
             startDate: true,
             endDate: true,
-            name: true,
-            dayOfWeek: true,
-            startTime: true,
-          },
-        })
+          name: true,
+          dayOfWeek: true,
+          startTime: true,
+          capacity: true,
+        },
+      })
       : [];
 
   if (plan.billingType === BillingType.PER_WEEK && templates.length === 0) {
@@ -163,6 +167,7 @@ export async function createEnrolmentsFromSelection(
         name: true,
         dayOfWeek: true,
         startTime: true,
+        capacity: true,
       },
       orderBy: [{ startDate: "asc" }, { id: "asc" }],
     });
@@ -247,6 +252,19 @@ export async function createEnrolmentsFromSelection(
 
   const status = payload.status ?? EnrolmentStatus.ACTIVE;
   const created = await prisma.$transaction(async (tx) => {
+    for (const window of windows) {
+      const template = templates.find((item) => item.id === window.templateId);
+      if (!template) continue;
+      await assertCapacityForTemplateRange({
+        template,
+        plan,
+        windowStart: window.startDate,
+        windowEnd: window.endDate ?? null,
+        allowOverload: payload.allowOverload,
+        client: tx,
+      });
+    }
+
     const earliestStart = windows.reduce(
       (acc, window) => (acc && acc < window.startDate ? acc : window.startDate),
       windows[0]?.startDate ?? startDate

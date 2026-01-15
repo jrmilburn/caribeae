@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { toStringSafe } from "@/lib/string";
 
 import type { AuditReport } from "@/server/reports/getAuditReport";
 
@@ -24,7 +25,7 @@ function buildQueryString(params: { from?: string; to?: string; includeVoided?: 
   const search = new URLSearchParams();
   if (params.from) search.set("from", params.from);
   if (params.to) search.set("to", params.to);
-  if (params.includeVoided) search.set("includeVoided", "true");
+  if (params.includeVoided) search.set("includeVoided", toStringSafe(params.includeVoided));
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

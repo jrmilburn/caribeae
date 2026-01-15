@@ -24,6 +24,8 @@ import {
   type ScheduleClassClickContext,
 } from "@/packages/schedule";
 import { transitionFamily } from "@/server/family/transitionFamily";
+import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
+import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 
@@ -83,6 +85,7 @@ export function FamilyTransitionWizard({
   const [submitting, setSubmitting] = React.useState(false);
   const [wizardOpen, setWizardOpen] = React.useState(false);
   const [scheduleStudentId, setScheduleStudentId] = React.useState<string | null>(null);
+  const [capacityWarning, setCapacityWarning] = React.useState<CapacityExceededDetails | null>(null);
 
   const [students, setStudents] = React.useState<StudentDraft[]>(() =>
     family.students.map((student) => ({
@@ -168,7 +171,7 @@ export function FamilyTransitionWizard({
     return true;
   }, [planById, selectedStudents, setupReady, step]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (allowOverload?: boolean) => {
     if (!setupReady) {
       toast.error("Add at least one plan and class template first.");
       return;
@@ -191,6 +194,7 @@ export function FamilyTransitionWizard({
         openingBalanceCents,
         notes: notes.trim() || undefined,
         force,
+        allowOverload,
         students: selectedStudents.map((student) => ({
           studentId: student.studentId,
           planId: student.planId,
@@ -204,6 +208,11 @@ export function FamilyTransitionWizard({
       setWizardOpen(false);
       router.refresh();
     } catch (error) {
+      const details = parseCapacityError(error);
+      if (details) {
+        setCapacityWarning(details);
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Unable to transition family.");
     } finally {
       setSubmitting(false);
@@ -645,7 +654,7 @@ export function FamilyTransitionWizard({
                 ) : (
                   <Button
                     type="button"
-                    onClick={handleSubmit}
+                    onClick={() => void handleSubmit()}
                     disabled={!setupReady || submitting || (!force && hasExisting)}
                   >
                     {submitting ? "Submitting…" : "Submit transition"}
@@ -705,6 +714,17 @@ export function FamilyTransitionWizard({
           </div>
         </DialogContent>
       </Dialog>
+
+      <CapacityOverloadDialog
+        open={Boolean(capacityWarning)}
+        details={capacityWarning}
+        busy={submitting}
+        onCancel={() => setCapacityWarning(null)}
+        onConfirm={() => {
+          setCapacityWarning(null);
+          void handleSubmit(true);
+        }}
+      />
     </>
   );
 }
