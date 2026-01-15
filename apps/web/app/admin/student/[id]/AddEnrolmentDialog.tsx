@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,8 @@ import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
 import { isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { formatCurrencyFromCents } from "@/lib/currency";
 
 export function AddEnrolmentDialog({
   open,
@@ -56,6 +59,8 @@ export function AddEnrolmentDialog({
   const [planId, setPlanId] = React.useState<string>("");
   const [startDate, setStartDate] = React.useState<string>("");
   const [startDateTouched, setStartDateTouched] = React.useState(false);
+  const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
+  const [customBlockLength, setCustomBlockLength] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -64,6 +69,8 @@ export function AddEnrolmentDialog({
       setPlanId("");
       setStartDate("");
       setStartDateTouched(false);
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
       setSaving(false);
     }
   }, [open]);
@@ -124,6 +131,18 @@ export function AddEnrolmentDialog({
     [availablePlans, planId]
   );
   const planIsWeekly = selectedPlan?.billingType === "PER_WEEK";
+  const planIsBlock = selectedPlan?.billingType === "PER_CLASS";
+  const planBlockLength = selectedPlan ? resolveBlockLength(selectedPlan.blockClassCount) : 1;
+  const parsedCustomBlockLength = Number(customBlockLength);
+  const customBlockValue = Number.isInteger(parsedCustomBlockLength) ? parsedCustomBlockLength : null;
+  const blockPricing =
+    selectedPlan && planIsBlock
+      ? calculateBlockPricing({
+          priceCents: selectedPlan.priceCents,
+          blockLength: planBlockLength,
+          customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
+        })
+      : null;
   const planDay = selectedPlan
     ? selectedPlan.isSaturdayOnly
       ? "saturday"
@@ -149,6 +168,17 @@ export function AddEnrolmentDialog({
   const effectiveLevelId = studentLevelId ?? null;
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
+
+  React.useEffect(() => {
+    if (!selectedPlan || !planIsBlock) {
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
+      return;
+    }
+    if (!customBlockEnabled) {
+      setCustomBlockLength(String(planBlockLength));
+    }
+  }, [selectedPlan, planIsBlock, planBlockLength, customBlockEnabled]);
 
   const onClassClick = (
     occurrence: NormalizedScheduleClass,
@@ -239,6 +269,10 @@ export function AddEnrolmentDialog({
       toast.error("Select a plan, classes, and start date.");
       return;
     }
+    if (customBlockEnabled && planIsBlock && (!customBlockValue || customBlockValue < planBlockLength)) {
+      toast.error(`Custom block length must be at least ${planBlockLength} classes.`);
+      return;
+    }
     setSaving(true);
 
     try {
@@ -248,6 +282,7 @@ export function AddEnrolmentDialog({
         templateIds: selectedTemplateIds,
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
+        customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
       });
 
       onOpenChange(false);
@@ -306,6 +341,48 @@ export function AddEnrolmentDialog({
                       ? "No weekday plans exist for this level. Create one in Plans."
                       : "No enrolment plans are available for the selected level."}
                 </p>
+              ) : null}
+              {planIsBlock && selectedPlan ? (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {planBlockLength} classes · {formatCurrencyFromCents(selectedPlan.priceCents)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      onClick={() => {
+                        if (!customBlockEnabled) {
+                          setCustomBlockLength(String(planBlockLength));
+                        }
+                        setCustomBlockEnabled((prev) => !prev);
+                      }}
+                    >
+                      {customBlockEnabled ? "Use default" : "Customize"}
+                    </button>
+                  </div>
+                  {customBlockEnabled ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="custom-block-length-student">Number of classes</Label>
+                        <Input
+                          id="custom-block-length-student"
+                          type="number"
+                          min={planBlockLength}
+                          value={customBlockLength}
+                          onChange={(e) => setCustomBlockLength(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
+                      </div>
+                      {blockPricing ? (
+                        <div className="text-xs text-muted-foreground">
+                          <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
+                          <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="space-y-1">

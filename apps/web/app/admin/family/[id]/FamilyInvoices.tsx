@@ -41,6 +41,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
 import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
@@ -232,8 +233,8 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
         <div className="flex items-center gap-2">
           <PayAheadSheet familyId={family.id} />
           <RecordPaymentSheet
-            family={family}
             familyId={family.id}
+            enrolments={billing.enrolments}
             openInvoices={openInvoices}
             open={paymentSheetOpen}
             onOpenChange={onPaymentSheetChange}
@@ -648,14 +649,14 @@ function PayAheadSheet({ familyId }: { familyId: string }) {
 }
 
 function RecordPaymentSheet({
-  family,
   familyId,
+  enrolments,
   openInvoices,
   open,
   onOpenChange,
 }: {
-  family: FamilyWithStudentsAndInvoices;
   familyId: string;
+  enrolments: BillingData["enrolments"];
   openInvoices: Array<
     BillingData["openInvoices"][number] & {
       balanceCents: number;
@@ -678,18 +679,19 @@ function RecordPaymentSheet({
   const [method, setMethod] = React.useState<PaymentMethod>("Cash");
   const [note, setNote] = React.useState("");
   const [paidDate, setPaidDate] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
+  const [customBlockLength, setCustomBlockLength] = React.useState("");
   const [isSubmitting, startSubmit] = React.useTransition();
 
   const enrolmentOptions = React.useMemo(() => {
-    return family.students.flatMap((student) =>
-      (student.enrolments ?? [])
-        .filter((enrolment) => enrolment.status === "ACTIVE" && enrolment.plan?.billingType)
-        .map((enrolment) => ({
-          id: enrolment.id,
-          label: `${student.name} · ${enrolment.plan?.name ?? "Plan"}`,
-        }))
-    );
-  }, [family.students]);
+    return enrolments
+      .filter((enrolment) => enrolment.plan?.billingType)
+      .map((enrolment) => ({
+        id: enrolment.id,
+        label: `${enrolment.student.name} · ${enrolment.plan?.name ?? "Plan"}`,
+        plan: enrolment.plan,
+      }));
+  }, [enrolments]);
 
   React.useEffect(() => {
     if (!sheetOpen) return;
@@ -708,6 +710,8 @@ function RecordPaymentSheet({
     setMethod("Cash");
     setNote("");
     setPaidDate(new Date().toISOString().slice(0, 10));
+    setCustomBlockEnabled(false);
+    setCustomBlockLength("");
   }, [sheetOpen, openInvoices]);
 
   React.useEffect(() => {
@@ -733,7 +737,33 @@ function RecordPaymentSheet({
   }));
   const allocatedTotalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
   const explicitAmountCents = dollarsToCents(amount || "0");
-  const totalCents = applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents : explicitAmountCents;
+  const selectedEnrolment = enrolmentOptions.find((option) => option.id === applyTarget) ?? null;
+  const isBlockPlan = selectedEnrolment?.plan?.billingType === "PER_CLASS";
+  const planBlockLength = selectedEnrolment?.plan ? resolveBlockLength(selectedEnrolment.plan.blockClassCount) : 1;
+  const parsedCustomBlockLength = Number(customBlockLength);
+  const customBlockValue = Number.isInteger(parsedCustomBlockLength) ? parsedCustomBlockLength : null;
+  const blockPricing =
+    selectedEnrolment?.plan && isBlockPlan
+      ? calculateBlockPricing({
+          priceCents: selectedEnrolment.plan.priceCents,
+          blockLength: planBlockLength,
+          customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
+        })
+      : null;
+  const amountCents = customBlockEnabled && blockPricing ? blockPricing.totalCents : explicitAmountCents;
+  const totalCents = applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents : amountCents;
+
+  React.useEffect(() => {
+    if (!sheetOpen) return;
+    if (!isBlockPlan) {
+      setCustomBlockEnabled(false);
+      setCustomBlockLength("");
+      return;
+    }
+    if (!customBlockEnabled) {
+      setCustomBlockLength(String(planBlockLength));
+    }
+  }, [applyTarget, sheetOpen, isBlockPlan, planBlockLength, customBlockEnabled]);
 
   const toggleSelection = (invoiceId: string) => {
     setSelected((prev) => (prev.includes(invoiceId) ? prev.filter((id) => id !== invoiceId) : [...prev, invoiceId]));
@@ -763,6 +793,12 @@ function RecordPaymentSheet({
     }
 
     const paidAtDate = paidDate ? new Date(paidDate) : new Date();
+    const invalidCustomBlock =
+      customBlockEnabled && isBlockPlan && (!customBlockValue || customBlockValue < planBlockLength);
+    if (invalidCustomBlock) {
+      toast.error(`Custom block length must be at least ${planBlockLength} classes.`);
+      return;
+    }
 
     startSubmit(async () => {
       try {
@@ -780,6 +816,7 @@ function RecordPaymentSheet({
                 }))
               : undefined,
           enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+          customBlockLength: customBlockEnabled && isBlockPlan && customBlockValue ? customBlockValue : undefined,
           idempotencyKey: crypto.randomUUID(),
         });
         toast.success("Payment recorded.");
@@ -901,10 +938,53 @@ function RecordPaymentSheet({
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                value={amount}
+                value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
                 onChange={(e) => setAmount(e.target.value)}
+                disabled={customBlockEnabled && isBlockPlan}
                 placeholder="0.00"
               />
+              {isBlockPlan && selectedEnrolment?.plan ? (
+                <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {planBlockLength} classes · {formatCurrencyFromCents(selectedEnrolment.plan.priceCents)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      onClick={() => {
+                        if (!customBlockEnabled) {
+                          setCustomBlockLength(String(planBlockLength));
+                        }
+                        setCustomBlockEnabled((prev) => !prev);
+                      }}
+                    >
+                      {customBlockEnabled ? "Use default" : "Customize"}
+                    </button>
+                  </div>
+                  {customBlockEnabled ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="custom-block-length">Number of classes</Label>
+                        <Input
+                          id="custom-block-length"
+                          type="number"
+                          min={planBlockLength}
+                          value={customBlockLength}
+                          onChange={(e) => setCustomBlockLength(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
+                      </div>
+                      {blockPricing ? (
+                        <div className="text-xs text-muted-foreground">
+                          <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
+                          <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
 
