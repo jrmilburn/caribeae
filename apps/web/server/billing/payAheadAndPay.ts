@@ -14,10 +14,12 @@ import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUti
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
   quantity: z.number().int().positive().max(24).default(1),
+  customBlockLength: z.number().int().positive().optional(),
 });
 
 const payAheadSchema = z.object({
@@ -33,7 +35,7 @@ export type PayAheadAndPayInput = z.infer<typeof payAheadSchema>;
 
 function blockSize(plan: EnrolmentPlan | null) {
   if (!plan) return 0;
-  const size = plan.blockClassCount ?? 1;
+  const size = resolveBlockLength(plan.blockClassCount);
   return size > 0 ? size : 0;
 }
 
@@ -82,6 +84,9 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       }
       if (!enrolment.template) throw new Error("Class template missing for enrolment.");
       assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
+      if (item.customBlockLength != null && enrolment.plan.billingType !== BillingType.PER_CLASS) {
+        throw new Error("Custom block length is only available for per-class plans.");
+      }
       if (enrolment.status !== EnrolmentStatus.ACTIVE) {
         throw new Error("Only active enrolments can be billed ahead.");
       }
@@ -149,6 +154,15 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         if (!creditsPerBlock || creditsPerBlock <= 0) {
           throw new Error("Plan is missing block or class count details.");
         }
+        if (item.customBlockLength != null) {
+          if (!Number.isInteger(item.customBlockLength)) {
+            throw new Error("Custom block length must be an integer.");
+          }
+          if (item.customBlockLength < creditsPerBlock) {
+            throw new Error("Custom block length must be at least the plan block length.");
+          }
+        }
+        const effectiveBlockLength = item.customBlockLength ?? creditsPerBlock;
 
         const anchorTemplate =
           enrolment.classAssignments.find((assignment) => assignment.template?.dayOfWeek != null)?.template ??
@@ -175,6 +189,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           },
           blocksPurchased: item.quantity,
           blockClassCount: creditsPerBlock,
+          creditsPurchased: effectiveBlockLength * item.quantity,
           holidays,
         });
 
@@ -190,13 +205,17 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
               kind: InvoiceLineItemKind.ENROLMENT,
               description: plan.name,
               quantity: item.quantity,
-              unitPriceCents: plan.priceCents,
+              unitPriceCents: calculateBlockPricing({
+                priceCents: plan.priceCents,
+                blockLength: creditsPerBlock,
+                customBlockLength: effectiveBlockLength,
+              }).totalCents,
             },
           ],
           status: InvoiceStatus.SENT,
           coverageStart: coverageRange.coverageStart,
           coverageEnd: coverageRange.coverageEnd,
-          creditsPurchased: creditsPerBlock * item.quantity,
+          creditsPurchased: effectiveBlockLength * item.quantity,
           issuedAt,
           dueAt,
           client: tx,
