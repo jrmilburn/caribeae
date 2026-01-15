@@ -54,7 +54,7 @@ test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends covera
     priceCents: 1000,
     levelId: "lvl",
     sessionsPerWeek: 1,
-  };
+  } as any;
   const enrolment = {
     id: "enrol",
     startDate: start,
@@ -64,7 +64,7 @@ test("Scenario E: PER_CLASS blocks purchase credits and pay-ahead extends covera
     plan,
     template: { dayOfWeek: 0, name: "Monday" },
     classAssignments: [],
-  };
+  } as any;
 
   const coverage = resolveCoverageForPlan({
     enrolment,
@@ -88,7 +88,7 @@ test("Scenario E2: PER_CLASS custom block length advances coverage", () => {
     priceCents: 1000,
     levelId: "lvl",
     sessionsPerWeek: 1,
-  };
+  } as any;
   const enrolment = {
     id: "enrol",
     startDate: start,
@@ -98,7 +98,7 @@ test("Scenario E2: PER_CLASS custom block length advances coverage", () => {
     plan,
     template: { dayOfWeek: 0, name: "Monday" },
     classAssignments: [],
-  };
+  } as any;
 
   const coverage = resolveCoverageForPlan({
     enrolment,
@@ -117,8 +117,8 @@ test("Scenario F: PER_WEEK pay-ahead invoices advance coverage sequentially", ()
     startDate: d("2026-06-01"),
     endDate: null,
     paidThroughDate: null as Date | null,
-  };
-  const plan = { durationWeeks: 1, sessionsPerWeek: 1 };
+  } as any;
+  const plan = { durationWeeks: 1, sessionsPerWeek: 1 } as any;
 
   const sequence = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,
@@ -139,7 +139,7 @@ test("Scenario F: PER_WEEK pay-ahead invoices advance coverage sequentially", ()
 
 test("Scenario G: long weekly duration respects quantity and clamps to end date", () => {
   const start = d("2026-07-05");
-  const plan = { durationWeeks: 26, sessionsPerWeek: 1 };
+  const plan = { durationWeeks: 26, sessionsPerWeek: 1 } as any;
 
   const first = resolveWeeklyPayAheadSequence({
     startDate: start,
@@ -182,7 +182,7 @@ test("Scenario G: weekly coverage skips holidays after paid-through", () => {
     template: { dayOfWeek: 0, name: "Monday" },
     classAssignments: [],
     student: { familyId: "fam" },
-  };
+  } as any;
   const plan = {
     billingType: BillingType.PER_WEEK,
     enrolmentType: "CLASS" as const,
@@ -193,7 +193,7 @@ test("Scenario G: weekly coverage skips holidays after paid-through", () => {
     priceCents: 1000,
     levelId: "lvl",
     sessionsPerWeek: 1,
-  };
+  } as any;
 
   const coverage = resolveCoverageForPlan({
     enrolment,

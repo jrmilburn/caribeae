@@ -2,7 +2,7 @@ import assert from "node:assert";
 
 import { BillingType, EnrolmentStatus } from "@prisma/client";
 
-import { recordPayment } from "./recordPayment";
+import { recordPayment, type RecordPaymentInput } from "./recordPayment";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
@@ -26,6 +26,8 @@ function test(name: string, fn: () => void | Promise<void>) {
 }
 
 type FakeDb = ReturnType<typeof createFakeClient>;
+
+const asRecordPaymentClient = (db: FakeDb) => db as unknown as RecordPaymentInput["client"];
 
 function createFakeClient() {
   let idCounter = 0;
@@ -217,12 +219,12 @@ test("idempotency: same key does not duplicate payment or entitlements", async (
   const db = createFakeClient();
   const enrolment = seedWeeklyEnrolment(db);
 
-  const payload = {
+  const payload: RecordPaymentInput = {
     familyId: "family-1",
     amountCents: 2500,
     enrolmentId: enrolment.id,
     idempotencyKey: "same-key",
-    client: db,
+    client: asRecordPaymentClient(db),
   };
 
   await recordPayment(payload);
@@ -249,7 +251,7 @@ test("overdue flips based on paidThrough and credits", async () => {
     amountCents: 2500,
     enrolmentId: weekly.id,
     idempotencyKey: "weekly-payment",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   await recordPayment({
@@ -257,7 +259,7 @@ test("overdue flips based on paidThrough and credits", async () => {
     amountCents: 4000,
     enrolmentId: credits.id,
     idempotencyKey: "credit-payment",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   assert.ok(!isEnrolmentOverdue(weekly, now));
@@ -274,7 +276,7 @@ test("holiday handling extends paidThrough for weekly payments", async () => {
     amountCents: 2500,
     enrolmentId: enrolment.id,
     idempotencyKey: "holiday-payment",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
@@ -289,7 +291,7 @@ test("manual paid-through forward uses updated baseline for weekly payments", as
     amountCents: 2500,
     enrolmentId: enrolment.id,
     idempotencyKey: "manual-forward",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-19");
@@ -304,7 +306,7 @@ test("manual paid-through backward stays aligned for weekly payments", async () 
     amountCents: 2500,
     enrolmentId: enrolment.id,
     idempotencyKey: "manual-backward",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
@@ -320,7 +322,7 @@ test("custom block length uses prorated payment and credits", async () => {
     enrolmentId: enrolment.id,
     customBlockLength: 6,
     idempotencyKey: "custom-block",
-    client: db,
+    client: asRecordPaymentClient(db),
   });
 
   assert.strictEqual(db.__data.payments[0].amountCents, 6000);
@@ -340,7 +342,7 @@ test("custom block length cannot be below plan block length", async () => {
       enrolmentId: enrolment.id,
       customBlockLength: 2,
       idempotencyKey: "invalid-block",
-      client: db,
+      client: asRecordPaymentClient(db),
     });
   } catch (err) {
     error = err;

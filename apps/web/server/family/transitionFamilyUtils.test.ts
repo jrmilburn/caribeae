@@ -49,6 +49,7 @@ const templates = [
     dayOfWeek: 0,
     startTime: 600,
     name: "Mon",
+    capacity: null,
   },
   {
     id: "t2",
@@ -59,6 +60,7 @@ const templates = [
     dayOfWeek: 2,
     startTime: 600,
     name: "Wed",
+    capacity: null,
   },
   {
     id: "t3",
@@ -69,6 +71,7 @@ const templates = [
     dayOfWeek: 4,
     startTime: 600,
     name: "Fri",
+    capacity: null,
   },
 ];
 
@@ -144,6 +147,7 @@ test("rejects mismatched level or inactive templates", () => {
         dayOfWeek: 1,
         startTime: 600,
         name: "Tue",
+        capacity: null,
       },
     ],
   ]);
