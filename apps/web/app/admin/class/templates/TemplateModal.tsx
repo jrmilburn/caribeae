@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatDateKey } from "@/lib/dateKey";
+import { scheduleDateKey } from "@/packages/schedule";
 import { SubstituteTeacherDialog } from "../[id]/SubstituteTeacherDialog";
 
 import {
@@ -138,8 +138,15 @@ export function TemplateModal({
   const isEditMode = Boolean(template?.id);
   const [subDialogOpen, setSubDialogOpen] = React.useState(false);
 
+  /**
+   * Root cause summary:
+   * - Schedule occurrences use Brisbane-local Date objects (UTC timestamps) for template cells.
+   * - formatDateKey() uses the viewer's local timezone, which can shift Brisbane dates by a day.
+   * - The class page then rejects the requested date (wrong weekday) and falls back to the next occurrence (e.g. Feb 2).
+   * Fix: build date-only params with Brisbane-aware scheduleDateKey() so navigation remains stable.
+   */
   const prefillDateKey = React.useMemo(
-    () => (prefill?.date ? formatDateKey(prefill.date) : null),
+    () => (prefill?.date ? scheduleDateKey(prefill.date) : null),
     [prefill?.date]
   );
   const viewHref = template?.id ? buildClassHref(template.id, prefillDateKey, null) : null;
