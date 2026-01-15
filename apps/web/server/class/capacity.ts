@@ -1,5 +1,3 @@
-"use server";
-
 import { addDays, isAfter, startOfDay } from "date-fns";
 import type { Prisma } from "@prisma/client";
 
