@@ -21,6 +21,11 @@ import {
 } from "@/server/billing/paidThroughTemplateChange";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
+import {
+  assertCapacityAvailable,
+  getCapacitySnapshot,
+  resolveOccurrenceDateOnOrAfter,
+} from "@/server/class/capacity";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -28,6 +33,7 @@ type ChangeEnrolmentInput = {
   startDate?: string;
   effectiveLevelId?: string | null;
   confirmShorten?: boolean;
+  allowOverload?: boolean;
 };
 
 type PreviewChangeEnrolmentInput = {
@@ -88,6 +94,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         endDate: true,
         name: true,
         dayOfWeek: true,
+        startTime: true,
+        capacity: true,
       },
     });
 
@@ -177,6 +185,25 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       existingEnrolments: existing,
       ignoreEnrolmentIds: new Set([enrolment.id]),
     });
+
+    for (const window of windows) {
+      const template = templates.find((item) => item.id === window.templateId);
+      if (!template) continue;
+      const occurrenceDate = resolveOccurrenceDateOnOrAfter({
+        template,
+        startDate: window.startDate,
+      });
+      if (!occurrenceDate) continue;
+      const snapshot = await getCapacitySnapshot({
+        templateId: template.id,
+        occurrenceDate,
+        existingEnrolmentId: enrolment.id,
+        client: tx,
+      });
+      if (snapshot) {
+        assertCapacityAvailable(snapshot, input.allowOverload);
+      }
+    }
 
     const existingAssignments = new Set(enrolment.classAssignments.map((a) => a.templateId));
     const nextAssignments = new Set(payload.templateIds);

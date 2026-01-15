@@ -4,9 +4,9 @@ import { BillingType } from "@prisma/client";
 
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 
-type TemplateSummary = Pick<
+export type TemplateSummary = Pick<
   ClassTemplate,
-  "id" | "levelId" | "active" | "startDate" | "endDate" | "dayOfWeek" | "startTime" | "name"
+  "id" | "levelId" | "active" | "startDate" | "endDate" | "dayOfWeek" | "startTime" | "name" | "capacity"
 >;
 
 type ResolveTemplatesParams = {
