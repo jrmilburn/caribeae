@@ -20,9 +20,8 @@ function DayColumnSkeleton() {
 export default function ScheduleGridSkeleton() {
   return (
     <div className="flex h-full w-full flex-col">
-
       {/* Grid area */}
-      <div className="flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
+      <div className="relative flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
         <div className="h-full overflow-auto">
           <div className="min-w-[800px]">
             {/* Week header row skeleton (like WeekView) */}
@@ -75,6 +74,12 @@ export default function ScheduleGridSkeleton() {
             </div>
           </div>
         </div>
+
+        {/* Fade-out towards bottom (Grid area only) */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-background"
+        />
       </div>
     </div>
   );
