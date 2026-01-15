@@ -63,10 +63,16 @@ export default function Loading() {
       </div>
 
       {/* Rows */}
-      <div>
-        {Array.from({ length: 10 }).map((_, i) => (
+      <div className="relative">
+        {Array.from({ length: 15 }).map((_, i) => (
           <ListRowSkeleton key={i} />
         ))}
+
+        {/* Fade-out towards bottom */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-background"
+        />
       </div>
     </div>
   );
