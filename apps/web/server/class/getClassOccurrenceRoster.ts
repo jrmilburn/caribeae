@@ -2,6 +2,7 @@ import { BillingType, EnrolmentStatus } from "@prisma/client";
 import { isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
+import type { PrismaClient, Prisma } from "@prisma/client";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
@@ -102,7 +103,11 @@ export function filterEligibleEnrolmentsForOccurrence(
   );
 }
 
-async function fetchEnrolmentCandidates(templateId: string, date: Date, client = prisma) {
+async function fetchEnrolmentCandidates(
+  templateId: string,
+  date: Date,
+  client: PrismaClient | Prisma.TransactionClient = prisma
+) {
   return client.enrolment.findMany({
     where: {
       status: { not: EnrolmentStatus.CANCELLED },
@@ -135,7 +140,7 @@ export async function getEligibleEnrolmentsForOccurrence(
   templateId: string,
   levelId: string,
   date: Date,
-  options?: { client?: typeof prisma }
+  options?: { client?: PrismaClient | Prisma.TransactionClient }
 ) {
   const candidates = await fetchEnrolmentCandidates(templateId, date, options?.client ?? prisma);
   return filterEligibleEnrolmentsForOccurrence(candidates, templateId, levelId, date);

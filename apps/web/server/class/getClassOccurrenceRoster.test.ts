@@ -1,8 +1,8 @@
 import assert from "node:assert";
 
-import { BillingType, EnrolmentStatus } from "@prisma/client";
+import { BillingType, EnrolmentStatus, EnrolmentType } from "@prisma/client";
 
-import { filterEligibleEnrolmentsForOccurrence } from "./getClassOccurrenceRoster";
+import { filterEligibleEnrolmentsForOccurrence, type EligibleEnrolmentCandidate } from "./getClassOccurrenceRoster";
 
 function test(name: string, fn: () => void) {
   try {
@@ -19,7 +19,7 @@ const date = new Date("2025-02-05T00:00:00Z");
 const templateId = "template-1";
 const levelId = "level-1";
 
-function buildCandidate(overrides: Partial<any> = {}) {
+function buildCandidate(overrides: Partial<EligibleEnrolmentCandidate> = {}) {
   return {
     id: "enrolment-1",
     studentId: "student-1",
@@ -29,11 +29,26 @@ function buildCandidate(overrides: Partial<any> = {}) {
     paidThroughDate: null,
     paidThroughDateComputed: null,
     templateId,
-    plan: { billingType: BillingType.PER_WEEK },
+    plan: {
+      id: "plan-1",
+      name: "Weekly plan",
+      levelId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      priceCents: 0,
+      isSaturdayOnly: false,
+      enrolmentType: EnrolmentType.BLOCK,
+      billingType: BillingType.PER_WEEK,
+      durationWeeks: 1,
+      blockClassCount: null,
+      sessionsPerWeek: 1,
+      blockLength: 1,
+    },
     student: { id: "student-1", name: "Alex", levelId },
+    template: { id: templateId, dayOfWeek: 0, name: "Monday", startTime: 9 * 60, levelId },
     classAssignments: [],
     ...overrides,
-  };
+  } as EligibleEnrolmentCandidate;
 }
 
 test("includes active enrolments that cover the occurrence date", () => {

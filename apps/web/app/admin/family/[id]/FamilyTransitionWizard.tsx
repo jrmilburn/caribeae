@@ -654,7 +654,7 @@ export function FamilyTransitionWizard({
                 ) : (
                   <Button
                     type="button"
-                    onClick={handleSubmit}
+                    onClick={() => void handleSubmit()}
                     disabled={!setupReady || submitting || (!force && hasExisting)}
                   >
                     {submitting ? "Submitting…" : "Submit transition"}

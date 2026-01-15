@@ -7,7 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate } from "@/server/enrolment/planRules";
-import { resolveAnchorTemplate, resolveTransitionTemplates } from "@/server/family/transitionFamilyUtils";
+import {
+  resolveAnchorTemplate,
+  resolveTransitionTemplates,
+  type TemplateSummary,
+} from "@/server/family/transitionFamilyUtils";
 import {
   assertCapacityAvailable,
   getCapacitySnapshot,
@@ -101,8 +105,9 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       selection: (typeof payload.students)[number];
       plan: (typeof plans)[number];
       normalizedStart: Date;
-      templatesForSelection: (typeof templates)[number][];
-      anchorTemplate: (typeof templates)[number];
+      paidThrough: Date;
+      templatesForSelection: TemplateSummary[];
+      anchorTemplate: TemplateSummary;
     }> = [];
 
     for (const selection of payload.students) {
@@ -144,6 +149,10 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       if (!anchorTemplate) {
         throw new Error("Select at least one class template.");
       }
+      const anchorTemplateFull = templatesForSelection.find((template) => template.id === anchorTemplate.id);
+      if (!anchorTemplateFull) {
+        throw new Error("Anchor template not found.");
+      }
 
       for (const template of templatesForSelection) {
         const occurrenceDate = resolveOccurrenceDateOnOrAfter({
@@ -174,8 +183,9 @@ export async function transitionFamily(input: TransitionFamilyInput) {
         selection,
         plan,
         normalizedStart,
+        paidThrough,
         templatesForSelection,
-        anchorTemplate,
+        anchorTemplate: anchorTemplateFull,
       });
     }
 
@@ -191,7 +201,7 @@ export async function transitionFamily(input: TransitionFamilyInput) {
       }
     }
 
-    for (const { selection, plan, normalizedStart, templatesForSelection, anchorTemplate } of enrolmentSelections) {
+    for (const { selection, plan, normalizedStart, paidThrough, templatesForSelection, anchorTemplate } of enrolmentSelections) {
       const enrolment = await tx.enrolment.create({
         data: {
           studentId: selection.studentId,

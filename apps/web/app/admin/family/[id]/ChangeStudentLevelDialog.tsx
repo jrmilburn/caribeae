@@ -422,7 +422,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
                   <Button variant="outline" onClick={() => setStep(1)}>
                     Back
                   </Button>
-                  <Button onClick={handleSubmit} disabled={!canSubmit}>
+                  <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
                     {submitting ? "Saving..." : "Confirm change"}
                   </Button>
                 </div>
