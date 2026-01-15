@@ -19,7 +19,7 @@ function DayColumnSkeleton() {
 
 export default function Loading() {
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex min-h-[100dvh] w-full flex-col">
       {/* Header (matches ScheduleView header bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2">
@@ -35,10 +35,11 @@ export default function Loading() {
       </div>
 
       {/* Grid area */}
-      <div className="relative flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
+      <div className="relative flex-1 min-h-0 overflow-hidden border-t border-border bg-card shadow-sm">
+        {/* Scroll container */}
         <div className="h-full overflow-auto">
-          <div className="min-w-[800px]">
-            {/* Week header row skeleton (like WeekView) */}
+          <div className="min-w-[800px] min-h-full">
+            {/* Week header row skeleton (sticky) */}
             <div
               className="sticky top-0 z-40 grid min-h-[60px] border-b border-r border-border bg-card"
               style={{
@@ -81,7 +82,11 @@ export default function Loading() {
 
               {/* Day columns */}
               {DAYS.map((d) => (
-                <div key={d} className="border-l border-border">
+                <div
+                  key={d}
+                  className="border-l border-border"
+                  style={{ height: 20 * 32 }} // 20 rows * h-8 (32px) => ensures full-height columns
+                >
                   <DayColumnSkeleton />
                 </div>
               ))}

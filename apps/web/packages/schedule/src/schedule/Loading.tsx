@@ -5,7 +5,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 function DayColumnSkeleton() {
   return (
-    <div className="relative h-[640px]">
+    <div className="relative h-full">
       {/* faint background */}
       <div className="absolute inset-0 bg-muted/10" />
 
@@ -18,12 +18,15 @@ function DayColumnSkeleton() {
 }
 
 export default function ScheduleGridSkeleton() {
+  // 20 rows * h-8 (32px) = 640px
+  const GRID_BODY_HEIGHT = 20 * 32;
+
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex min-h-[100dvh] w-full flex-col">
       {/* Grid area */}
-      <div className="relative flex-1 overflow-hidden border-t border-border bg-card shadow-sm">
+      <div className="relative flex-1 min-h-0 overflow-hidden border-t border-border bg-card shadow-sm">
         <div className="h-full overflow-auto">
-          <div className="min-w-[800px]">
+          <div className="min-w-[800px] min-h-full">
             {/* Week header row skeleton (like WeekView) */}
             <div
               className="sticky top-0 z-40 grid min-h-[60px] border-b border-r border-border bg-card"
@@ -67,7 +70,11 @@ export default function ScheduleGridSkeleton() {
 
               {/* Day columns */}
               {DAYS.map((d) => (
-                <div key={d} className="border-l border-border">
+                <div
+                  key={d}
+                  className="border-l border-border"
+                  style={{ height: GRID_BODY_HEIGHT }}
+                >
                   <DayColumnSkeleton />
                 </div>
               ))}
