@@ -22,12 +22,14 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
 
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { toast } from "sonner";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { formatCurrencyFromCents } from "@/lib/currency";
+import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
 function fromDateInputValue(v: string) {
   if (!v) return null;
@@ -59,6 +61,7 @@ export function CreateEnrolmentDialog({
   const [status, setStatus] = React.useState<EnrolmentStatus>("ACTIVE");
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
   const [customBlockLength, setCustomBlockLength] = React.useState("");
+  const [capacityWarning, setCapacityWarning] = React.useState<CapacityExceededDetails | null>(null);
 
   React.useEffect(() => {
     if (!open) {
@@ -124,8 +127,7 @@ export function CreateEnrolmentDialog({
     }
   }, [selectedPlan, planIsBlock, planBlockLength, customBlockEnabled]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitEnrolment(allowOverload?: boolean) {
     if (!canSubmit) {
       if (requiresMultipleTemplates) {
         toast.error(selectionRequirement.helper);
@@ -152,12 +154,18 @@ export function CreateEnrolmentDialog({
         endDate: end?.toISOString() ?? undefined,
         status,
         customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
+        allowOverload,
       });
 
       onOpenChange(false);
       router.refresh();
     } catch (err) {
       console.error(err);
+      const details = parseCapacityError(err);
+      if (details) {
+        setCapacityWarning(details);
+        return;
+      }
       toast.error(
         err instanceof Error ? err.message : "Unable to create enrolment. Please check the plan."
       );
@@ -166,9 +174,15 @@ export function CreateEnrolmentDialog({
     }
   }
 
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await submitEnrolment();
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add enrolment</DialogTitle>
         </DialogHeader>
@@ -306,7 +320,19 @@ export function CreateEnrolmentDialog({
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <CapacityOverloadDialog
+        open={Boolean(capacityWarning)}
+        details={capacityWarning}
+        busy={saving}
+        onCancel={() => setCapacityWarning(null)}
+        onConfirm={() => {
+          setCapacityWarning(null);
+          void submitEnrolment(true);
+        }}
+      />
+    </>
   );
 }

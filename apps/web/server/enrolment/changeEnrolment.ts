@@ -21,6 +21,7 @@ import {
 } from "@/server/billing/paidThroughTemplateChange";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
+import { assertCapacityForTemplateRange } from "@/server/class/capacity";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -28,6 +29,7 @@ type ChangeEnrolmentInput = {
   startDate?: string;
   effectiveLevelId?: string | null;
   confirmShorten?: boolean;
+  allowOverload?: boolean;
 };
 
 type PreviewChangeEnrolmentInput = {
@@ -88,6 +90,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
         endDate: true,
         name: true,
         dayOfWeek: true,
+        startTime: true,
+        capacity: true,
       },
     });
 
@@ -177,6 +181,20 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       existingEnrolments: existing,
       ignoreEnrolmentIds: new Set([enrolment.id]),
     });
+
+    for (const window of windows) {
+      const template = templates.find((item) => item.id === window.templateId);
+      if (!template) continue;
+      await assertCapacityForTemplateRange({
+        template,
+        plan: enrolment.plan,
+        windowStart: window.startDate,
+        windowEnd: window.endDate ?? null,
+        existingEnrolmentId: enrolment.id,
+        allowOverload: input.allowOverload,
+        client: tx,
+      });
+    }
 
     const existingAssignments = new Set(enrolment.classAssignments.map((a) => a.templateId));
     const nextAssignments = new Set(payload.templateIds);
