@@ -27,7 +27,8 @@ import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolm
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
-import { assertCapacityForTemplateRange } from "@/server/class/capacity";
+import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
+import type { CapacityExceededDetails } from "@/lib/capacityError";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -136,18 +137,48 @@ async function computeCreditForEnrolment(params: {
   return Math.round(remainingCredits * perCredit);
 }
 
-export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInput) {
+type ChangeStudentLevelResult =
+  | {
+      ok: true;
+      data: {
+        levelChangeId: string;
+        enrolmentIds: string[];
+        creditInvoiceId: string | null;
+        paymentId: string | null;
+        familyId: string;
+      };
+    }
+  | {
+      ok: false;
+      error:
+        | {
+            code: "CAPACITY_EXCEEDED";
+            details: CapacityExceededDetails;
+          }
+        | {
+            code: "VALIDATION_ERROR" | "UNKNOWN_ERROR";
+            message: string;
+          };
+    };
+
+export async function changeStudentLevelAndReenrol(
+  input: ChangeStudentLevelInput
+): Promise<ChangeStudentLevelResult> {
   const user = await getOrCreateUser();
   await requireAdmin();
 
   if (!input.templateIds.length) {
-    throw new Error("Select at least one class template.");
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: "Select at least one class template." },
+    };
   }
 
   const templateIds = Array.from(new Set(input.templateIds));
   const effectiveDate = normalizeStartDate(input.effectiveDate);
 
-  const result = await prisma.$transaction(async (tx) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
     const student = await tx.student.findUnique({
       where: { id: input.studentId },
       select: { id: true, levelId: true, familyId: true },
@@ -213,6 +244,49 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
     }
     if (selectionRequirement.requiredCount === 0 && templateIds.length > selectionRequirement.maxCount) {
       throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
+    }
+
+    const windows = templates.map((template) => {
+      const templateStart = startOfDay(template.startDate);
+      const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
+      const startDate = isBefore(effectiveDate, templateStart) ? templateStart : effectiveDate;
+      if (templateEnd && isAfter(startDate, templateEnd)) {
+        throw new Error(`Start date is after the class ends for ${template.name ?? "class"}.`);
+      }
+      return { templateId: template.id, startDate, endDate: templateEnd };
+    });
+
+    let capacityIssue: CapacityExceededDetails | null = null;
+    for (const window of windows) {
+      const template = templates.find((item) => item.id === window.templateId);
+      if (!template) continue;
+      const issue = await getCapacityIssueForTemplateRange({
+        template: {
+          ...template,
+          startTime: template.startTime ?? null,
+          capacity: template.capacity ?? null,
+        },
+        plan,
+        windowStart: window.startDate,
+        windowEnd: window.endDate ?? null,
+        client: tx,
+      });
+      if (issue) {
+        capacityIssue = issue;
+        break;
+      }
+    }
+    if (capacityIssue && !input.allowOverload) {
+      return { capacityIssue };
+    }
+    if (capacityIssue && input.allowOverload) {
+      console.info("[capacity] overload confirmed for changeStudentLevelAndReenrol", {
+        templateId: capacityIssue.templateId,
+        occurrenceDateKey: capacityIssue.occurrenceDateKey,
+        capacity: capacityIssue.capacity,
+        currentCount: capacityIssue.currentCount,
+        projectedCount: capacityIssue.projectedCount,
+      });
     }
 
     const existingEnrolments = await tx.enrolment.findMany({
@@ -294,33 +368,6 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
       where: { id: input.studentId },
       data: { levelId: input.toLevelId },
     });
-
-    const windows = templates.map((template) => {
-      const templateStart = startOfDay(template.startDate);
-      const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
-      const startDate = isBefore(effectiveDate, templateStart) ? templateStart : effectiveDate;
-      if (templateEnd && isAfter(startDate, templateEnd)) {
-        throw new Error(`Start date is after the class ends for ${template.name ?? "class"}.`);
-      }
-      return { templateId: template.id, startDate, endDate: templateEnd };
-    });
-
-    for (const window of windows) {
-      const template = templates.find((item) => item.id === window.templateId);
-      if (!template) continue;
-      await assertCapacityForTemplateRange({
-        template: {
-          ...template,
-          startTime: template.startTime ?? null,
-          capacity: template.capacity ?? null,
-        },
-        plan,
-        windowStart: window.startDate,
-        windowEnd: window.endDate ?? null,
-        allowOverload: input.allowOverload,
-        client: tx,
-      });
-    }
 
     const anchorTemplate = templates.sort((a, b) => {
       const dayA = a.dayOfWeek ?? 7;
@@ -439,18 +486,52 @@ export async function changeStudentLevelAndReenrol(input: ChangeStudentLevelInpu
         : null;
 
     return {
-      levelChangeId: levelChange.id,
-      enrolmentIds: enrolments.map((e) => e.id),
-      creditInvoiceId: creditInvoice?.id ?? null,
-      paymentId: payment?.payment.id ?? null,
-      familyId: student.familyId,
+      data: {
+        levelChangeId: levelChange.id,
+        enrolmentIds: enrolments.map((e) => e.id),
+        creditInvoiceId: creditInvoice?.id ?? null,
+        paymentId: payment?.payment.id ?? null,
+        familyId: student.familyId,
+      },
     };
   });
 
-  revalidatePath(`/admin/family/${result.familyId}`);
-  revalidatePath(`/admin/student/${input.studentId}`);
-  revalidatePath("/admin/enrolment");
-  templateIds.forEach((id) => revalidatePath(`/admin/class/${id}`));
+    if ("capacityIssue" in result) {
+      console.info("[capacity] exceeded for changeStudentLevelAndReenrol", {
+        templateId: result.capacityIssue.templateId,
+        occurrenceDateKey: result.capacityIssue.occurrenceDateKey,
+        capacity: result.capacityIssue.capacity,
+        currentCount: result.capacityIssue.currentCount,
+        projectedCount: result.capacityIssue.projectedCount,
+      });
+      return {
+        ok: false,
+        error: { code: "CAPACITY_EXCEEDED", details: result.capacityIssue },
+      };
+    }
 
-  return result;
+    revalidatePath(`/admin/family/${result.data.familyId}`);
+    revalidatePath(`/admin/student/${input.studentId}`);
+    revalidatePath("/admin/enrolment");
+    templateIds.forEach((id) => revalidatePath(`/admin/class/${id}`));
+
+    return { ok: true, data: result.data };
+  } catch (error) {
+    if (error instanceof Error) {
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: error.message || "Unable to change student level.",
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Unable to change student level.",
+      },
+    };
+  }
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert";
 
-import { assertCapacityAvailable, buildCapacityDetails } from "./capacity";
+import { buildCapacityDetails, getCapacityIssue, resolveCapacityIssue } from "./capacity";
 
 function test(name: string, fn: () => void) {
   try {
@@ -29,7 +29,7 @@ test("buildCapacityDetails projects the next enrolment count", () => {
   assert.strictEqual(details.projectedCount, 6);
 });
 
-test("assertCapacityAvailable throws when capacity would be exceeded", () => {
+test("getCapacityIssue returns details when capacity would be exceeded", () => {
   const details = buildCapacityDetails({
     templateId: "t1",
     templateName: "Monday 4pm",
@@ -41,10 +41,12 @@ test("assertCapacityAvailable throws when capacity would be exceeded", () => {
     additionalSeats: 1,
   });
 
-  assert.throws(() => assertCapacityAvailable(details, false));
+  const issue = getCapacityIssue(details);
+  assert.ok(issue);
+  assert.strictEqual(issue?.projectedCount, 6);
 });
 
-test("assertCapacityAvailable allows overload when explicitly permitted", () => {
+test("resolveCapacityIssue respects allowOverload", () => {
   const details = buildCapacityDetails({
     templateId: "t1",
     templateName: "Monday 4pm",
@@ -56,5 +58,8 @@ test("assertCapacityAvailable allows overload when explicitly permitted", () => 
     additionalSeats: 1,
   });
 
-  assert.doesNotThrow(() => assertCapacityAvailable(details, true));
+  const blocked = resolveCapacityIssue(details, false);
+  assert.ok(blocked);
+  const allowed = resolveCapacityIssue(details, true);
+  assert.strictEqual(allowed, null);
 });

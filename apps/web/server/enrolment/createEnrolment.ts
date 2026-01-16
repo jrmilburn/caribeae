@@ -46,9 +46,13 @@ export async function createEnrolment(input: CreateEnrolmentInput, options?: { s
     { skipAuth: options?.skipAuth }
   );
 
-  if (!result.enrolments[0]) {
+  if (!result.ok) {
+    throw new Error(result.error.message || "Unable to create enrolment.");
+  }
+
+  if (!result.data.enrolments[0]) {
     throw new Error("Unable to create enrolment.");
   }
 
-  return result.enrolments[0];
+  return result.data.enrolments[0];
 }

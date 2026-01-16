@@ -280,7 +280,7 @@ export function AddEnrolmentDialog({
     setSaving(true);
 
     try {
-      await createEnrolmentsFromSelection({
+      const result = await createEnrolmentsFromSelection({
         studentId,
         planId,
         templateIds: selectedTemplateIds,
@@ -289,6 +289,15 @@ export function AddEnrolmentDialog({
         customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
         allowOverload,
       });
+
+      if (!result.ok) {
+        if (result.error.code === "CAPACITY_EXCEEDED") {
+          setCapacityWarning(result.error.details);
+          return;
+        }
+        toast.error(result.error.message);
+        return;
+      }
 
       onOpenChange(false);
       router.refresh();

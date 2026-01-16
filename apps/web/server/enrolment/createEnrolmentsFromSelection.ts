@@ -21,7 +21,8 @@ import { validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { resolveBlockLength } from "@/lib/billing/blockPricing";
-import { assertCapacityForTemplateRange } from "@/server/class/capacity";
+import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
+import type { CapacityExceededDetails } from "@/lib/capacityError";
 
 type TemplateSummary = {
   id: string;
@@ -74,250 +75,325 @@ const payloadSchema = z.object({
   allowOverload: z.boolean().optional(),
 });
 
+type CreateEnrolmentsResult =
+  | {
+      ok: true;
+      data: {
+        enrolments: Array<{ id: string; studentId: string }>;
+        requirement: ReturnType<typeof getSelectionRequirement>;
+      };
+    }
+  | {
+      ok: false;
+      error:
+        | {
+            code: "CAPACITY_EXCEEDED";
+            details: CapacityExceededDetails;
+          }
+        | {
+            code: "VALIDATION_ERROR" | "UNKNOWN_ERROR";
+            message: string;
+          };
+    };
+
 export async function createEnrolmentsFromSelection(
   input: z.input<typeof payloadSchema>,
   options?: { skipAuth?: boolean }
-) {
-  if (!options?.skipAuth) {
-    await getOrCreateUser();
-    await requireAdmin();
-  }
-
-  const payload = payloadSchema.parse(input);
-  const startDate = normalizeStartDate(payload.startDate ?? new Date());
-  const explicitEndDate = payload.endDate ? normalizeStartDate(payload.endDate) : undefined;
-  const templateIdsInput = Array.from(new Set(payload.templateIds ?? []));
-
-  const [plan, student] = await Promise.all([
-    prisma.enrolmentPlan.findUnique({ where: { id: payload.planId } }),
-    prisma.student.findUnique({ where: { id: payload.studentId }, select: { id: true, levelId: true } }),
-  ]);
-
-  if (!plan) throw new Error("Enrolment plan not found.");
-  if (!student) throw new Error("Student not found.");
-  const effectiveLevelId = payload.effectiveLevelId ?? student.levelId ?? null;
-  if (!effectiveLevelId) {
-    throw new Error("Set the student's level before creating an enrolment.");
-  }
-  if (plan.levelId !== effectiveLevelId) {
-    throw new Error("Enrolment plan level must match the selected level.");
-  }
-
-  if (plan.billingType === BillingType.PER_WEEK && !plan.durationWeeks) {
-    throw new Error("Weekly plans require durationWeeks.");
-  }
-  if (plan.billingType === BillingType.PER_CLASS && plan.blockClassCount != null && plan.blockClassCount <= 0) {
-    throw new Error("PER_CLASS plans require a positive class count when blockClassCount is set.");
-  }
-  const planBlockLength = resolveBlockLength(plan.blockClassCount);
-  if (payload.customBlockLength != null) {
-    if (plan.billingType !== BillingType.PER_CLASS) {
-      throw new Error("Custom block length is only available for per-class plans.");
+): Promise<CreateEnrolmentsResult> {
+  try {
+    if (!options?.skipAuth) {
+      await getOrCreateUser();
+      await requireAdmin();
     }
-    if (!Number.isInteger(payload.customBlockLength)) {
-      throw new Error("Custom block length must be an integer.");
-    }
-    if (payload.customBlockLength < planBlockLength) {
-      throw new Error("Custom block length must be at least the plan block length.");
-    }
-  }
 
-  let templateIds = templateIdsInput;
-  const selectionRequirement = getSelectionRequirement(plan);
-  if (plan.billingType === BillingType.PER_WEEK) {
-    if (templateIds.length > selectionRequirement.maxCount) {
-      throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this weekly plan.`);
-    }
-  } else if (!templateIds.length) {
-    throw new Error("Select at least one class for this plan.");
-  }
+    const payload = payloadSchema.parse(input);
+    const startDate = normalizeStartDate(payload.startDate ?? new Date());
+    const explicitEndDate = payload.endDate ? normalizeStartDate(payload.endDate) : undefined;
+    const templateIdsInput = Array.from(new Set(payload.templateIds ?? []));
 
-  let templates =
-    templateIds.length > 0
-      ? await prisma.classTemplate.findMany({
-          where: { id: { in: templateIds } },
-          select: {
-            id: true,
-            levelId: true,
-            active: true,
-            startDate: true,
-            endDate: true,
+    const [plan, student] = await Promise.all([
+      prisma.enrolmentPlan.findUnique({ where: { id: payload.planId } }),
+      prisma.student.findUnique({ where: { id: payload.studentId }, select: { id: true, levelId: true } }),
+    ]);
+
+    if (!plan) throw new Error("Enrolment plan not found.");
+    if (!student) throw new Error("Student not found.");
+    const effectiveLevelId = payload.effectiveLevelId ?? student.levelId ?? null;
+    if (!effectiveLevelId) {
+      throw new Error("Set the student's level before creating an enrolment.");
+    }
+    if (plan.levelId !== effectiveLevelId) {
+      throw new Error("Enrolment plan level must match the selected level.");
+    }
+
+    if (plan.billingType === BillingType.PER_WEEK && !plan.durationWeeks) {
+      throw new Error("Weekly plans require durationWeeks.");
+    }
+    if (plan.billingType === BillingType.PER_CLASS && plan.blockClassCount != null && plan.blockClassCount <= 0) {
+      throw new Error("PER_CLASS plans require a positive class count when blockClassCount is set.");
+    }
+    const planBlockLength = resolveBlockLength(plan.blockClassCount);
+    if (payload.customBlockLength != null) {
+      if (plan.billingType !== BillingType.PER_CLASS) {
+        throw new Error("Custom block length is only available for per-class plans.");
+      }
+      if (!Number.isInteger(payload.customBlockLength)) {
+        throw new Error("Custom block length must be an integer.");
+      }
+      if (payload.customBlockLength < planBlockLength) {
+        throw new Error("Custom block length must be at least the plan block length.");
+      }
+    }
+
+    let templateIds = templateIdsInput;
+    const selectionRequirement = getSelectionRequirement(plan);
+    if (plan.billingType === BillingType.PER_WEEK) {
+      if (templateIds.length > selectionRequirement.maxCount) {
+        throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this weekly plan.`);
+      }
+    } else if (!templateIds.length) {
+      throw new Error("Select at least one class for this plan.");
+    }
+
+    let templates =
+      templateIds.length > 0
+        ? await prisma.classTemplate.findMany({
+            where: { id: { in: templateIds } },
+            select: {
+              id: true,
+              levelId: true,
+              active: true,
+              startDate: true,
+              endDate: true,
+              name: true,
+              dayOfWeek: true,
+              startTime: true,
+              capacity: true,
+            },
+          })
+        : [];
+
+    if (plan.billingType === BillingType.PER_WEEK && templates.length === 0) {
+      const anchorTemplate = await prisma.classTemplate.findFirst({
+        where: {
+          levelId: plan.levelId,
+          active: true,
+          startDate: { lte: startDate },
+          OR: [{ endDate: null }, { endDate: { gte: startDate } }],
+        },
+        select: {
+          id: true,
+          levelId: true,
+          active: true,
+          startDate: true,
+          endDate: true,
           name: true,
           dayOfWeek: true,
           startTime: true,
           capacity: true,
         },
-      })
-      : [];
+        orderBy: [{ startDate: "asc" }, { id: "asc" }],
+      });
 
-  if (plan.billingType === BillingType.PER_WEEK && templates.length === 0) {
-    const anchorTemplate = await prisma.classTemplate.findFirst({
+      if (!anchorTemplate) {
+        throw new Error("No active classes are available for this level. Add a class first.");
+      }
+
+      templateIds = [anchorTemplate.id];
+      templates = [anchorTemplate];
+    }
+
+    if (templates.length !== templateIds.length) {
+      throw new Error("Some selected classes could not be found.");
+    }
+
+    const missingLevelTemplate = templates.find((template) => !template.levelId);
+    if (missingLevelTemplate) {
+      throw new Error("Selected classes must have a level set before enrolling.");
+    }
+    const mismatchedTemplate = templates.find((template) => template.levelId && template.levelId !== effectiveLevelId);
+    if (mismatchedTemplate) {
+      throw new Error("Selected classes must match the student's level.");
+    }
+
+    assertPlanMatchesTemplates(plan, templates);
+
+    const selectionCheck = validateSelection({ plan, templateIds, templates });
+    if (!selectionCheck.ok) {
+      throw new Error(selectionCheck.message ?? "Invalid selection for plan.");
+    }
+
+    const normalizedPlan = normalizePlan(plan);
+    const windows = templates.map((template) => {
+      const templateStart = startOfDay(template.startDate);
+      const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
+      const alignedStart = isBefore(startDate, templateStart) ? templateStart : startDate;
+      if (templateEnd && isAfter(alignedStart, templateEnd)) {
+        throw new Error(`Start date is after the class template ends for ${template.name ?? "class"}.`);
+      }
+
+      const endDate = resolvePlannedEndDate(plan, alignedStart, explicitEndDate, templateEnd);
+      if (endDate && isBefore(endDate, alignedStart)) {
+        throw new Error("End date must be on or after the start date.");
+      }
+      if (endDate && templateEnd && isAfter(endDate, templateEnd)) {
+        return { templateId: template.id, startDate: alignedStart, endDate: templateEnd };
+      }
+      return { templateId: template.id, startDate: alignedStart, endDate };
+    });
+
+    const anchorTemplate = resolveAnchorTemplate(templates);
+    if (!anchorTemplate) {
+      throw new Error("Select at least one class template.");
+    }
+
+    const existing = await prisma.enrolment.findMany({
       where: {
-        levelId: plan.levelId,
-        active: true,
-        startDate: { lte: startDate },
-        OR: [{ endDate: null }, { endDate: { gte: startDate } }],
+        studentId: payload.studentId,
+        OR: [
+          { templateId: { in: templateIds } },
+          { classAssignments: { some: { templateId: { in: templateIds } } } },
+        ],
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
       },
       select: {
         id: true,
-        levelId: true,
-        active: true,
+        templateId: true,
         startDate: true,
         endDate: true,
-        name: true,
-        dayOfWeek: true,
-        startTime: true,
-        capacity: true,
-      },
-      orderBy: [{ startDate: "asc" }, { id: "asc" }],
-    });
-
-    if (!anchorTemplate) {
-      throw new Error("No active classes are available for this level. Add a class first.");
-    }
-
-    templateIds = [anchorTemplate.id];
-    templates = [anchorTemplate];
-  }
-
-  if (templates.length !== templateIds.length) {
-    throw new Error("Some selected classes could not be found.");
-  }
-
-  const missingLevelTemplate = templates.find((template) => !template.levelId);
-  if (missingLevelTemplate) {
-    throw new Error("Selected classes must have a level set before enrolling.");
-  }
-  const mismatchedTemplate = templates.find((template) => template.levelId && template.levelId !== effectiveLevelId);
-  if (mismatchedTemplate) {
-    throw new Error("Selected classes must match the student's level.");
-  }
-
-  assertPlanMatchesTemplates(plan, templates);
-
-  const selectionCheck = validateSelection({ plan, templateIds, templates });
-  if (!selectionCheck.ok) {
-    throw new Error(selectionCheck.message ?? "Invalid selection for plan.");
-  }
-
-  const normalizedPlan = normalizePlan(plan);
-  const windows = templates.map((template) => {
-    const templateStart = startOfDay(template.startDate);
-    const templateEnd = template.endDate ? startOfDay(template.endDate) : null;
-    const alignedStart = isBefore(startDate, templateStart) ? templateStart : startDate;
-    if (templateEnd && isAfter(alignedStart, templateEnd)) {
-      throw new Error(`Start date is after the class template ends for ${template.name ?? "class"}.`);
-    }
-
-    const endDate = resolvePlannedEndDate(plan, alignedStart, explicitEndDate, templateEnd);
-    if (endDate && isBefore(endDate, alignedStart)) {
-      throw new Error("End date must be on or after the start date.");
-    }
-    if (endDate && templateEnd && isAfter(endDate, templateEnd)) {
-      return { templateId: template.id, startDate: alignedStart, endDate: templateEnd };
-    }
-    return { templateId: template.id, startDate: alignedStart, endDate };
-  });
-
-  const anchorTemplate = resolveAnchorTemplate(templates);
-  if (!anchorTemplate) {
-    throw new Error("Select at least one class template.");
-  }
-
-  const existing = await prisma.enrolment.findMany({
-    where: {
-      studentId: payload.studentId,
-      OR: [
-        { templateId: { in: templateIds } },
-        { classAssignments: { some: { templateId: { in: templateIds } } } },
-      ],
-      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
-    },
-    select: {
-      id: true,
-      templateId: true,
-      startDate: true,
-      endDate: true,
-      status: true,
-    },
-  });
-
-  validateNoDuplicateEnrolments({
-    candidateWindows: windows.map((window) => ({
-      ...window,
-      templateName: templates.find((t) => t.id === window.templateId)?.name ?? "class",
-    })),
-    existingEnrolments: existing,
-  });
-
-  const status = payload.status ?? EnrolmentStatus.ACTIVE;
-  const created = await prisma.$transaction(async (tx) => {
-    for (const window of windows) {
-      const template = templates.find((item) => item.id === window.templateId);
-      if (!template) continue;
-      await assertCapacityForTemplateRange({
-        template,
-        plan,
-        windowStart: window.startDate,
-        windowEnd: window.endDate ?? null,
-        allowOverload: payload.allowOverload,
-        client: tx,
-      });
-    }
-
-    const earliestStart = windows.reduce(
-      (acc, window) => (acc && acc < window.startDate ? acc : window.startDate),
-      windows[0]?.startDate ?? startDate
-    );
-    const templateEndDates = windows.map((window) => window.endDate).filter(Boolean) as Date[];
-    const earliestEnd = templateEndDates.length
-      ? templateEndDates.reduce((acc, end) => (acc && acc < end ? acc : end))
-      : null;
-    const enrolmentEnd = resolvePlannedEndDate(plan, earliestStart, explicitEndDate, earliestEnd);
-    const accounting = initialAccountingForPlan(normalizedPlan, earliestStart);
-
-    const enrolment = await tx.enrolment.create({
-      data: {
-        templateId: anchorTemplate.id,
-        studentId: payload.studentId,
-        startDate: earliestStart,
-        endDate: enrolmentEnd,
-        status,
-        planId: plan.id,
-        paidThroughDate: accounting.paidThroughDate,
-        creditsRemaining: accounting.creditsRemaining,
-        creditsBalanceCached: accounting.creditsRemaining ?? null,
-        paidThroughDateComputed: accounting.paidThroughDate ?? null,
+        status: true,
       },
     });
 
-    await tx.enrolment.update({
-      where: { id: enrolment.id },
-      data: { billingGroupId: enrolment.id },
+    validateNoDuplicateEnrolments({
+      candidateWindows: windows.map((window) => ({
+        ...window,
+        templateName: templates.find((t) => t.id === window.templateId)?.name ?? "class",
+      })),
+      existingEnrolments: existing,
     });
 
-    if (templateIds.length) {
-      await tx.enrolmentClassAssignment.createMany({
-        data: templateIds.map((templateId) => ({
-          enrolmentId: enrolment.id,
-          templateId,
-        })),
-        skipDuplicates: true,
+    const status = payload.status ?? EnrolmentStatus.ACTIVE;
+    const result = await prisma.$transaction(async (tx) => {
+      let capacityIssue: CapacityExceededDetails | null = null;
+      for (const window of windows) {
+        const template = templates.find((item) => item.id === window.templateId);
+        if (!template) continue;
+        const issue = await getCapacityIssueForTemplateRange({
+          template,
+          plan,
+          windowStart: window.startDate,
+          windowEnd: window.endDate ?? null,
+          client: tx,
+        });
+        if (issue) {
+          capacityIssue = issue;
+          break;
+        }
+      }
+
+      if (capacityIssue && !payload.allowOverload) {
+        return { capacityIssue };
+      }
+
+      if (capacityIssue && payload.allowOverload) {
+        console.info("[capacity] overload confirmed for createEnrolmentsFromSelection", {
+          templateId: capacityIssue.templateId,
+          occurrenceDateKey: capacityIssue.occurrenceDateKey,
+          capacity: capacityIssue.capacity,
+          currentCount: capacityIssue.currentCount,
+          projectedCount: capacityIssue.projectedCount,
+        });
+      }
+
+      const earliestStart = windows.reduce(
+        (acc, window) => (acc && acc < window.startDate ? acc : window.startDate),
+        windows[0]?.startDate ?? startDate
+      );
+      const templateEndDates = windows.map((window) => window.endDate).filter(Boolean) as Date[];
+      const earliestEnd = templateEndDates.length
+        ? templateEndDates.reduce((acc, end) => (acc && acc < end ? acc : end))
+        : null;
+      const enrolmentEnd = resolvePlannedEndDate(plan, earliestStart, explicitEndDate, earliestEnd);
+      const accounting = initialAccountingForPlan(normalizedPlan, earliestStart);
+
+      const enrolment = await tx.enrolment.create({
+        data: {
+          templateId: anchorTemplate.id,
+          studentId: payload.studentId,
+          startDate: earliestStart,
+          endDate: enrolmentEnd,
+          status,
+          planId: plan.id,
+          paidThroughDate: accounting.paidThroughDate,
+          creditsRemaining: accounting.creditsRemaining,
+          creditsBalanceCached: accounting.creditsRemaining ?? null,
+          paidThroughDateComputed: accounting.paidThroughDate ?? null,
+        },
       });
+
+      await tx.enrolment.update({
+        where: { id: enrolment.id },
+        data: { billingGroupId: enrolment.id },
+      });
+
+      if (templateIds.length) {
+        await tx.enrolmentClassAssignment.createMany({
+          data: templateIds.map((templateId) => ({
+            enrolmentId: enrolment.id,
+            templateId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      await createInitialInvoiceForEnrolment(enrolment.id, {
+        prismaClient: tx,
+        skipAuth: true,
+        customBlockLength: payload.customBlockLength ?? null,
+      });
+      await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: undefined });
+      return { enrolments: [enrolment] };
+    });
+
+    if ("capacityIssue" in result) {
+      console.info("[capacity] exceeded for createEnrolmentsFromSelection", {
+        templateId: result.capacityIssue.templateId,
+        occurrenceDateKey: result.capacityIssue.occurrenceDateKey,
+        capacity: result.capacityIssue.capacity,
+        currentCount: result.capacityIssue.currentCount,
+        projectedCount: result.capacityIssue.projectedCount,
+      });
+      return {
+        ok: false,
+        error: {
+          code: "CAPACITY_EXCEEDED",
+          details: result.capacityIssue,
+        },
+      };
     }
 
-    await createInitialInvoiceForEnrolment(enrolment.id, {
-      prismaClient: tx,
-      skipAuth: true,
-      customBlockLength: payload.customBlockLength ?? null,
-    });
-    await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: undefined });
-    return [enrolment];
-  });
+    revalidatePath(`/admin/student/${payload.studentId}`);
+    templateIds.forEach((id) => revalidatePath(`/admin/class/${id}`));
+    revalidatePath("/admin/enrolment");
 
-  revalidatePath(`/admin/student/${payload.studentId}`);
-  templateIds.forEach((id) => revalidatePath(`/admin/class/${id}`));
-  revalidatePath("/admin/enrolment");
-
-  return { enrolments: created, requirement: getSelectionRequirement(plan) };
+    return { ok: true, data: { enrolments: result.enrolments, requirement: getSelectionRequirement(plan) } };
+  } catch (error) {
+    if (error instanceof Error) {
+      return {
+        ok: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: error.message || "Unable to create enrolment.",
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Unable to create enrolment.",
+      },
+    };
+  }
 }
