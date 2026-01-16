@@ -47,6 +47,9 @@ export async function createEnrolment(input: CreateEnrolmentInput, options?: { s
   );
 
   if (!result.ok) {
+    if (result.error.code === "CAPACITY_EXCEEDED") {
+      throw new Error("Class capacity exceeded.");
+    }
     throw new Error(result.error.message || "Unable to create enrolment.");
   }
 
