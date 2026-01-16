@@ -355,13 +355,20 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 
     return {
       data: {
-      enrolments: [updated],
-      templateIds: Array.from(new Set([...toAdd, ...toRemove])),
-      studentId: enrolment.studentId,
-      familyId: enrolment.student?.familyId ?? null,
-      originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
-      oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
-      newTemplates: templates.map((template) => describeTemplate(template)),
+        enrolments: [
+          {
+            id: updated.id,
+            studentId: updated.studentId,
+            familyId: updated.student?.familyId ?? null,
+            templateId: updated.templateId,
+          },
+        ],
+        templateIds: Array.from(new Set([...toAdd, ...toRemove])),
+        studentId: enrolment.studentId,
+        familyId: enrolment.student?.familyId ?? null,
+        originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
+        oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
+        newTemplates: templates.map((template) => describeTemplate(template)),
       },
     };
   });
