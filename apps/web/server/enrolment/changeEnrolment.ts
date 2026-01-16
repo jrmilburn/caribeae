@@ -366,7 +366,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
     };
   });
 
-    if ("capacityIssue" in result) {
+    if ("capacityIssue" in result && result.capacityIssue) {
       console.info("[capacity] exceeded for changeEnrolment", {
         templateId: result.capacityIssue.templateId,
         occurrenceDateKey: result.capacityIssue.occurrenceDateKey,

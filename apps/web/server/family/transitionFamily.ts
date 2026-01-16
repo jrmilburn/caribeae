@@ -307,7 +307,7 @@ export async function transitionFamily(input: TransitionFamilyInput): Promise<Tr
       return { data: { openingState, enrolmentIds } };
     });
 
-    if ("capacityIssue" in result) {
+    if ("capacityIssue" in result && result.capacityIssue) {
       console.info("[capacity] exceeded for transitionFamily", {
         templateId: result.capacityIssue.templateId,
         occurrenceDateKey: result.capacityIssue.occurrenceDateKey,

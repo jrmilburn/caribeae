@@ -356,7 +356,7 @@ export async function createEnrolmentsFromSelection(
       return { enrolments: [enrolment] };
     });
 
-    if ("capacityIssue" in result) {
+    if ("capacityIssue" in result && result.capacityIssue) {
       console.info("[capacity] exceeded for createEnrolmentsFromSelection", {
         templateId: result.capacityIssue.templateId,
         occurrenceDateKey: result.capacityIssue.occurrenceDateKey,
