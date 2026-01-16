@@ -14,10 +14,10 @@ import {
   type TemplateSummary,
 } from "@/server/family/transitionFamilyUtils";
 import {
-  assertCapacityAvailable,
   getCapacityIssueForOccurrences,
   listCapacityOccurrencesForTemplate,
 } from "@/server/class/capacity";
+import type { CapacityExceededDetails } from "@/lib/capacityError";
 
 const studentTransitionSchema = z.object({
   studentId: z.string().min(1),
@@ -42,241 +42,287 @@ const transitionFamilySchema = z.object({
 
 export type TransitionFamilyInput = z.infer<typeof transitionFamilySchema>;
 
-export async function transitionFamily(input: TransitionFamilyInput) {
+type TransitionFamilyResult =
+  | {
+      ok: true;
+      data: { openingState: { id: string }; enrolmentIds: string[] };
+    }
+  | {
+      ok: false;
+      error:
+        | {
+            code: "CAPACITY_EXCEEDED";
+            details: CapacityExceededDetails;
+          }
+        | {
+            code: "VALIDATION_ERROR" | "UNKNOWN_ERROR";
+            message: string;
+          };
+    };
+
+export async function transitionFamily(input: TransitionFamilyInput): Promise<TransitionFamilyResult> {
   const user = await getOrCreateUser();
   await requireAdmin();
 
-  const payload = transitionFamilySchema.parse(input);
+  try {
+    const payload = transitionFamilySchema.parse(input);
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.accountOpeningState.findUnique({
+        where: { familyId: payload.familyId },
+      });
 
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.accountOpeningState.findUnique({
-      where: { familyId: payload.familyId },
-    });
-
-    if (existing) {
-      if (!payload.force) {
-        throw new Error("Family has already been transitioned.");
+      if (existing) {
+        if (!payload.force) {
+          throw new Error("Family has already been transitioned.");
+        }
+        return { data: { openingState: existing, enrolmentIds: [] as string[] } };
       }
-      return { openingState: existing, enrolmentIds: [] as string[] };
-    }
 
-    const family = await tx.family.findUnique({ where: { id: payload.familyId } });
-    if (!family) {
-      throw new Error("Family not found.");
-    }
+      const family = await tx.family.findUnique({ where: { id: payload.familyId } });
+      if (!family) {
+        throw new Error("Family not found.");
+      }
 
-    const studentIds = payload.students.map((student) => student.studentId);
-    const students = await tx.student.findMany({
-      where: { id: { in: studentIds }, familyId: payload.familyId },
-      select: { id: true },
-    });
+      const studentIds = payload.students.map((student) => student.studentId);
+      const students = await tx.student.findMany({
+        where: { id: { in: studentIds }, familyId: payload.familyId },
+        select: { id: true },
+      });
 
-    if (students.length !== studentIds.length) {
-      throw new Error("Selected students do not belong to this family.");
-    }
+      if (students.length !== studentIds.length) {
+        throw new Error("Selected students do not belong to this family.");
+      }
 
-    const planIds = payload.students.map((student) => student.planId);
-    const templateIds = payload.students.flatMap((student) =>
-      student.templateIds && student.templateIds.length
-        ? student.templateIds
-        : student.classTemplateId
-          ? [student.classTemplateId]
-          : []
-    );
-    const uniqueTemplateIds = Array.from(new Set(templateIds));
+      const planIds = payload.students.map((student) => student.planId);
+      const templateIds = payload.students.flatMap((student) =>
+        student.templateIds && student.templateIds.length
+          ? student.templateIds
+          : student.classTemplateId
+            ? [student.classTemplateId]
+            : []
+      );
+      const uniqueTemplateIds = Array.from(new Set(templateIds));
 
-    const [plans, templates] = await Promise.all([
-      tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
-      uniqueTemplateIds.length
-        ? tx.classTemplate.findMany({
-            where: { id: { in: uniqueTemplateIds } },
-          })
-        : Promise.resolve([]),
-    ]);
+      const [plans, templates] = await Promise.all([
+        tx.enrolmentPlan.findMany({ where: { id: { in: planIds } } }),
+        uniqueTemplateIds.length
+          ? tx.classTemplate.findMany({
+              where: { id: { in: uniqueTemplateIds } },
+            })
+          : Promise.resolve([]),
+      ]);
 
-    const planMap = new Map(plans.map((plan) => [plan.id, plan]));
-    const templateMap = new Map(templates.map((template) => [template.id, template]));
+      const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+      const templateMap = new Map(templates.map((template) => [template.id, template]));
 
-    const enrolmentIds: string[] = [];
-    const capacityRequests = new Map<string, Map<string, number>>();
-    const enrolmentSelections: Array<{
-      selection: (typeof payload.students)[number];
-      plan: (typeof plans)[number];
-      normalizedStart: Date;
-      paidThrough: Date;
-      templatesForSelection: TemplateSummary[];
-      anchorTemplate: TemplateSummary;
-    }> = [];
+      const enrolmentIds: string[] = [];
+      const capacityRequests = new Map<string, Map<string, number>>();
+      const enrolmentSelections: Array<{
+        selection: (typeof payload.students)[number];
+        plan: (typeof plans)[number];
+        normalizedStart: Date;
+        paidThrough: Date;
+        templatesForSelection: TemplateSummary[];
+        anchorTemplate: TemplateSummary;
+      }> = [];
 
-    for (const selection of payload.students) {
-      const plan = planMap.get(selection.planId);
-      const selectedIds =
-        selection.templateIds && selection.templateIds.length
-          ? selection.templateIds
-          : selection.classTemplateId
-            ? [selection.classTemplateId]
+      for (const selection of payload.students) {
+        const plan = planMap.get(selection.planId);
+        const selectedIds =
+          selection.templateIds && selection.templateIds.length
+            ? selection.templateIds
+            : selection.classTemplateId
+              ? [selection.classTemplateId]
+              : [];
+
+        if (!plan) {
+          throw new Error("Missing enrolment plan.");
+        }
+
+        const normalizedStart = normalizeStartDate(selection.startDate);
+        const paidThrough = normalizeStartDate(selection.paidThroughDate);
+        const levelTemplates =
+          plan.billingType === BillingType.PER_WEEK && selectedIds.length === 0
+            ? await tx.classTemplate.findMany({
+                where: {
+                  levelId: plan.levelId,
+                  active: true,
+                  startDate: { lte: normalizedStart },
+                  OR: [{ endDate: null }, { endDate: { gte: normalizedStart } }],
+                },
+              })
             : [];
 
-      if (!plan) {
-        throw new Error("Missing enrolment plan.");
-      }
+        const templatesForSelection = resolveTransitionTemplates({
+          plan,
+          selectedIds,
+          templatesById: templateMap,
+          levelTemplates,
+          startDate: normalizedStart,
+        });
 
-      const normalizedStart = normalizeStartDate(selection.startDate);
-      const paidThrough = normalizeStartDate(selection.paidThroughDate);
-      const levelTemplates =
-        plan.billingType === BillingType.PER_WEEK && selectedIds.length === 0
-          ? await tx.classTemplate.findMany({
-              where: {
-                levelId: plan.levelId,
-                active: true,
-                startDate: { lte: normalizedStart },
-                OR: [{ endDate: null }, { endDate: { gte: normalizedStart } }],
-              },
-            })
-          : [];
+        const anchorTemplate = resolveAnchorTemplate(templatesForSelection);
+        if (!anchorTemplate) {
+          throw new Error("Select at least one class template.");
+        }
+        const anchorTemplateFull = templatesForSelection.find((template) => template.id === anchorTemplate.id);
+        if (!anchorTemplateFull) {
+          throw new Error("Anchor template not found.");
+        }
 
-      const templatesForSelection = resolveTransitionTemplates({
-        plan,
-        selectedIds,
-        templatesById: templateMap,
-        levelTemplates,
-        startDate: normalizedStart,
-      });
+        for (const template of templatesForSelection) {
+          const templateForCapacity = {
+            id: template.id,
+            name: template.name ?? null,
+            dayOfWeek: template.dayOfWeek ?? null,
+            startDate: template.startDate,
+            endDate: template.endDate ?? null,
+            capacity: template.capacity ?? null,
+            levelId: template.levelId ?? null,
+            startTime: template.startTime ?? null,
+          };
+          const plannedEnd = resolvePlannedEndDate(
+            plan,
+            normalizedStart,
+            null,
+            template.endDate ?? null
+          );
+          const occurrences = listCapacityOccurrencesForTemplate({
+            template: templateForCapacity,
+            plan,
+            windowStart: normalizedStart,
+            windowEnd: plannedEnd,
+          });
+          if (!occurrences.length) continue;
+          const templateMap = capacityRequests.get(template.id) ?? new Map<string, number>();
+          for (const occurrence of occurrences) {
+            const key = formatDateKey(occurrence);
+            templateMap.set(key, (templateMap.get(key) ?? 0) + 1);
+          }
+          capacityRequests.set(template.id, templateMap);
+        }
 
-      const anchorTemplate = resolveAnchorTemplate(templatesForSelection);
-      if (!anchorTemplate) {
-        throw new Error("Select at least one class template.");
-      }
-      const anchorTemplateFull = templatesForSelection.find((template) => template.id === anchorTemplate.id);
-      if (!anchorTemplateFull) {
-        throw new Error("Anchor template not found.");
-      }
-
-      for (const template of templatesForSelection) {
-        const templateForCapacity = {
-          id: template.id,
-          name: template.name ?? null,
-          dayOfWeek: template.dayOfWeek ?? null,
-          startDate: template.startDate,
-          endDate: template.endDate ?? null,
-          capacity: template.capacity ?? null,
-          levelId: template.levelId ?? null,
-          startTime: template.startTime ?? null,
-        };
-        const plannedEnd = resolvePlannedEndDate(
+        enrolmentSelections.push({
+          selection,
           plan,
           normalizedStart,
-          null,
-          template.endDate ?? null
-        );
-        const occurrences = listCapacityOccurrencesForTemplate({
-          template: templateForCapacity,
-          plan,
-          windowStart: normalizedStart,
-          windowEnd: plannedEnd,
+          paidThrough,
+          templatesForSelection,
+          anchorTemplate: anchorTemplateFull,
         });
-        if (!occurrences.length) continue;
-        const templateMap = capacityRequests.get(template.id) ?? new Map<string, number>();
-        for (const occurrence of occurrences) {
-          const key = formatDateKey(occurrence);
-          templateMap.set(key, (templateMap.get(key) ?? 0) + 1);
-        }
-        capacityRequests.set(template.id, templateMap);
       }
 
-      enrolmentSelections.push({
-        selection,
-        plan,
-        normalizedStart,
-        paidThrough,
-        templatesForSelection,
-        anchorTemplate: anchorTemplateFull,
-      });
-    }
-
-    let earliestIssue = null as null | Awaited<ReturnType<typeof getCapacityIssueForOccurrences>>;
-    for (const [templateId, seatMap] of capacityRequests.entries()) {
-      const occurrenceDates = Array.from(seatMap.keys())
-        .map((key) => parseDateKey(key))
-        .filter((date): date is Date => Boolean(date));
-      const issue = await getCapacityIssueForOccurrences({
-        templateId,
-        occurrenceDates,
-        additionalSeatsByDate: seatMap,
-        client: tx,
-      });
-      if (issue) {
-        if (!earliestIssue) {
-          earliestIssue = issue;
-        } else {
-          const currentDate = parseDateKey(issue.occurrenceDateKey);
-          const earliestDate = parseDateKey(earliestIssue.occurrenceDateKey);
-          if (currentDate && earliestDate && currentDate < earliestDate) {
+      let earliestIssue = null as null | Awaited<ReturnType<typeof getCapacityIssueForOccurrences>>;
+      for (const [templateId, seatMap] of capacityRequests.entries()) {
+        const occurrenceDates = Array.from(seatMap.keys())
+          .map((key) => parseDateKey(key))
+          .filter((date): date is Date => Boolean(date));
+        const issue = await getCapacityIssueForOccurrences({
+          templateId,
+          occurrenceDates,
+          additionalSeatsByDate: seatMap,
+          client: tx,
+        });
+        if (issue) {
+          if (!earliestIssue) {
             earliestIssue = issue;
+          } else {
+            const currentDate = parseDateKey(issue.occurrenceDateKey);
+            const earliestDate = parseDateKey(earliestIssue.occurrenceDateKey);
+            if (currentDate && earliestDate && currentDate < earliestDate) {
+              earliestIssue = issue;
+            }
           }
         }
       }
-    }
-    if (earliestIssue) {
-      assertCapacityAvailable(earliestIssue, payload.allowOverload);
-    }
+      if (earliestIssue && !payload.allowOverload) {
+        return { capacityIssue: earliestIssue };
+      }
+      if (earliestIssue && payload.allowOverload) {
+        console.info("[capacity] overload confirmed for transitionFamily", {
+          templateId: earliestIssue.templateId,
+          occurrenceDateKey: earliestIssue.occurrenceDateKey,
+          capacity: earliestIssue.capacity,
+          currentCount: earliestIssue.currentCount,
+          projectedCount: earliestIssue.projectedCount,
+        });
+      }
 
-    for (const { selection, plan, normalizedStart, paidThrough, templatesForSelection, anchorTemplate } of enrolmentSelections) {
-      const enrolment = await tx.enrolment.create({
+      for (const { selection, plan, normalizedStart, paidThrough, templatesForSelection, anchorTemplate } of enrolmentSelections) {
+        const enrolment = await tx.enrolment.create({
+          data: {
+            studentId: selection.studentId,
+            planId: plan.id,
+            templateId: anchorTemplate.id,
+            startDate: normalizedStart,
+            status: EnrolmentStatus.ACTIVE,
+            paidThroughDate: paidThrough,
+          },
+        });
+
+        await tx.enrolment.update({
+          where: { id: enrolment.id },
+          data: { billingGroupId: enrolment.id },
+        });
+
+        await tx.enrolmentClassAssignment.createMany({
+          data: templatesForSelection.map((template) => ({
+            enrolmentId: enrolment.id,
+            templateId: template.id,
+          })),
+          skipDuplicates: true,
+        });
+
+        if (plan.billingType === BillingType.PER_CLASS) {
+          const credits = selection.credits ?? 0;
+          if (credits < 0) {
+            throw new Error("Credits must be zero or positive.");
+          }
+          if (credits > 0) {
+            await tx.enrolmentCreditEvent.create({
+              data: {
+                enrolmentId: enrolment.id,
+                type: EnrolmentCreditEventType.MANUAL_ADJUST,
+                creditsDelta: credits,
+                occurredOn: normalizedStart,
+                note: "Opening credits",
+              },
+            });
+          }
+        }
+        enrolmentIds.push(enrolment.id);
+      }
+
+      const openingState = await tx.accountOpeningState.create({
         data: {
-          studentId: selection.studentId,
-          planId: plan.id,
-          templateId: anchorTemplate.id,
-          startDate: normalizedStart,
-          status: EnrolmentStatus.ACTIVE,
-          paidThroughDate: paidThrough,
+          familyId: payload.familyId,
+          effectiveDate: normalizeStartDate(payload.effectiveDate ?? new Date()),
+          createdById: user.id,
+          openingBalanceCents: payload.openingBalanceCents,
+          notes: payload.notes?.trim() || null,
+          batchId: payload.batchId?.trim() || null,
         },
       });
 
-      await tx.enrolment.update({
-        where: { id: enrolment.id },
-        data: { billingGroupId: enrolment.id },
-      });
-
-      await tx.enrolmentClassAssignment.createMany({
-        data: templatesForSelection.map((template) => ({
-          enrolmentId: enrolment.id,
-          templateId: template.id,
-        })),
-        skipDuplicates: true,
-      });
-
-      if (plan.billingType === BillingType.PER_CLASS) {
-        const credits = selection.credits ?? 0;
-        if (credits < 0) {
-          throw new Error("Credits must be zero or positive.");
-        }
-        if (credits > 0) {
-          await tx.enrolmentCreditEvent.create({
-            data: {
-              enrolmentId: enrolment.id,
-              type: EnrolmentCreditEventType.MANUAL_ADJUST,
-              creditsDelta: credits,
-              occurredOn: normalizedStart,
-              note: "Opening credits",
-            },
-          });
-        }
-      }
-      enrolmentIds.push(enrolment.id);
-    }
-
-    const openingState = await tx.accountOpeningState.create({
-      data: {
-        familyId: payload.familyId,
-        effectiveDate: normalizeStartDate(payload.effectiveDate ?? new Date()),
-        createdById: user.id,
-        openingBalanceCents: payload.openingBalanceCents,
-        notes: payload.notes?.trim() || null,
-        batchId: payload.batchId?.trim() || null,
-      },
+      return { data: { openingState, enrolmentIds } };
     });
 
-    return { openingState, enrolmentIds };
-  });
+    if ("capacityIssue" in result && result.capacityIssue) {
+      console.info("[capacity] exceeded for transitionFamily", {
+        templateId: result.capacityIssue.templateId,
+        occurrenceDateKey: result.capacityIssue.occurrenceDateKey,
+        capacity: result.capacityIssue.capacity,
+        currentCount: result.capacityIssue.currentCount,
+        projectedCount: result.capacityIssue.projectedCount,
+      });
+      return { ok: false, error: { code: "CAPACITY_EXCEEDED", details: result.capacityIssue } };
+    }
+
+    return { ok: true, data: result.data };
+  } catch (error) {
+    if (error instanceof Error) {
+      return { ok: false, error: { code: "VALIDATION_ERROR", message: error.message || "Unable to transition family." } };
+    }
+    return { ok: false, error: { code: "UNKNOWN_ERROR", message: "Unable to transition family." } };
+  }
 }

@@ -3,10 +3,7 @@ import { BillingType, type EnrolmentPlan, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { formatDateKey } from "@/lib/dateKey";
-import {
-  buildCapacityErrorMessage,
-  type CapacityExceededDetails,
-} from "@/lib/capacityError";
+import { type CapacityExceededDetails } from "@/lib/capacityError";
 import { getEligibleEnrolmentsForOccurrence } from "@/server/class/getClassOccurrenceRoster";
 
 /**
@@ -17,16 +14,6 @@ import { getEligibleEnrolmentsForOccurrence } from "@/server/class/getClassOccur
  * - UI entry points funnel into createEnrolmentsFromSelection, changeEnrolment, transitionFamily,
  *   and changeStudentLevelAndReenrol, so capacity checks are enforced there server-side.
  */
-
-export class CapacityExceededError extends Error {
-  details: CapacityExceededDetails;
-
-  constructor(details: CapacityExceededDetails) {
-    super(buildCapacityErrorMessage(details));
-    this.details = details;
-    this.name = "CapacityExceededError";
-  }
-}
 
 type TemplateOccurrenceInput = {
   template: {
@@ -147,10 +134,13 @@ export function buildCapacityDetails(params: {
   };
 }
 
-export function assertCapacityAvailable(details: CapacityExceededDetails, allowOverload?: boolean) {
-  if (details.projectedCount > details.capacity && !allowOverload) {
-    throw new CapacityExceededError(details);
-  }
+export function getCapacityIssue(details: CapacityExceededDetails) {
+  return details.projectedCount > details.capacity ? details : null;
+}
+
+export function resolveCapacityIssue(details: CapacityExceededDetails, allowOverload?: boolean) {
+  if (allowOverload) return null;
+  return getCapacityIssue(details);
 }
 
 export async function getCapacitySnapshot(params: {
@@ -235,14 +225,13 @@ export async function getCapacityIssueForOccurrences(params: {
   return null;
 }
 
-export async function assertCapacityForTemplateRange(params: {
+export async function getCapacityIssueForTemplateRange(params: {
   template: TemplateOccurrenceInput["template"];
   plan: EnrolmentPlan;
   windowStart: Date;
   windowEnd: Date | null;
   additionalSeats?: number;
   existingEnrolmentId?: string;
-  allowOverload?: boolean;
   client?: Prisma.TransactionClient;
 }) {
   const occurrences = listCapacityOccurrencesForTemplate({
@@ -260,6 +249,7 @@ export async function assertCapacityForTemplateRange(params: {
     client: params.client,
   });
   if (issue) {
-    assertCapacityAvailable(issue, params.allowOverload);
+    return issue;
   }
+  return null;
 }

@@ -189,7 +189,7 @@ export function FamilyTransitionWizard({
 
     try {
       setSubmitting(true);
-      await transitionFamily({
+      const result = await transitionFamily({
         familyId: family.id,
         openingBalanceCents,
         notes: notes.trim() || undefined,
@@ -204,6 +204,14 @@ export function FamilyTransitionWizard({
           credits: student.credits,
         })),
       });
+      if (!result.ok) {
+        if (result.error.code === "CAPACITY_EXCEEDED") {
+          setCapacityWarning(result.error.details);
+          return;
+        }
+        toast.error(result.error.message);
+        return;
+      }
       toast.success("Family transitioned successfully.");
       setWizardOpen(false);
       router.refresh();

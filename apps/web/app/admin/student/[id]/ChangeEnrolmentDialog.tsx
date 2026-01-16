@@ -212,12 +212,17 @@ export function ChangeEnrolmentDialog({
           });
           return;
         }
-      } else {
-        toast.success("Enrolment updated.");
-        onOpenChange(false);
-        onChanged?.();
-        router.refresh();
+        if (result.error.code === "CAPACITY_EXCEEDED") {
+          setCapacityWarning({ details: result.error.details, confirmShorten });
+          return;
+        }
+        toast.error(result.error.message);
+        return;
       }
+      toast.success("Enrolment updated.");
+      onOpenChange(false);
+      onChanged?.();
+      router.refresh();
     } catch (err) {
       console.error(err);
       const details = parseCapacityError(err);
