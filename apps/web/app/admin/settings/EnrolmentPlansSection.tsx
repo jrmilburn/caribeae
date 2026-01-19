@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 
 import { deleteEnrolmentPlan } from "@/server/enrolmentPlan/deleteEnrolmentPlan";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import { EnrolmentPlanForm } from "../enrolment-plans/EnrolmentPlanForm";
 
@@ -49,13 +50,18 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
   const onDelete = async (plan: PlanWithLevel) => {
     const ok = window.confirm(`Delete enrolment plan "${plan.name}"?`);
     if (!ok) return;
-    try {
-      await deleteEnrolmentPlan(plan.id);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete plan.";
-      window.alert(message);
-    }
+    await runMutationWithToast(
+      () => deleteEnrolmentPlan(plan.id),
+      {
+        pending: { title: "Deleting enrolment plan..." },
+        success: { title: "Enrolment plan deleted" },
+        error: (message) => ({
+          title: "Unable to delete enrolment plan",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   return (

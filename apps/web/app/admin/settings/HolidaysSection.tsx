@@ -26,6 +26,7 @@ import {
 
 import { HolidayForm } from "../holidays/HolidayForm";
 import { deleteHoliday } from "@/server/holiday/deleteHoliday";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 export function HolidaysSection({
   holidays,
@@ -49,8 +50,18 @@ export function HolidaysSection({
   const onDelete = async (holiday: Holiday) => {
     const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
     if (!ok) return;
-    await deleteHoliday(holiday.id);
-    router.refresh();
+    await runMutationWithToast(
+      () => deleteHoliday(holiday.id),
+      {
+        pending: { title: "Deleting holiday..." },
+        success: { title: "Holiday deleted" },
+        error: (message) => ({
+          title: "Unable to delete holiday",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");

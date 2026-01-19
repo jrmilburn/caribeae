@@ -28,6 +28,7 @@ import { HolidayForm } from "./HolidayForm";
 import { deleteHoliday } from "@/server/holiday/deleteHoliday";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import type { HolidayListItem } from "@/server/holiday/listHolidays";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 export default function HolidaysPageClient({
   holidays,
@@ -57,8 +58,18 @@ export default function HolidaysPageClient({
   const onDelete = async (holiday: HolidayListItem) => {
     const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
     if (!ok) return;
-    await deleteHoliday(holiday.id);
-    router.refresh();
+    await runMutationWithToast(
+      () => deleteHoliday(holiday.id),
+      {
+        pending: { title: "Deleting holiday..." },
+        success: { title: "Holiday deleted" },
+        error: (message) => ({
+          title: "Unable to delete holiday",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");

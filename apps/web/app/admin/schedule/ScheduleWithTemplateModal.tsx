@@ -11,6 +11,7 @@ import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
 import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
 import type { NormalizedScheduleClass } from "@/packages/schedule";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +95,11 @@ function coerceToClassTemplate(input: unknown): TemplateModalTemplate {
     endTime: asNumberOrNull(t.endTime) as ClassTemplate["endTime"],
     capacity: asNumberOrNull(t.capacity) as ClassTemplate["capacity"],
   };
+}
+
+function getScheduleDescription(date?: Date | null) {
+  if (!date) return undefined;
+  return `Scheduled for ${date.toLocaleDateString()}`;
 }
 
 function FiltersPopover({
@@ -259,11 +265,36 @@ export default function ScheduleWithTemplateModal({
   };
 
   const handleSave = async (payload: ClientTemplate) => {
+    const description = getScheduleDescription(
+      payload.startDate instanceof Date ? payload.startDate : prefill?.date ?? null
+    );
+
     if (selectedTemplate) {
-      // ✅ id exists because selectedTemplate is ClassTemplate
-      await updateTemplate(payload, selectedTemplate.id);
+      await runMutationWithToast(
+        () => updateTemplate(payload, selectedTemplate.id),
+        {
+          pending: { title: "Saving class..." },
+          success: { title: "Class updated", description },
+          error: (message) => ({
+            title: "Unable to update class",
+            description: message,
+          }),
+          throwOnError: true,
+        }
+      );
     } else {
-      await createTemplate(payload);
+      await runMutationWithToast(
+        () => createTemplate(payload),
+        {
+          pending: { title: "Creating class..." },
+          success: { title: "Class created", description },
+          error: (message) => ({
+            title: "Unable to create class",
+            description: message,
+          }),
+          throwOnError: true,
+        }
+      );
     }
 
     setModalOpen(false);

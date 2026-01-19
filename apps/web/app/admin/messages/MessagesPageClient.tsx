@@ -38,9 +38,10 @@ function ComposeSheet({
 }) {
   const [channel, setChannel] = React.useState<Channel>("SMS");
   const isEmail = channel === "EMAIL";
+  const [open, setOpen] = React.useState(false);
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button>New message</Button>
       </SheetTrigger>
@@ -64,6 +65,7 @@ function ComposeSheet({
               invoiceStatuses={invoiceStatuses}
               mode="direct"
               onChannelChange={setChannel}
+              onSent={() => setOpen(false)}
             />
           </div>
         </div>
@@ -85,9 +87,10 @@ function BroadcastSheet({
 }) {
   const [channel, setChannel] = React.useState<Channel>("SMS");
   const isEmail = channel === "EMAIL";
+  const [open, setOpen] = React.useState(false);
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant="outline">Broadcast</Button>
       </SheetTrigger>
@@ -112,6 +115,7 @@ function BroadcastSheet({
               classOptions={classOptions}
               mode="broadcast"
               onChannelChange={setChannel}
+              onSent={() => setOpen(false)}
             />
           </div>
         </div>

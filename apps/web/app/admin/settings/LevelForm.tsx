@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 
 import { createLevel } from "@/server/level/createLevel";
 import { updateLevel } from "@/server/level/updateLevel";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type LevelFormState = {
   name: string;
@@ -90,16 +91,24 @@ export function LevelForm({
     };
 
     try {
-      if (mode === "edit" && level) {
-        await updateLevel(level.id, payload);
-      } else {
-        await createLevel(payload);
-      }
-      onSaved();
-      onOpenChange(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      setError(message);
+      const result = await runMutationWithToast(
+        () => (mode === "edit" && level ? updateLevel(level.id, payload) : createLevel(payload)),
+        {
+          pending: { title: mode === "edit" ? "Saving level..." : "Creating level..." },
+          success: { title: mode === "edit" ? "Level updated" : "Level created" },
+          error: (message) => ({
+            title: mode === "edit" ? "Unable to update level" : "Unable to create level",
+            description: message,
+          }),
+          onSuccess: () => {
+            onSaved();
+            onOpenChange(false);
+          },
+          onError: (message) => setError(message),
+        }
+      );
+
+      if (!result) return;
     } finally {
       setSubmitting(false);
     }

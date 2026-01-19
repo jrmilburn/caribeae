@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { createEnrolmentPlan } from "@/server/enrolmentPlan/createEnrolmentPlan";
 import { updateEnrolmentPlan } from "@/server/enrolmentPlan/updateEnrolmentPlan";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type PlanFormState = {
   name: string;
@@ -131,13 +132,22 @@ export function EnrolmentPlanForm({
     };
 
     try {
-      if (mode === "edit" && plan) {
-        await updateEnrolmentPlan(plan.id, payload);
-      } else {
-        await createEnrolmentPlan(payload);
-      }
-      onSaved?.();
-      onOpenChange(false);
+      const result = await runMutationWithToast(
+        () => (mode === "edit" && plan ? updateEnrolmentPlan(plan.id, payload) : createEnrolmentPlan(payload)),
+        {
+          pending: { title: mode === "edit" ? "Saving enrolment plan..." : "Creating enrolment plan..." },
+          success: { title: mode === "edit" ? "Enrolment plan updated" : "Enrolment plan created" },
+          error: (message) => ({
+            title: mode === "edit" ? "Unable to update enrolment plan" : "Unable to create enrolment plan",
+            description: message,
+          }),
+          onSuccess: () => {
+            onSaved?.();
+            onOpenChange(false);
+          },
+        }
+      );
+      if (!result) return;
     } finally {
       setSubmitting(false);
     }

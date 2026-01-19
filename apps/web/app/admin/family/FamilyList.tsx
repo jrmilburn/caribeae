@@ -20,6 +20,7 @@ import { FamilyModal } from "./FamilyModal"
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
 import { deleteFamily } from "@/server/family/deleteFamily";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import type { ClientFamilyWithStudents } from "@/server/family/types";
 import type { FamilyListEntry } from "@/server/family/listFamilies";
@@ -86,8 +87,18 @@ export default function FamilyList({
   const handleDelete = async (family: FamilyListEntry) => {
     const ok = window.confirm(`Delete "${family.name}"?`);
     if (!ok) return;
-    await deleteFamily(family.id)
-    router.refresh();
+    await runMutationWithToast(
+      () => deleteFamily(family.id),
+      {
+        pending: { title: "Deleting family..." },
+        success: { title: "Family deleted" },
+        error: (message) => ({
+          title: "Unable to delete family",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   const applyFilters = () => {
