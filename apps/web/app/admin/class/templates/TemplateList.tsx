@@ -10,6 +10,7 @@ import { TemplateModal } from "./TemplateModal";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
 import { deleteTemplate } from "@/server/classTemplate/deleteTemplate";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
 import type { ClassTemplateListItem } from "@/server/classTemplate/listClassTemplates";
@@ -86,11 +87,33 @@ export default function TemplateList({
 
   const handleSave = async (payload: ClientTemplate) => {
     if (selectedTemplate) {
-      await updateTemplate(payload, selectedTemplate.id);
-      router.refresh();
+      await runMutationWithToast(
+        () => updateTemplate(payload, selectedTemplate.id),
+        {
+          pending: { title: "Saving class..." },
+          success: { title: "Class updated" },
+          error: (message) => ({
+            title: "Unable to update class",
+            description: message,
+          }),
+          onSuccess: () => router.refresh(),
+          throwOnError: true,
+        }
+      );
     } else {
-      await createTemplate(payload);
-      router.refresh();
+      await runMutationWithToast(
+        () => createTemplate(payload),
+        {
+          pending: { title: "Creating class..." },
+          success: { title: "Class created" },
+          error: (message) => ({
+            title: "Unable to create class",
+            description: message,
+          }),
+          onSuccess: () => router.refresh(),
+          throwOnError: true,
+        }
+      );
     }
   };
 
@@ -98,8 +121,18 @@ export default function TemplateList({
     const ok = window.confirm(`Delete "${template.name ?? "Untitled template"}"?`);
     if (!ok) return;
 
-    await deleteTemplate(template.id);
-    router.refresh();
+    await runMutationWithToast(
+      () => deleteTemplate(template.id),
+      {
+        pending: { title: "Deleting class..." },
+        success: { title: "Class deleted" },
+        error: (message) => ({
+          title: "Unable to delete class",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   const applyFilters = () => {

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 
 import { createTeacher } from "@/server/teacher/createTeacher";
 import { updateTeacher } from "@/server/teacher/updateTeacher";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type TeacherFormState = {
   name: string;
@@ -85,16 +86,24 @@ export function TeacherForm({
     };
 
     try {
-      if (mode === "edit" && teacher) {
-        await updateTeacher(teacher.id, payload);
-      } else {
-        await createTeacher(payload);
-      }
-      onSaved();
-      onOpenChange(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      setError(message);
+      const result = await runMutationWithToast(
+        () => (mode === "edit" && teacher ? updateTeacher(teacher.id, payload) : createTeacher(payload)),
+        {
+          pending: { title: mode === "edit" ? "Saving teacher..." : "Creating teacher..." },
+          success: { title: mode === "edit" ? "Teacher updated" : "Teacher created" },
+          error: (message) => ({
+            title: mode === "edit" ? "Unable to update teacher" : "Unable to create teacher",
+            description: message,
+          }),
+          onSuccess: () => {
+            onSaved();
+            onOpenChange(false);
+          },
+          onError: (message) => setError(message),
+        }
+      );
+
+      if (!result) return;
     } finally {
       setSubmitting(false);
     }

@@ -26,6 +26,7 @@ import {
 
 import { EnrolmentPlanForm } from "./EnrolmentPlanForm";
 import { deleteEnrolmentPlan } from "@/server/enrolmentPlan/deleteEnrolmentPlan";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type PlanWithLevel = EnrolmentPlan & { level: Level };
 
@@ -38,8 +39,18 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
   const onDelete = async (plan: PlanWithLevel) => {
     const ok = window.confirm(`Delete enrolment plan "${plan.name}"?`);
     if (!ok) return;
-    await deleteEnrolmentPlan(plan.id);
-    router.refresh();
+    await runMutationWithToast(
+      () => deleteEnrolmentPlan(plan.id),
+      {
+        pending: { title: "Deleting enrolment plan..." },
+        success: { title: "Enrolment plan deleted" },
+        error: (message) => ({
+          title: "Unable to delete enrolment plan",
+          description: message,
+        }),
+        onSuccess: () => router.refresh(),
+      }
+    );
   };
 
   return (

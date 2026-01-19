@@ -25,6 +25,7 @@ import {
 import { formatDateKey } from "@/lib/dateKey";
 import { createHoliday } from "@/server/holiday/createHoliday";
 import { updateHoliday } from "@/server/holiday/updateHoliday";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type HolidayScope = "BUSINESS" | "LEVEL" | "TEMPLATE";
 
@@ -119,13 +120,22 @@ export function HolidayForm({
     };
 
     try {
-      if (mode === "edit" && holiday) {
-        await updateHoliday(holiday.id, payload);
-      } else {
-        await createHoliday(payload);
-      }
-      onSaved?.();
-      onOpenChange(false);
+      const result = await runMutationWithToast(
+        () => (mode === "edit" && holiday ? updateHoliday(holiday.id, payload) : createHoliday(payload)),
+        {
+          pending: { title: mode === "edit" ? "Saving holiday..." : "Creating holiday..." },
+          success: { title: mode === "edit" ? "Holiday updated" : "Holiday created" },
+          error: (message) => ({
+            title: mode === "edit" ? "Unable to update holiday" : "Unable to create holiday",
+            description: message,
+          }),
+          onSuccess: () => {
+            onSaved?.();
+            onOpenChange(false);
+          },
+        }
+      );
+      if (!result) return;
     } finally {
       setSubmitting(false);
     }

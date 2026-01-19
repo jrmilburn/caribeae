@@ -9,7 +9,7 @@ import type { ClientFamilyWithStudents, FamilyActionResult, FamilyStudentPayload
 import type { Level } from "@prisma/client";
 import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { Plus, Trash2 } from "lucide-react";
 import { SmartPhoneInput } from "@/components/SmartPhoneInput";
 import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
@@ -245,21 +245,26 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
     if (!form.name.trim()) return;
     if (!validatePhones()) return;
 
-    try {
-      setSubmitting(true);
-      const res = await onSave(buildPayload());
-      if (res?.success) {
-        toast.success("Family updated.");
-        close();
-      } else {
-        const message = res?.error ?? "Unable to save family.";
-        if (!applyServerPhoneError(message)) {
-          setServerError(message);
-        }
+    setSubmitting(true);
+    const res = await runMutationWithToast(
+      () => onSave(buildPayload()),
+      {
+        pending: { title: "Saving family..." },
+        success: { title: "Family updated" },
+        error: (message) => ({
+          title: "Unable to save family",
+          description: message,
+        }),
+        onSuccess: () => close(),
+        onError: (message) => {
+          if (!applyServerPhoneError(message)) {
+            setServerError(message);
+          }
+        },
       }
-    } finally {
-      setSubmitting(false);
-    }
+    );
+    setSubmitting(false);
+    if (!res) return;
   };
 
   const handleCreateFamily = async () => {
@@ -274,26 +279,31 @@ export function FamilyModal({ open, onOpenChange, family, levels, onSave }: Fami
     const studentsOk = validateStudents();
     if (!studentsOk) return;
 
-    try {
-      setSubmitting(true);
-      const payload: ClientFamilyWithStudents = {
-        ...buildPayload(),
-        students: buildStudentPayload(),
-      };
+    setSubmitting(true);
+    const payload: ClientFamilyWithStudents = {
+      ...buildPayload(),
+      students: buildStudentPayload(),
+    };
 
-      const res = await onSave(payload);
-      if (res?.success) {
-        toast.success("Family created.");
-        close();
-      } else {
-        const message = res?.error ?? "Unable to create family.";
-        if (!applyServerPhoneError(message)) {
-          setServerError(message);
-        }
+    const res = await runMutationWithToast(
+      () => onSave(payload),
+      {
+        pending: { title: "Creating family..." },
+        success: { title: "Family created" },
+        error: (message) => ({
+          title: "Unable to create family",
+          description: message,
+        }),
+        onSuccess: () => close(),
+        onError: (message) => {
+          if (!applyServerPhoneError(message)) {
+            setServerError(message);
+          }
+        },
       }
-    } finally {
-      setSubmitting(false);
-    }
+    );
+    setSubmitting(false);
+    if (!res) return;
   };
 
   const handlePrimaryAction = async () => {
