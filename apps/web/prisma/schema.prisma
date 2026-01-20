@@ -328,6 +328,11 @@ enum InvoiceStatus {
   OVERDUE
 }
 
+enum InvoiceKind {
+  STANDARD
+  CATCH_UP
+}
+
 enum InvoiceLineItemKind {
   ENROLMENT
   PRODUCT
@@ -465,6 +470,7 @@ model EnrolmentPlan {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   enrolments Enrolment[]
+  invoiceLineItems InvoiceLineItem[]
 }
 
 model Holiday {
@@ -657,6 +663,7 @@ model Invoice {
   amountCents     Int
   amountPaidCents Int           @default(0)
   status          InvoiceStatus @default(DRAFT)
+  kind            InvoiceKind   @default(STANDARD)
 
   coverageStart         DateTime?
   coverageEnd           DateTime?
@@ -738,12 +745,17 @@ model InvoiceLineItem {
   quantity       Int                 @default(1)
   unitPriceCents Int
   amountCents    Int
+  blocksBilled   Int?
+  billingType    BillingType?
 
   product   Product? @relation(fields: [productId], references: [id])
   productId String?
 
   enrolment   Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
   enrolmentId String?
+
+  plan   EnrolmentPlan? @relation(fields: [planId], references: [id])
+  planId String?
 
   student   Student? @relation(fields: [studentId], references: [id])
   studentId String?
@@ -755,6 +767,7 @@ model InvoiceLineItem {
   @@index([kind])
   @@index([productId])
   @@index([enrolmentId])
+  @@index([planId])
   @@index([studentId])
 }
 

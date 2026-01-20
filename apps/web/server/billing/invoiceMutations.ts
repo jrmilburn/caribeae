@@ -2,7 +2,7 @@
 
 import { addDays } from "date-fns";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { InvoiceLineItemKind, InvoiceStatus, PaymentStatus } from "@prisma/client";
+import { BillingType, InvoiceKind, InvoiceLineItemKind, InvoiceStatus, PaymentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -20,6 +20,9 @@ type LineItemInput = {
   amountCents?: number;
   productId?: string | null;
   enrolmentId?: string | null;
+  planId?: string | null;
+  blocksBilled?: number | null;
+  billingType?: BillingType | null;
   studentId?: string | null;
 };
 
@@ -34,6 +37,7 @@ type CreateInvoiceWithLineItemsInput = {
   familyId: string;
   enrolmentId?: string | null;
   lineItems: LineItemInput[];
+  kind?: InvoiceKind;
   issuedAt?: Date;
   dueAt?: Date | null;
   status?: InvoiceStatus;
@@ -95,6 +99,9 @@ function normalizeLineItem(input: LineItemInput) {
     amountCents: computed,
     productId: input.productId ?? null,
     enrolmentId: input.enrolmentId ?? null,
+    planId: input.planId ?? null,
+    blocksBilled: input.blocksBilled != null ? Math.trunc(input.blocksBilled) : null,
+    billingType: input.billingType ?? null,
     studentId: input.studentId ?? null,
   };
 }
@@ -179,6 +186,7 @@ export async function createInvoiceWithLineItems(input: CreateInvoiceWithLineIte
         amountCents: 0,
         amountPaidCents: 0,
         status: input.status ?? InvoiceStatus.DRAFT,
+        kind: input.kind ?? InvoiceKind.STANDARD,
         issuedAt,
         dueAt,
         coverageStart: input.coverageStart ?? null,
@@ -366,7 +374,16 @@ async function persistAllocations(
                   },
                 },
               },
-              lineItems: { select: { kind: true, quantity: true } },
+              lineItems: {
+                select: {
+                  kind: true,
+                  quantity: true,
+                  enrolmentId: true,
+                  planId: true,
+                  blocksBilled: true,
+                  billingType: true,
+                },
+              },
             },
           });
 
