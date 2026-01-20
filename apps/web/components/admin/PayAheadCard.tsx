@@ -243,8 +243,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <CardTitle className="text-base">Pay ahead</CardTitle>
-          <p className="text-sm text-muted-foreground">Bill the next block and record payment in one step.</p>
+          <CardTitle className="text-base">Pay next block</CardTitle>
         </div>
         <Badge variant="secondary" className="gap-1">
           <PlusCircle className="h-4 w-4" />
