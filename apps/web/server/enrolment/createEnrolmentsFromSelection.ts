@@ -8,7 +8,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import {
   getSelectionRequirement,
   initialAccountingForPlan,
@@ -347,11 +346,6 @@ export async function createEnrolmentsFromSelection(
         });
       }
 
-      await createInitialInvoiceForEnrolment(enrolment.id, {
-        prismaClient: tx,
-        skipAuth: true,
-        customBlockLength: payload.customBlockLength ?? null,
-      });
       await recalculateEnrolmentCoverage(enrolment.id, "PLAN_CHANGED", { tx, actorId: undefined });
       return { enrolments: [enrolment] };
     });

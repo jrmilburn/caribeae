@@ -17,6 +17,7 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
+import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -178,7 +179,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     balanceCents: Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
   }));
 
-  const outstandingCents = openInvoicesWithBalance.reduce((sum : any, inv : any) => sum + inv.balanceCents, 0);
   const paidCents = paymentsAggregate._sum.amountCents ?? 0;
   const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
   const unallocatedCents = Math.max(paidCents - allocatedCents, 0);
@@ -241,6 +241,11 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   });
 
   const enrolmentsFlat = students.flatMap((s : any) => s.enrolments);
+  const summary = computeFamilyBillingSummary({
+    enrolments: enrolmentsFlat,
+    openInvoices: openInvoicesWithBalance,
+    today: new Date(),
+  });
   const latestPaidThroughDates = enrolmentsFlat
     .map((e : any) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
     .filter(Boolean) as Date[];
@@ -270,7 +275,10 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents,
+    outstandingCents: summary.invoiceOwingCents,
+    invoiceOwingCents: summary.invoiceOwingCents,
+    overdueOwingCents: summary.overdueOwingCents,
+    totalOwingCents: summary.totalOwingCents,
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {
@@ -280,10 +288,12 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
           status: nextDueInvoice.status,
         }
       : null,
+    nextPaymentDueDayKey: summary.nextPaymentDueDayKey,
     paidThroughLatest,
     creditsTotal,
     payments,
     holidays,
+    breakdown: summary.breakdown,
   };
 }
 
