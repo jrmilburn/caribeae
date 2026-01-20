@@ -23,7 +23,17 @@ type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
         };
       };
     };
-    lineItems: { select: { id: true; kind: true; quantity: true } };
+    lineItems: {
+      select: {
+        id: true;
+        kind: true;
+        quantity: true;
+        enrolmentId: true;
+        planId: true;
+        blocksBilled: true;
+        billingType: true;
+      };
+    };
   };
 }>;
 
@@ -40,7 +50,16 @@ async function recomputeInvoicePaymentState(
     where: { id: invoiceId },
     include: {
       enrolment: { include: { plan: true, template: true } },
-      lineItems: { select: { kind: true, quantity: true } },
+      lineItems: {
+        select: {
+          kind: true,
+          quantity: true,
+          enrolmentId: true,
+          planId: true,
+          blocksBilled: true,
+          billingType: true,
+        },
+      },
     },
   });
 
@@ -100,7 +119,17 @@ async function recomputeInvoicePaymentState(
         },
       },
 
-      lineItems: { select: { id: true, kind: true, quantity: true } },
+      lineItems: {
+        select: {
+          id: true,
+          kind: true,
+          quantity: true,
+          enrolmentId: true,
+          planId: true,
+          blocksBilled: true,
+          billingType: true,
+        },
+      },
     },
   });
 
@@ -118,7 +147,16 @@ async function recomputeEntitlementsForEnrolment(tx: Prisma.TransactionClient, e
     where: { enrolmentId },
     include: {
       enrolment: { include: { plan: true, template: true } },
-      lineItems: { select: { kind: true, quantity: true } },
+      lineItems: {
+        select: {
+          kind: true,
+          quantity: true,
+          enrolmentId: true,
+          planId: true,
+          blocksBilled: true,
+          billingType: true,
+        },
+      },
     },
   });
 
@@ -186,7 +224,7 @@ async function recomputeEntitlementsForEnrolment(tx: Prisma.TransactionClient, e
 
   const purchases: Prisma.EnrolmentCreditEventCreateManyInput[] = [];
   for (const invoice of enrolmentInvoices) {
-    const creditsDelta = resolveCreditsPurchased(invoice as InvoiceWithRelations, enrolment.plan);
+    const creditsDelta = resolveCreditsPurchased(invoice, enrolment.plan);
     if (creditsDelta <= 0) continue;
     const occurredOn = normalizeDate(invoice.paidAt ?? new Date());
     purchases.push({
