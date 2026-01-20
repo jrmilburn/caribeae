@@ -19,6 +19,7 @@ import FamilyInvoices from "./FamilyInvoices";
 import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 import { StudentModal } from "./StudentModal";
 import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
+import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
 
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
@@ -353,6 +354,10 @@ function OverviewTab({
 }) {
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+        <div className="text-sm text-muted-foreground">Billing actions</div>
+        <CatchUpPaymentDialog familyId={family.id} familyName={family.name} />
+      </div>
       <FamilyBillingPositionCard billing={billingPosition} />
 
       <Card className="border-l-0 border-r-0 border-b-0 shadow-none">
