@@ -317,7 +317,7 @@ export function FamilyTransitionWizard({
       </Card>
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1100px]">
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1100px] max-h-[calc(100vh-4rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Transition family</DialogTitle>
           </DialogHeader>
