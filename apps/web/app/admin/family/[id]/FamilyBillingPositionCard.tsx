@@ -16,7 +16,7 @@ type Props = {
   billing: FamilyBillingPosition;
 };
 
-function formatDate(value?: Date | null) {
+function formatDate(value?: Date | string | null) {
   return formatBrisbaneDate(value);
 }
 
