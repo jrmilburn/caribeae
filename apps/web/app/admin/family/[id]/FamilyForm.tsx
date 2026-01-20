@@ -375,6 +375,7 @@ function OverviewTab({
 function BillingTab({
   family,
   billing,
+  billingPosition,
   paymentSheetOpen,
   onPaymentSheetChange,
 }: {
