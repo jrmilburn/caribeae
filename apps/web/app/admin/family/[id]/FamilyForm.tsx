@@ -372,7 +372,6 @@ function OverviewTab({
 function BillingTab({
   family,
   billing,
-  billingPosition,
   paymentSheetOpen,
   onPaymentSheetChange,
 }: {
@@ -384,19 +383,6 @@ function BillingTab({
 }) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MiniStat label="Owing" value={formatCurrencyFromCents(billingPosition.outstandingCents)} />
-        <MiniStat label="Unallocated" value={formatCurrencyFromCents(billingPosition.unallocatedCents)} />
-        <MiniStat
-          label="Next due"
-          value={billingPosition.nextDueInvoice?.dueAt ? billingPosition.nextDueInvoice.dueAt?.toDateString() ?? "—" : "—"}
-          hint={
-            billingPosition.nextDueInvoice?.balanceCents
-              ? formatCurrencyFromCents(billingPosition.nextDueInvoice.balanceCents)
-              : undefined
-          }
-        />
-      </div>
       <FamilyInvoices
         family={family}
         billing={billing}

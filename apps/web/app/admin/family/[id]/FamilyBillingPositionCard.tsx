@@ -2,7 +2,7 @@ import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
@@ -56,10 +56,6 @@ export function FamilyBillingPositionCard({ billing }: Props) {
     <Card className="border-l-0 border-b-0 border-r-0 shadow-none">
       <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <CardTitle className="text-base">Billing position</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Paid-to dates and credits are tracked per enrolment; totals roll up below.
-          </p>
         </div>
 
         {billing.unallocatedCents > 0 ? (
