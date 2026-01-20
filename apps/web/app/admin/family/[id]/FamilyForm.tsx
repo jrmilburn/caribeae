@@ -163,8 +163,6 @@ export default function FamilyForm({
           phone: family.primaryPhone,
           email: family.primaryEmail,
         }}
-        outstandingCents={billingPosition.outstandingCents}
-        nextDue={billingPosition.nextDueInvoice}
         lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
         actions={
           <div className="flex flex-col gap-2">

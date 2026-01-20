@@ -246,12 +246,12 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
             <div className="text-xs text-muted-foreground">Open invoices</div>
             <div className="mt-1 text-2xl font-semibold">{openInvoices.filter(i => i.balanceCents > 0).length}</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {nextDue?.dueAt ? `Next due ${formatDate(nextDue.dueAt)}` : "No upcoming due date"}
+              {nextDue?.dueAt ? `Next payment due ${formatDate(nextDue.dueAt)}` : "No upcoming payment due date"}
             </div>
           </div>
 
           <div className="rounded-lg border bg-muted/30 p-4">
-            <div className="text-xs text-muted-foreground">Next due</div>
+            <div className="text-xs text-muted-foreground">Next payment due</div>
             <div className="mt-1 text-lg font-semibold">
               {nextDue?.dueAt ? formatDate(nextDue.dueAt) : "—"}
             </div>

@@ -16,7 +16,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
-import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
+import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -27,6 +27,66 @@ function asDate(value?: Date | string | null) {
 }
 
 type EntitlementStatus = "AHEAD" | "DUE_SOON" | "OVERDUE" | "UNKNOWN";
+
+type OwingEnrolment = {
+  billingType: BillingType | null;
+  paidThroughDate: Date | null;
+  creditsRemaining: number | null;
+  planPriceCents: number | null;
+  blockClassCount: number | null;
+};
+
+function calculateWeeklyOwingCents(paidThroughDate: Date | null, priceCents: number, today: Date) {
+  if (!paidThroughDate || priceCents <= 0) return 0;
+  const paidThrough = brisbaneStartOfDay(paidThroughDate);
+  if (!isAfter(today, paidThrough)) return 0;
+  const daysBehind = differenceInCalendarDays(today, paidThrough);
+  const weeksBehind = Math.ceil(daysBehind / 7);
+  return weeksBehind * priceCents;
+}
+
+function calculateBlockOwingCents(creditsRemaining: number | null, priceCents: number, blockClassCount: number | null) {
+  if (priceCents <= 0) return 0;
+  const credits = creditsRemaining ?? 0;
+  if (credits > 0) return 0;
+  const blockSize = Math.max(blockClassCount ?? 1, 1);
+  const blocksBehind = Math.max(1, Math.ceil(-credits / blockSize));
+  return blocksBehind * priceCents;
+}
+
+export function calculateAmountOwingCents(enrolments: OwingEnrolment[], todayInput: Date = new Date()) {
+  const today = brisbaneStartOfDay(todayInput);
+  return enrolments.reduce((sum, enrolment) => {
+    const priceCents = enrolment.planPriceCents ?? 0;
+    if (enrolment.billingType === BillingType.PER_WEEK) {
+      return sum + calculateWeeklyOwingCents(enrolment.paidThroughDate, priceCents, today);
+    }
+    if (enrolment.billingType === BillingType.PER_CLASS) {
+      return sum + calculateBlockOwingCents(enrolment.creditsRemaining, priceCents, enrolment.blockClassCount);
+    }
+    return sum;
+  }, 0);
+}
+
+export function calculateNextPaymentDueDayKey(
+  enrolments: Array<Pick<OwingEnrolment, "paidThroughDate">>,
+  todayInput: Date = new Date()
+) {
+  const today = brisbaneStartOfDay(todayInput);
+  let earliestKey: string | null = null;
+
+  for (const enrolment of enrolments) {
+    if (!enrolment.paidThroughDate) continue;
+    const paidThrough = brisbaneStartOfDay(enrolment.paidThroughDate);
+    const candidate = isAfter(today, paidThrough) ? today : paidThrough;
+    const candidateKey = toBrisbaneDayKey(candidate);
+    if (!earliestKey || brisbaneCompare(candidateKey, earliestKey) < 0) {
+      earliestKey = candidateKey;
+    }
+  }
+
+  return earliestKey;
+}
 
 function evaluateEntitlement(params: {
   billingType: BillingType | null | undefined;
@@ -178,7 +238,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     balanceCents: Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
   }));
 
-  const outstandingCents = openInvoicesWithBalance.reduce((sum : any, inv : any) => sum + inv.balanceCents, 0);
   const paidCents = paymentsAggregate._sum.amountCents ?? 0;
   const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
   const unallocatedCents = Math.max(paidCents - allocatedCents, 0);
@@ -241,6 +300,8 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   });
 
   const enrolmentsFlat = students.flatMap((s : any) => s.enrolments);
+  const amountOwingCents = calculateAmountOwingCents(enrolmentsFlat);
+  const nextPaymentDueDayKey = calculateNextPaymentDueDayKey(enrolmentsFlat);
   const latestPaidThroughDates = enrolmentsFlat
     .map((e : any) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
     .filter(Boolean) as Date[];
@@ -270,7 +331,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents,
+    amountOwingCents,
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {
@@ -280,6 +341,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
           status: nextDueInvoice.status,
         }
       : null,
+    nextPaymentDueDayKey,
     paidThroughLatest,
     creditsTotal,
     payments,
