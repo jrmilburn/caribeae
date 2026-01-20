@@ -10,12 +10,6 @@ type Contact = {
   email?: string | null;
 };
 
-type NextDue = {
-  dueAt?: Date | string | null;
-  status?: string | null;
-  balanceCents?: number | null;
-};
-
 type PaymentMeta = {
   paidAt?: Date | string | null;
   amountCents?: number | null;
@@ -24,8 +18,6 @@ type PaymentMeta = {
 type FamilyHeaderSummaryProps = {
   familyName: string;
   contact?: Contact;
-  outstandingCents?: number | null;
-  nextDue?: NextDue | null;
   lastPayment?: PaymentMeta | null;
   actions?: React.ReactNode;
   sticky?: boolean;

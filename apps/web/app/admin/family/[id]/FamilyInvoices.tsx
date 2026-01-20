@@ -49,6 +49,7 @@ import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
+import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { recordFamilyPayment } from "@/server/billing/recordFamilyPayment";
 import { undoPayment } from "@/server/billing/undoPayment";
 import { Loader2, MoreHorizontal } from "lucide-react";
@@ -58,6 +59,7 @@ type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 type Props = {
   family: FamilyWithStudentsAndInvoices;
   billing: BillingData;
+  billingPosition: FamilyBillingPosition;
   paymentSheetOpen?: boolean;
   onPaymentSheetChange?: (open: boolean) => void;
 };
@@ -101,7 +103,7 @@ type InvoiceAllocationItem = {
   amountCents: number;
 };
 
-export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPaymentSheetChange }: Props) {
+export default function FamilyInvoices({ family, billing, billingPosition, paymentSheetOpen, onPaymentSheetChange }: Props) {
 
   const router = useRouter();
 
@@ -111,7 +113,7 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
     balanceCents: getInvoiceBalanceCents(invoice),
   }));
 
-  const totalOwingCents = openInvoices.reduce((sum, inv) => sum + inv.balanceCents, 0);
+  const totalOwingCents = billingPosition.outstandingCents;
 
   const nextDue = [...openInvoices]
     .filter((i) => i.balanceCents > 0)
@@ -246,12 +248,12 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
             <div className="text-xs text-muted-foreground">Open invoices</div>
             <div className="mt-1 text-2xl font-semibold">{openInvoices.filter(i => i.balanceCents > 0).length}</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {nextDue?.dueAt ? `Next due ${formatDate(nextDue.dueAt)}` : "No upcoming due date"}
+              {nextDue?.dueAt ? `Next payment due ${formatDate(nextDue.dueAt)}` : "No upcoming payment due date"}
             </div>
           </div>
 
           <div className="rounded-lg border bg-muted/30 p-4">
-            <div className="text-xs text-muted-foreground">Next due</div>
+            <div className="text-xs text-muted-foreground">Next payment due</div>
             <div className="mt-1 text-lg font-semibold">
               {nextDue?.dueAt ? formatDate(nextDue.dueAt) : "—"}
             </div>

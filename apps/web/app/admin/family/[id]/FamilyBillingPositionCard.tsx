@@ -16,7 +16,7 @@ type Props = {
   billing: FamilyBillingPosition;
 };
 
-function formatDate(value?: Date | null) {
+function formatDate(value?: Date | string | null) {
   return formatBrisbaneDate(value);
 }
 
@@ -78,7 +78,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
               {formatCurrencyFromCents(billing.outstandingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on outstanding invoice balances
+              Based on open invoice balances
             </div>
           </div>
 
@@ -91,13 +91,12 @@ export function FamilyBillingPositionCard({ billing }: Props) {
           </div>
 
           <div className="rounded-lg border bg-card p-4">
-            <div className="text-xs text-muted-foreground">Open invoices</div>
+            <div className="text-xs text-muted-foreground">Next payment due</div>
             <div className="mt-1 text-2xl font-semibold">
-              {/*eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-              {billing.openInvoices.filter((i : any) => i.balanceCents > 0).length}
+              {billing.nextDueInvoice?.dueAt ? formatDate(billing.nextDueInvoice.dueAt) : "—"}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {billing.nextDueInvoice?.dueAt ? `Next due ${formatDate(billing.nextDueInvoice.dueAt)}` : "No upcoming due date"}
+              {billing.nextDueInvoice?.dueAt ? "Upcoming open invoice" : "No upcoming payment due date"}
             </div>
           </div>
         </div>
