@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 
 import { deleteTeacher } from "@/server/teacher/deleteTeacher";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { getTeacherPayRates } from "@/server/payRates/getTeacherPayRates";
 import { saveTeacherPayRate } from "@/server/payRates/saveTeacherPayRate";
 import { deleteTeacherPayRate } from "@/server/payRates/deleteTeacherPayRate";
@@ -64,11 +65,18 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
 
     setDeletingId(teacher.id);
     try {
-      await deleteTeacher(teacher.id);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete teacher.";
-      window.alert(message);
+      await runMutationWithToast(
+        () => deleteTeacher(teacher.id),
+        {
+          pending: { title: "Deleting teacher..." },
+          success: { title: "Teacher deleted" },
+          error: (message) => ({
+            title: "Unable to delete teacher",
+            description: message,
+          }),
+          onSuccess: () => router.refresh(),
+        }
+      );
     } finally {
       setDeletingId(null);
     }

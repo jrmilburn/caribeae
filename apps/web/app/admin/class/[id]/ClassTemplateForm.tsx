@@ -20,6 +20,7 @@ import {
 import { updateTemplate } from "@/server/classTemplate/updateTemplate";
 import type { ClientTemplateWithInclusions } from "./types";
 import { minutesToTimeInput, timeInputToMinutes, dayLabel, DAY_OPTIONS } from "./utils/time";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 function toDateInputValue(d?: Date | null) {
   if (!d) return "";
@@ -71,20 +72,33 @@ export function ClassTemplateForm({
       const startMin = timeInputToMinutes(form.startTime);
       const endMin = timeInputToMinutes(form.endTime);
 
-      await updateTemplate({
-        name: form.name,
-        levelId: form.levelId,
-        teacherId: form.teacherId === "none" ? null : form.teacherId,
-        dayOfWeek: Number(form.dayOfWeek),
-        startTime: startMin,
-        endTime: endMin,
-        startDate: fromDateInputValue(form.startDate),
-        endDate: fromDateInputValue(form.endDate),
-        capacity: form.capacity ? Number(form.capacity) : null,
-        active: form.active,
-      }, classTemplate.id);
-
-      router.refresh();
+      await runMutationWithToast(
+        () =>
+          updateTemplate(
+            {
+              name: form.name,
+              levelId: form.levelId,
+              teacherId: form.teacherId === "none" ? null : form.teacherId,
+              dayOfWeek: Number(form.dayOfWeek),
+              startTime: startMin,
+              endTime: endMin,
+              startDate: fromDateInputValue(form.startDate),
+              endDate: fromDateInputValue(form.endDate),
+              capacity: form.capacity ? Number(form.capacity) : null,
+              active: form.active,
+            },
+            classTemplate.id
+          ),
+        {
+          pending: { title: "Saving class..." },
+          success: { title: "Class updated" },
+          error: (message) => ({
+            title: "Unable to update class",
+            description: message,
+          }),
+          onSuccess: () => router.refresh(),
+        }
+      );
     } finally {
       setSaving(false);
     }

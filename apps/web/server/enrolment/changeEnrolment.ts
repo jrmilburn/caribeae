@@ -21,7 +21,8 @@ import {
 } from "@/server/billing/paidThroughTemplateChange";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
-import { assertCapacityForTemplateRange } from "@/server/class/capacity";
+import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
+import type { CapacityExceededDetails } from "@/lib/capacityError";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -39,12 +40,51 @@ type PreviewChangeEnrolmentInput = {
   effectiveLevelId?: string | null;
 };
 
-export async function changeEnrolment(input: ChangeEnrolmentInput) {
+type ChangeEnrolmentResult =
+  | {
+      ok: true;
+      data: {
+        enrolments: Array<{
+          id: string;
+          studentId: string;
+          familyId: string | null;
+          templateId: string | null;
+        }>;
+        templateIds: string[];
+        studentId: string;
+        familyId: string | null;
+        originalTemplates: string[];
+        oldTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
+        newTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
+      };
+    }
+  | {
+      ok: false;
+      error:
+        | {
+            code: "COVERAGE_WOULD_SHORTEN";
+            oldDateKey: string | null;
+            newDateKey: string | null;
+          }
+        | {
+            code: "CAPACITY_EXCEEDED";
+            details: CapacityExceededDetails;
+          }
+        | {
+            code: "VALIDATION_ERROR" | "UNKNOWN_ERROR";
+            message: string;
+          };
+    };
+
+export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<ChangeEnrolmentResult> {
   const user = await getOrCreateUser();
   await requireAdmin();
 
   if (!input.templateIds.length) {
-    throw new Error("Select at least one class template.");
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: "Select at least one class template." },
+    };
   }
 
   const payload = {
@@ -182,17 +222,33 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
       ignoreEnrolmentIds: new Set([enrolment.id]),
     });
 
+    let capacityIssue: CapacityExceededDetails | null = null;
     for (const window of windows) {
       const template = templates.find((item) => item.id === window.templateId);
       if (!template) continue;
-      await assertCapacityForTemplateRange({
+      const issue = await getCapacityIssueForTemplateRange({
         template,
         plan: enrolment.plan,
         windowStart: window.startDate,
         windowEnd: window.endDate ?? null,
         existingEnrolmentId: enrolment.id,
-        allowOverload: input.allowOverload,
         client: tx,
+      });
+      if (issue) {
+        capacityIssue = issue;
+        break;
+      }
+    }
+    if (capacityIssue && !input.allowOverload) {
+      return { capacityIssue };
+    }
+    if (capacityIssue && input.allowOverload) {
+      console.info("[capacity] overload confirmed for changeEnrolment", {
+        templateId: capacityIssue.templateId,
+        occurrenceDateKey: capacityIssue.occurrenceDateKey,
+        capacity: capacityIssue.capacity,
+        currentCount: capacityIssue.currentCount,
+        projectedCount: capacityIssue.projectedCount,
       });
     }
 
@@ -298,29 +354,52 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
     }
 
     return {
-      enrolments: [updated],
-      templateIds: Array.from(new Set([...toAdd, ...toRemove])),
-      studentId: enrolment.studentId,
-      familyId: enrolment.student?.familyId ?? null,
-      originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
-      oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
-      newTemplates: templates.map((template) => describeTemplate(template)),
+      data: {
+        enrolments: [
+          {
+            id: updated.id,
+            studentId: updated.studentId,
+            familyId: updated.student?.familyId ?? null,
+            templateId: updated.templateId,
+          },
+        ],
+        templateIds: Array.from(new Set([...toAdd, ...toRemove])),
+        studentId: enrolment.studentId,
+        familyId: enrolment.student?.familyId ?? null,
+        originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
+        oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
+        newTemplates: templates.map((template) => describeTemplate(template)),
+      },
     };
   });
 
-    const allTemplates = new Set<string>([...result.templateIds, ...result.originalTemplates]);
-    result.enrolments.forEach((e) => {
+    if ("capacityIssue" in result && result.capacityIssue) {
+      console.info("[capacity] exceeded for changeEnrolment", {
+        templateId: result.capacityIssue.templateId,
+        occurrenceDateKey: result.capacityIssue.occurrenceDateKey,
+        capacity: result.capacityIssue.capacity,
+        currentCount: result.capacityIssue.currentCount,
+        projectedCount: result.capacityIssue.projectedCount,
+      });
+      return {
+        ok: false,
+        error: { code: "CAPACITY_EXCEEDED", details: result.capacityIssue },
+      };
+    }
+
+    const allTemplates = new Set<string>([...result.data.templateIds, ...result.data.originalTemplates]);
+    result.data.enrolments.forEach((e) => {
       if (e.templateId) allTemplates.add(e.templateId);
     });
 
-    revalidatePath(`/admin/student/${result.studentId}`);
+    revalidatePath(`/admin/student/${result.data.studentId}`);
     allTemplates.forEach((id) => revalidatePath(`/admin/class/${id}`));
-    if (result.familyId) {
-      revalidatePath(`/admin/family/${result.familyId}`);
+    if (result.data.familyId) {
+      revalidatePath(`/admin/family/${result.data.familyId}`);
     }
     revalidatePath("/admin/enrolment");
 
-    return { ok: true as const, data: result };
+    return { ok: true as const, data: result.data };
   } catch (error) {
     if (error instanceof CoverageWouldShortenError) {
       return {
@@ -329,10 +408,25 @@ export async function changeEnrolment(input: ChangeEnrolmentInput) {
           code: "COVERAGE_WOULD_SHORTEN",
           oldDateKey: error.oldDateKey,
           newDateKey: error.newDateKey,
+          },
+      };
+    }
+    if (error instanceof Error) {
+      return {
+        ok: false as const,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: error.message || "Unable to change enrolment.",
         },
       };
     }
-    throw error;
+    return {
+      ok: false as const,
+      error: {
+        code: "UNKNOWN_ERROR",
+        message: "Unable to change enrolment.",
+      },
+    };
   }
 }
 

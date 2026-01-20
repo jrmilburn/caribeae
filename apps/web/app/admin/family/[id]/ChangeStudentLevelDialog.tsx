@@ -185,7 +185,7 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
     }
     setSubmitting(true);
     try {
-      await changeStudentLevelAndReenrol({
+      const result = await changeStudentLevelAndReenrol({
         studentId: student.id,
         toLevelId: selectedLevelId,
         effectiveDate: `${effectiveDate}T00:00:00`,
@@ -194,6 +194,14 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
         note,
         allowOverload,
       });
+      if (!result.ok) {
+        if (result.error.code === "CAPACITY_EXCEEDED") {
+          setCapacityWarning(result.error.details);
+          return;
+        }
+        toast.error(result.error.message);
+        return;
+      }
       toast.success("Level updated and enrolments created.");
       onOpenChange(false);
       router.refresh();

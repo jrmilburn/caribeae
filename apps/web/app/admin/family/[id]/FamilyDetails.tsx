@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { updateFamily } from "@/server/family/updateFamily";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { useRouter } from "next/navigation";
 import { SmartPhoneInput } from "@/components/SmartPhoneInput";
 import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
@@ -90,36 +90,40 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
 
     setSaving(true);
 
-    try {
-      const payload = {
-        name: form.name.trim(),
-        primaryContactName: form.primaryContactName.trim() || undefined,
-        primaryEmail: form.primaryEmail.trim() || undefined,
-        primaryPhone: primary.value.trim() || undefined,
-        secondaryContactName: form.secondaryContactName.trim() || undefined,
-        secondaryEmail: form.secondaryEmail.trim() || undefined,
-        secondaryPhone: secondary.value.trim() || undefined,
-        medicalContactName: form.medicalContactName.trim() || undefined,
-        medicalContactPhone: form.medicalContactPhone.trim() || undefined,
-        address: form.address.trim() || undefined,
-      };
+    const payload = {
+      name: form.name.trim(),
+      primaryContactName: form.primaryContactName.trim() || undefined,
+      primaryEmail: form.primaryEmail.trim() || undefined,
+      primaryPhone: primary.value.trim() || undefined,
+      secondaryContactName: form.secondaryContactName.trim() || undefined,
+      secondaryEmail: form.secondaryEmail.trim() || undefined,
+      secondaryPhone: secondary.value.trim() || undefined,
+      medicalContactName: form.medicalContactName.trim() || undefined,
+      medicalContactPhone: form.medicalContactPhone.trim() || undefined,
+      address: form.address.trim() || undefined,
+    };
 
-      const result = await updateFamily(payload, family.id);
-      if (!result.success) {
-        const message = result.error ?? "Unable to update family.";
-        if (!applyServerPhoneError(message)) {
-          toast.error(message);
+    try {
+      const result = await runMutationWithToast(
+        () => updateFamily(payload, family.id),
+        {
+          pending: { title: "Saving family..." },
+          success: { title: "Family updated" },
+          error: (message) => ({
+            title: "Unable to update family",
+            description: message,
+          }),
+          onSuccess: () => {
+            router.refresh();
+            onSaved?.();
+          },
+          onError: (message) => {
+            applyServerPhoneError(message);
+          },
         }
-        return;
-      }
-      toast.success("Family updated.");
-      router.refresh();
-      onSaved?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to update family.";
-      if (!applyServerPhoneError(message)) {
-        toast.error(message);
-      }
+      );
+
+      if (!result) return;
     } finally {
       setSaving(false);
     }

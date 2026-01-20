@@ -21,6 +21,7 @@ import {
   sendBroadcastAction,
   sendDirectMessageAction,
 } from "@/server/messages/workflows";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 type ComposeTabProps = {
   families: Family[];
@@ -29,6 +30,7 @@ type ComposeTabProps = {
   classOptions?: ClassFilterOption[];
   mode?: "direct" | "broadcast"; // NEW
   onChannelChange?: (channel: Channel) => void;
+  onSent?: () => void;
 };
 
 export type Channel = "SMS" | "EMAIL";
@@ -55,7 +57,7 @@ function formatSchedule(option: ClassFilterOption) {
   return "Schedule TBD";
 }
 
-export function ComposeTab({ families, levels, invoiceStatuses, classOptions = [], mode, onChannelChange }: ComposeTabProps) {
+export function ComposeTab({ families, levels, invoiceStatuses, classOptions = [], mode, onChannelChange, onSent }: ComposeTabProps) {
   const showTabs = !mode;
   const defaultValue = mode ?? "direct";
 
@@ -194,21 +196,36 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
 
       if (!body) return;
 
-      const res = await sendDirectMessageAction({
-        familyId,
-        channel,
-        body,
-        subject: subject || undefined,
-      });
+      const selectedFamily = families.find((family) => family.id === familyId);
+      const result = await runMutationWithToast(
+        () =>
+          sendDirectMessageAction({
+            familyId,
+            channel,
+            body,
+            subject: subject || undefined,
+          }),
+        {
+          pending: { title: channel === "SMS" ? "Sending SMS..." : "Sending email..." },
+          success: {
+            title: channel === "SMS" ? "SMS sent" : "Email sent",
+            description: selectedFamily ? `Sent to ${selectedFamily.name}.` : undefined,
+          },
+          error: (message) => ({
+            title: channel === "SMS" ? "Unable to send SMS" : "Unable to send email",
+            description: message,
+          }),
+          onSuccess: () => {
+            setDirectStatus(null);
+            setDirectSmsMessage("");
+            setSubject("");
+            if (channel === "EMAIL") directEmailEditorRef.current?.clear();
+            onSent?.();
+          },
+        }
+      );
 
-      if (res.ok) {
-        setDirectStatus("Message sent");
-        setDirectSmsMessage("");
-        setSubject("");
-        if (channel === "EMAIL") directEmailEditorRef.current?.clear();
-      } else {
-        setDirectStatus(res.error ?? "Failed to send");
-      }
+      if (!result) return;
     });
   };
 
@@ -242,27 +259,60 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
 
       if (!body) return;
 
-      const res = await sendBroadcastAction({
-        channel: broadcastChannel,
-        body,
-        subject: broadcastSubject || undefined,
-        filters: {
-          levelIds: Array.from(selectedLevels),
-          invoiceStatuses: Array.from(selectedInvoiceStatuses),
-          activeEnrolments: activeOnly,
-          classTemplateIds: Array.from(selectedClasses),
-        },
-      });
+      const result = await runMutationWithToast(
+        () =>
+          sendBroadcastAction({
+            channel: broadcastChannel,
+            body,
+            subject: broadcastSubject || undefined,
+            filters: {
+              levelIds: Array.from(selectedLevels),
+              invoiceStatuses: Array.from(selectedInvoiceStatuses),
+              activeEnrolments: activeOnly,
+              classTemplateIds: Array.from(selectedClasses),
+            },
+          }),
+        {
+          pending: { title: broadcastChannel === "SMS" ? "Sending broadcast SMS..." : "Sending broadcast email..." },
+          success: (res) => {
+            const summary =
+              res && typeof res === "object" && "summary" in res
+                ? (res as { summary?: { sent: number; failed: number; total: number } }).summary
+                : null;
+            const skipped =
+              res && typeof res === "object" && "skipped" in res
+                ? (res as { skipped?: unknown[] }).skipped?.length ?? 0
+                : 0;
+            const sent = summary?.sent ?? 0;
+            const failed = summary?.failed ?? 0;
+            const total = summary?.total ?? sent + failed;
+            const descriptionParts = [
+              total ? `${sent}/${total} delivered` : null,
+              failed ? `${failed} failed` : null,
+              skipped ? `${skipped} skipped` : null,
+            ].filter(Boolean);
 
-      if ("ok" in res && res.ok) {
-        setBroadcastStatus("Broadcast sent");
-        setBroadcastSmsMessage("");
-        setBroadcastSubject("");
-        if (broadcastChannel === "EMAIL") broadcastEmailEditorRef.current?.clear();
-        setPreview(null);
-      } else {
-        setBroadcastStatus((res).error ?? "Failed to send");
-      }
+            return {
+              title: broadcastChannel === "SMS" ? "SMS broadcast sent" : "Email broadcast sent",
+              description: descriptionParts.length ? descriptionParts.join(" · ") : undefined,
+            };
+          },
+          error: (message) => ({
+            title: broadcastChannel === "SMS" ? "Unable to send broadcast SMS" : "Unable to send broadcast email",
+            description: message,
+          }),
+          onSuccess: () => {
+            setBroadcastStatus(null);
+            setBroadcastSmsMessage("");
+            setBroadcastSubject("");
+            if (broadcastChannel === "EMAIL") broadcastEmailEditorRef.current?.clear();
+            setPreview(null);
+            onSent?.();
+          },
+        }
+      );
+
+      if (!result) return;
     });
   };
 

@@ -26,6 +26,7 @@ import {
 
 import { deleteLevel } from "@/server/level/deleteLevel";
 import { LevelForm } from "./LevelForm";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 export function LevelsSection({ levels }: { levels: Level[] }) {
   const router = useRouter();
@@ -47,11 +48,18 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
 
     setDeletingId(level.id);
     try {
-      await deleteLevel(level.id);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete level.";
-      window.alert(message);
+      await runMutationWithToast(
+        () => deleteLevel(level.id),
+        {
+          pending: { title: "Deleting level..." },
+          success: { title: "Level deleted" },
+          error: (message) => ({
+            title: "Unable to delete level",
+            description: message,
+          }),
+          onSuccess: () => router.refresh(),
+        }
+      );
     } finally {
       setDeletingId(null);
     }
