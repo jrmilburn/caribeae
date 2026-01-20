@@ -1,6 +1,7 @@
 import {
   BillingType,
   EnrolmentCreditEventType,
+  InvoiceKind,
   InvoiceLineItemKind,
   InvoiceStatus,
   type Prisma,
@@ -17,6 +18,11 @@ import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolm
 import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { getWeeklyPaidThrough } from "@/server/billing/enrolmentBilling";
+import {
+  resolveBlockCatchUpCoverage,
+  resolveWeeklyCatchUpCoverage,
+} from "@/server/billing/catchUpPaymentUtils";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -29,7 +35,7 @@ type InvoiceWithRelations = Prisma.InvoiceGetPayload<{
         classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } } } };
       };
     };
-    lineItems: { select: { kind: true; quantity: true } };
+    lineItems: { select: { kind: true; quantity: true; enrolmentId: true; planId: true; blocksBilled: true; billingType: true } };
   };
 }>;
 
@@ -109,13 +115,149 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         where: { id: invoiceId },
         include: {
           enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
-          lineItems: { select: { kind: true, quantity: true } },
+          lineItems: { select: { kind: true, quantity: true, enrolmentId: true, planId: true, blocksBilled: true, billingType: true } },
         },
       }));
 
     if (!invoice) throw new Error("Invoice not found.");
     if (invoice.status !== InvoiceStatus.PAID) return invoice;
     if (hasAppliedEntitlements(invoice)) return invoice;
+
+    if (invoice.kind === InvoiceKind.CATCH_UP) {
+      const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT && li.enrolmentId);
+      for (const lineItem of enrolmentLines) {
+        if (!lineItem.enrolmentId) continue;
+        const enrolment = await tx.enrolment.findUnique({
+          where: { id: lineItem.enrolmentId },
+          include: {
+            plan: true,
+            template: true,
+            classAssignments: { include: { template: true } },
+          },
+        });
+
+        if (!enrolment?.plan) continue;
+        if (lineItem.planId && enrolment.planId !== lineItem.planId) {
+          throw new Error("Catch-up line item plan does not match current enrolment plan.");
+        }
+
+        const plan = enrolment.plan;
+        const blocksBilled = lineItem.blocksBilled ?? lineItem.quantity ?? 0;
+        if (blocksBilled <= 0) continue;
+
+        const assignedTemplates = enrolment.classAssignments.length
+          ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+          : enrolment.template
+            ? [enrolment.template]
+            : [];
+
+        if (!assignedTemplates.length) {
+          throw new Error("Class template missing for enrolment.");
+        }
+
+        if (plan.billingType === BillingType.PER_WEEK) {
+          if (!plan.durationWeeks || plan.durationWeeks <= 0) {
+            throw new Error("Weekly plans require a duration in weeks.");
+          }
+
+          const templateIds = assignedTemplates.map((template) => template.id);
+          const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+          const holidays = await tx.holiday.findMany({
+            where: buildHolidayScopeWhere({ templateIds, levelIds }),
+            select: { startDate: true, endDate: true, levelId: true, templateId: true },
+          });
+
+          const paidThrough = getWeeklyPaidThrough(enrolment);
+          const coverage = resolveWeeklyCatchUpCoverage(
+            {
+              enrolmentStartDate: enrolment.startDate,
+              enrolmentEndDate: enrolment.endDate ?? null,
+              paidThroughDate: paidThrough ?? null,
+              durationWeeks: plan.durationWeeks,
+              sessionsPerWeek: plan.sessionsPerWeek ?? null,
+              assignedTemplates,
+              holidays,
+            },
+            blocksBilled
+          );
+
+          if (!coverage.coverageEnd || !coverage.coverageStart) {
+            throw new Error("Weekly catch-up invoices must include a coverage window.");
+          }
+
+          await tx.enrolment.update({
+            where: { id: enrolment.id },
+            data: {
+              paidThroughDate: normalizeDate(coverage.coverageEnd),
+              paidThroughDateComputed: coverage.coverageEndBase ? normalizeDate(coverage.coverageEndBase) : null,
+            },
+          });
+        } else if (plan.billingType === BillingType.PER_CLASS) {
+          if ((plan.blockClassCount ?? 1) <= 0) {
+            throw new Error("PER_CLASS plans require blockClassCount to grant credits.");
+          }
+
+          const creditsDelta = (plan.blockClassCount ?? 1) * blocksBilled;
+          if (creditsDelta > 0) {
+            await recordCreditPurchase(tx, {
+              enrolmentId: enrolment.id,
+              creditsDelta,
+              occurredOn: asDate(invoice.paidAt) ?? new Date(),
+              invoiceId: invoice.id,
+            });
+          }
+
+          const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+          if (!anchorTemplate?.dayOfWeek && anchorTemplate?.dayOfWeek !== 0) {
+            throw new Error("Class template missing for enrolment.");
+          }
+
+          const templateIds = assignedTemplates.map((template) => template.id);
+          const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+          const holidays = await tx.holiday.findMany({
+            where: buildHolidayScopeWhere({ templateIds, levelIds }),
+            select: { startDate: true, endDate: true, levelId: true, templateId: true },
+          });
+
+          const coverage = resolveBlockCatchUpCoverage(
+            {
+              enrolmentStartDate: enrolment.startDate,
+              enrolmentEndDate: enrolment.endDate ?? null,
+              paidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+              classTemplate: {
+                dayOfWeek: anchorTemplate.dayOfWeek,
+                startTime: anchorTemplate.startTime ?? null,
+              },
+              blockClassCount: plan.blockClassCount ?? 1,
+              holidays,
+            },
+            blocksBilled
+          );
+
+          if (coverage.coverageEnd) {
+            const coverageEnd = normalizeCoverageEndForStorage(coverage.coverageEnd);
+            const coverageEndBase = coverage.coverageEndBase
+              ? normalizeCoverageEndForStorage(coverage.coverageEndBase)
+              : coverageEnd;
+            await tx.enrolment.update({
+              where: { id: enrolment.id },
+              data: {
+                paidThroughDate: coverageEnd,
+                paidThroughDateComputed: coverageEndBase,
+              },
+            });
+          }
+        }
+
+        await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
+        await getEnrolmentBillingStatus(enrolment.id, { client: tx });
+      }
+
+      return tx.invoice.update({
+        where: { id: invoice.id },
+        data: { entitlementsAppliedAt: new Date() },
+      });
+    }
 
     const enrolment = invoice.enrolment;
     if (!enrolment?.plan) return invoice;
