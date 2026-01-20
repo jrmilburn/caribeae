@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 import { searchFamilies } from "@/server/family/searchFamilies";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
@@ -345,9 +346,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     }
   };
 
-  const outstanding = summary?.outstandingCents ?? 0;
-  const totalOpenInvoices = summary?.openInvoices.length ?? 0;
-  const nextDue = summary?.nextDueInvoice;
+  const outstanding = summary?.amountOwingCents ?? 0;
   const lastPayment = summary?.payments?.[0] ?? null;
   const [activeTab, setActiveTab] = React.useState("billing");
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(new Set(["billing"]));
@@ -370,8 +369,6 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
           name: selectedFamily?.primaryContactName,
           phone: selectedFamily?.primaryPhone,
         }}
-        outstandingCents={outstanding}
-        nextDue={nextDue}
         lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
         actions={
           <>
@@ -475,8 +472,6 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
             summary={summary}
             loadingSummary={loadingSummary}
             outstanding={outstanding}
-            totalOpenInvoices={totalOpenInvoices}
-            nextDue={nextDue}
             onOpenAction={setActionMode}
           />
         </div>
@@ -541,8 +536,6 @@ function CounterTabs({
   summary,
   loadingSummary,
   outstanding,
-  totalOpenInvoices,
-  nextDue,
   onOpenAction,
 }: {
   activeTab: string;
@@ -551,8 +544,6 @@ function CounterTabs({
   summary: FamilyBillingSummary | null;
   loadingSummary: boolean;
   outstanding: number;
-  totalOpenInvoices: number;
-  nextDue: FamilyBillingSummary["nextDueInvoice"] | undefined;
   onOpenAction: (mode: ActionMode) => void;
 }) {
   return (
@@ -578,9 +569,6 @@ function CounterTabs({
             <BillingTab
               summary={summary}
               loadingSummary={loadingSummary}
-              outstanding={outstanding}
-              totalOpenInvoices={totalOpenInvoices}
-              nextDue={nextDue}
               onOpenAction={onOpenAction}
             />
           </TabsContent>
@@ -605,15 +593,10 @@ function CounterTabs({
 function BillingTab({
   summary,
   loadingSummary,
-  totalOpenInvoices,
-  nextDue,
   onOpenAction,
 }: {
   summary: FamilyBillingSummary | null;
   loadingSummary: boolean;
-  outstanding: number;
-  totalOpenInvoices: number;
-  nextDue: FamilyBillingSummary["nextDueInvoice"] | undefined;
   onOpenAction: (mode: ActionMode) => void;
 }) {
   if (!summary) {
@@ -641,10 +624,10 @@ function BillingTab({
           icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />}
         />
         <SummaryCard
-          label="Open invoices"
-          value={`${totalOpenInvoices}`}
+          label="Next payment due"
+          value={summary.nextPaymentDueDayKey ? formatBrisbaneDate(summary.nextPaymentDueDayKey) : "—"}
           sublabel={
-            nextDue ? `Next due ${formatDate(nextDue.dueAt)} · ${formatCurrencyFromCents(nextDue.balanceCents)}` : "No upcoming due date"
+            summary.nextPaymentDueDayKey ? "Earliest paid-through date across active enrolments" : "No upcoming payment due date"
           }
           icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
         />
