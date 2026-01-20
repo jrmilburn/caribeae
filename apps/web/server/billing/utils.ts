@@ -39,15 +39,24 @@ export async function adjustInvoicePayment(
   deltaCents: number,
   paidAtHint?: Date | null
 ) {
-const invoice = await tx.invoice.findUnique({
-  where: { id: invoiceId },
-  include: {
-    enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
-    lineItems: { select: { id: true, kind: true, quantity: true } },
-    _count: { select: { lineItems: true } },
-  },
-});
-
+  const invoice = await tx.invoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
+      lineItems: {
+        select: {
+          id: true,
+          kind: true,
+          quantity: true,
+          enrolmentId: true,
+          planId: true,
+          blocksBilled: true,
+          billingType: true,
+        },
+      },
+      _count: { select: { lineItems: true } },
+    },
+  });
 
   if (!invoice) throw new Error("Invoice not found");
   const nextPaid = Math.max(invoice.amountPaidCents + deltaCents, 0);
