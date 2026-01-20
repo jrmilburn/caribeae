@@ -346,7 +346,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     }
   };
 
-  const outstanding = summary?.amountOwingCents ?? 0;
+  const outstanding = summary?.totalOwingCents ?? 0;
   const lastPayment = summary?.payments?.[0] ?? null;
   const [activeTab, setActiveTab] = React.useState("billing");
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(new Set(["billing"]));

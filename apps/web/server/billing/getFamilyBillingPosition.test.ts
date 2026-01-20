@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { BillingType } from "@prisma/client";
 
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
-import { calculateAmountOwingCents, calculateNextPaymentDueDayKey } from "./familyBillingCalculations";
+import { computeFamilyBillingSummary } from "./familyBillingSummary";
 
 function d(input: string) {
   return new Date(`${input}T00:00:00.000Z`);
@@ -20,77 +20,126 @@ function test(name: string, fn: () => void) {
   }
 }
 
-test("amount owing is zero when paid-through is current", () => {
-  const amount = calculateAmountOwingCents(
-    [
+test("paid-through current and no open invoices => owing 0", () => {
+  const summary = computeFamilyBillingSummary({
+    enrolments: [
       {
+        id: "e1",
+        studentId: "s1",
+        planId: "p1",
         billingType: BillingType.PER_WEEK,
-        paidThroughDate: d("2026-01-15"),
-        creditsRemaining: 0,
-        planPriceCents: 2400,
-        blockClassCount: null,
-      },
-    ],
-    d("2026-01-15")
-  );
-
-  assert.strictEqual(amount, 0);
-});
-
-test("weekly plans owe by weeks behind", () => {
-  const amount = calculateAmountOwingCents(
-    [
-      {
-        billingType: BillingType.PER_WEEK,
-        paidThroughDate: d("2026-01-01"),
-        creditsRemaining: 0,
         planPriceCents: 2500,
         blockClassCount: null,
+        paidThroughDate: d("2026-01-15"),
+        creditsRemaining: 0,
       },
     ],
-    d("2026-01-15")
-  );
+    openInvoices: [],
+    today: d("2026-01-15"),
+  });
 
-  assert.strictEqual(amount, 5000);
+  assert.strictEqual(summary.totalOwingCents, 0);
+  assert.strictEqual(summary.overdueOwingCents, 0);
 });
 
-test("per-class plans owe by unpaid block count", () => {
-  const amount = calculateAmountOwingCents(
-    [
+test("paid-through behind and no open invoices => overdue owing", () => {
+  const summary = computeFamilyBillingSummary({
+    enrolments: [
       {
+        id: "e1",
+        studentId: "s1",
+        planId: "p1",
+        billingType: BillingType.PER_WEEK,
+        planPriceCents: 2500,
+        blockClassCount: null,
+        paidThroughDate: d("2026-01-01"),
+        creditsRemaining: 0,
+      },
+    ],
+    openInvoices: [],
+    today: d("2026-01-15"),
+  });
+
+  assert.strictEqual(summary.overdueOwingCents, 5000);
+  assert.strictEqual(summary.totalOwingCents, 5000);
+});
+
+test("open invoice coverage removes overdue owing", () => {
+  const summary = computeFamilyBillingSummary({
+    enrolments: [
+      {
+        id: "e1",
+        studentId: "s1",
+        planId: "p1",
+        billingType: BillingType.PER_WEEK,
+        planPriceCents: 2500,
+        blockClassCount: null,
+        paidThroughDate: d("2026-01-01"),
+        creditsRemaining: 0,
+      },
+    ],
+    openInvoices: [
+      {
+        enrolmentId: "e1",
+        balanceCents: 2500,
+        coverageEnd: d("2026-01-20"),
+      },
+    ],
+    today: d("2026-01-15"),
+  });
+
+  assert.strictEqual(summary.overdueOwingCents, 0);
+  assert.strictEqual(summary.invoiceOwingCents, 2500);
+});
+
+test("per-class overdue uses block counts when credits are negative", () => {
+  const summary = computeFamilyBillingSummary({
+    enrolments: [
+      {
+        id: "e1",
+        studentId: "s1",
+        planId: "p1",
         billingType: BillingType.PER_CLASS,
-        paidThroughDate: null,
-        creditsRemaining: -1,
         planPriceCents: 3000,
         blockClassCount: 5,
-      },
-      {
-        billingType: BillingType.PER_CLASS,
         paidThroughDate: null,
         creditsRemaining: -6,
-        planPriceCents: 3000,
-        blockClassCount: 5,
       },
     ],
-    d("2026-01-10")
-  );
+    openInvoices: [],
+    today: d("2026-01-10"),
+  });
 
-  assert.strictEqual(amount, 9000);
+  assert.strictEqual(summary.overdueOwingCents, 6000);
 });
 
-test("next payment due uses earliest paid-through date, clamped to today", () => {
-  const nextDue = calculateNextPaymentDueDayKey(
-    [
-      { paidThroughDate: d("2026-01-05") },
-      { paidThroughDate: d("2026-01-12") },
+test("next payment due uses earliest overdue date", () => {
+  const summary = computeFamilyBillingSummary({
+    enrolments: [
+      {
+        id: "e1",
+        studentId: "s1",
+        planId: "p1",
+        billingType: BillingType.PER_WEEK,
+        planPriceCents: 2500,
+        blockClassCount: null,
+        paidThroughDate: d("2026-01-05"),
+        creditsRemaining: 0,
+      },
+      {
+        id: "e2",
+        studentId: "s2",
+        planId: "p2",
+        billingType: BillingType.PER_WEEK,
+        planPriceCents: 2500,
+        blockClassCount: null,
+        paidThroughDate: d("2026-01-12"),
+        creditsRemaining: 0,
+      },
     ],
-    d("2026-01-10")
-  );
+    openInvoices: [],
+    today: d("2026-01-10"),
+  });
 
-  assert.strictEqual(nextDue, toBrisbaneDayKey(d("2026-01-10")));
-});
-
-test("next payment due returns null when no paid-through dates exist", () => {
-  const nextDue = calculateNextPaymentDueDayKey([{ paidThroughDate: null }], d("2026-01-10"));
-  assert.strictEqual(nextDue, null);
+  assert.strictEqual(summary.nextPaymentDueDayKey, toBrisbaneDayKey(d("2026-01-10")));
 });
