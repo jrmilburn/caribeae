@@ -375,6 +375,7 @@ function OverviewTab({
 function BillingTab({
   family,
   billing,
+  billingPosition,
   paymentSheetOpen,
   onPaymentSheetChange,
 }: {
@@ -389,6 +390,7 @@ function BillingTab({
       <FamilyInvoices
         family={family}
         billing={billing}
+        billingPosition={billingPosition}
         paymentSheetOpen={paymentSheetOpen}
         onPaymentSheetChange={onPaymentSheetChange}
       />
