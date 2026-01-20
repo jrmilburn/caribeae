@@ -478,16 +478,6 @@ function FamilyActionSheet({
   );
 }
 
-function MiniStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold">{value}</div>
-      {hint ? <div className="text-xs text-muted-foreground">{hint}</div> : null}
-    </div>
-  );
-}
-
 function ContactRow({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className={className}>

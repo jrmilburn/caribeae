@@ -102,14 +102,6 @@ type InvoiceAllocationItem = {
 };
 
 export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPaymentSheetChange }: Props) {
-  const latestPaidThrough = family.students
-    .flatMap((s) => s.enrolments ?? [])
-    .map((e) => e.paidThroughDate)
-    .filter(Boolean) as Date[];
-
-  const latestPaidThroughDate = latestPaidThrough.length
-    ? latestPaidThrough.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
-    : null;
 
   const router = useRouter();
 
@@ -223,11 +215,6 @@ export default function FamilyInvoices({ family, billing, paymentSheetOpen, onPa
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <CardTitle className="text-base">Billing</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {latestPaidThroughDate
-              ? `Paid through ${formatDate(latestPaidThroughDate)}`
-              : "Manage invoices and payments."}
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -626,12 +613,12 @@ function PayAheadSheet({ familyId }: { familyId: string }) {
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>
         <Button variant="outline" size="sm">
-          Pay ahead
+          Pay next block
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
-          <SheetTitle>Pay ahead</SheetTitle>
+          <SheetTitle>Pay next block</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-4">
           {isLoading && !summary ? (

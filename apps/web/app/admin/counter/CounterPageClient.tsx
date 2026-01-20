@@ -391,7 +391,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
               disabled={!summary}
             >
               <Sparkles className="mr-2 h-4 w-4" />
-              Pay ahead
+              Pay next block
             </Button>
             <Button size="sm" onClick={() => setActionMode("PAYMENT")} disabled={!summary}>
               <CreditCard className="mr-2 h-4 w-4" />
@@ -657,7 +657,7 @@ function BillingTab({
         </Button>
         <Button size="sm" variant="secondary" onClick={() => onOpenAction("PAY_AHEAD")}>
           <Sparkles className="mr-2 h-4 w-4" />
-          Pay ahead
+          Pay next block
         </Button>
         <Button size="sm" variant="outline" onClick={() => onOpenAction("CHECKOUT")}>
           <ShoppingBag className="mr-2 h-4 w-4" />
@@ -918,7 +918,7 @@ function CounterActionSheet({
   const isOpen = Boolean(mode);
 
   const title =
-    mode === "PAYMENT" ? "Take payment" : mode === "PAY_AHEAD" ? "Pay ahead" : mode === "CHECKOUT" ? "Checkout" : "";
+    mode === "PAYMENT" ? "Take payment" : mode === "PAY_AHEAD" ? "Pay next block" : mode === "CHECKOUT" ? "Checkout" : "";
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
