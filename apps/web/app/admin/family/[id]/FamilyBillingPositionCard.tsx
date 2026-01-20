@@ -72,10 +72,10 @@ export function FamilyBillingPositionCard({ billing }: Props) {
             <div
               className={cn(
                 "mt-1 text-2xl font-semibold",
-                billing.totalOwingCents > 0 ? "text-destructive" : "text-emerald-700"
+                billing.outstandingCents > 0 ? "text-destructive" : "text-emerald-700"
               )}
             >
-              {formatCurrencyFromCents(billing.totalOwingCents)}
+              {formatCurrencyFromCents(billing.outstandingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
               Based on open invoice balances
