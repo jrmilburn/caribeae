@@ -49,7 +49,7 @@ async function recomputeInvoicePaymentState(
   const invoice = await tx.invoice.findUnique({
     where: { id: invoiceId },
     include: {
-      enrolment: { include: { plan: true, template: true } },
+      enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
       lineItems: {
         select: {
           kind: true,
@@ -146,7 +146,7 @@ async function recomputeEntitlementsForEnrolment(tx: Prisma.TransactionClient, e
   const invoices = await tx.invoice.findMany({
     where: { enrolmentId },
     include: {
-      enrolment: { include: { plan: true, template: true } },
+      enrolment: { include: { plan: true, template: true, classAssignments: { include: { template: true } } } },
       lineItems: {
         select: {
           kind: true,

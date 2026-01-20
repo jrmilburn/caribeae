@@ -467,9 +467,9 @@ model EnrolmentPlan {
 
   blockLength Int @default(1)
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  enrolments       Enrolment[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  enrolments Enrolment[]
   invoiceLineItems InvoiceLineItem[]
 }
 
