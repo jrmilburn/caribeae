@@ -13,6 +13,7 @@ type PayAheadCoverageParams = {
   enrolmentStartDate: Date;
   enrolmentEndDate?: Date | null;
   classTemplate: PaidThroughTemplate;
+  assignedTemplates?: PaidThroughTemplate[];
   blocksPurchased: number;
   blockClassCount: number;
   creditsPurchased?: number;
@@ -25,6 +26,7 @@ export function computeBlockPayAheadCoverage(params: PayAheadCoverageParams): Co
     enrolmentStartDate: params.enrolmentStartDate,
     enrolmentEndDate: params.enrolmentEndDate ?? null,
     classTemplate: params.classTemplate,
+    assignedTemplates: params.assignedTemplates,
     blockClassCount: params.blockClassCount,
     blocksPurchased: params.blocksPurchased,
     creditsPurchased: params.creditsPurchased,

@@ -228,6 +228,10 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
                 dayOfWeek: anchorTemplate.dayOfWeek,
                 startTime: anchorTemplate.startTime ?? null,
               },
+              assignedTemplates: assignedTemplates.map((template) => ({
+                dayOfWeek: template.dayOfWeek,
+                startTime: template.startTime ?? null,
+              })),
               blockClassCount: plan.blockClassCount ?? 1,
               holidays,
             },
@@ -337,6 +341,10 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
           dayOfWeek: anchorTemplate.dayOfWeek,
           startTime: anchorTemplate.startTime ?? null,
         },
+        assignedTemplates: assignedTemplates.map((template) => ({
+          dayOfWeek: template.dayOfWeek,
+          startTime: template.startTime ?? null,
+        })),
         blockClassCount: plan.blockClassCount ?? 1,
         creditsPurchased: creditsDelta,
         holidays,

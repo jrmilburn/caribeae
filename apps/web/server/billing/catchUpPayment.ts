@@ -228,15 +228,18 @@ async function buildCatchUpPreview(
       throw new Error("PER_CLASS plans require blockClassCount to be greater than zero when provided.");
     }
 
-    const anchorTemplate =
-      enrolment.classAssignments.find((assignment) => assignment.template?.dayOfWeek != null)?.template ??
-      enrolment.template;
+    const assignedTemplates = enrolment.classAssignments.length
+      ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+      : enrolment.template
+        ? [enrolment.template]
+        : [];
+    const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
     if (!anchorTemplate) {
       throw new Error("Class template missing for enrolment.");
     }
 
-    const templateIds = [anchorTemplate.id];
-    const levelIds = [anchorTemplate.levelId ?? null];
+    const templateIds = assignedTemplates.map((template) => template.id);
+    const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
     const holidays = await loadHolidays(tx, { templateIds, levelIds });
 
     const requiredBlocksToCurrent = resolveBlockBlocksToCurrent({
@@ -255,6 +258,10 @@ async function buildCatchUpPreview(
         enrolmentEndDate: enrolment.endDate ?? null,
         paidThroughDate: fromPaidThrough ?? null,
         classTemplate: { dayOfWeek: anchorTemplate.dayOfWeek ?? null, startTime: anchorTemplate.startTime ?? null },
+        assignedTemplates: assignedTemplates.map((template) => ({
+          dayOfWeek: template.dayOfWeek,
+          startTime: template.startTime ?? null,
+        })),
         blockClassCount,
         holidays,
       },

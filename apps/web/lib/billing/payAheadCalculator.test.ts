@@ -109,3 +109,20 @@ test("Custom credits extend pay-ahead coverage", () => {
   assert.ok(result.coverageEnd);
   assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-03-23");
 });
+
+test("Multiple weekly templates advance pay-ahead coverage faster", () => {
+  const result = computeBlockPayAheadCoverage({
+    currentPaidThroughDate: null,
+    enrolmentStartDate: d("2026-01-12"),
+    enrolmentEndDate: null,
+    classTemplate: mondayTemplate,
+    assignedTemplates: [mondayTemplate, { dayOfWeek: 2, startTime: 9 * 60 }],
+    blocksPurchased: 1,
+    blockClassCount: 4,
+    creditsPurchased: 4,
+    holidays: [],
+  });
+
+  assert.ok(result.coverageEnd);
+  assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-01-21");
+});

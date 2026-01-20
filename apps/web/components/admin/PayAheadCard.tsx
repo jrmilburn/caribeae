@@ -109,6 +109,13 @@ function projectPaidAhead(
       return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + blockSize(enrolment) * quantity };
     }
 
+    const assignedTemplates = (enrolment.assignedClasses ?? [])
+      .map((template : any) => ({
+        dayOfWeek: template.dayOfWeek,
+        startTime: template.startTime ?? null,
+      }))
+      .filter((template : any): template is { dayOfWeek: number; startTime?: number | null } => template.dayOfWeek != null);
+
     const effectiveBlockLength = customBlockLength ?? blockSize(enrolment);
     const range = computeBlockPayAheadCoverage({
       currentPaidThroughDate: paidThrough,
@@ -118,6 +125,7 @@ function projectPaidAhead(
         dayOfWeek: anchorTemplate.dayOfWeek,
         startTime: anchorTemplate.startTime ?? null,
       },
+      assignedTemplates: assignedTemplates.length ? assignedTemplates : undefined,
       blocksPurchased: quantity,
       blockClassCount: blockSize(enrolment),
       creditsPurchased: effectiveBlockLength * quantity,

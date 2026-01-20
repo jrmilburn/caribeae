@@ -164,16 +164,19 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         }
         const effectiveBlockLength = item.customBlockLength ?? creditsPerBlock;
 
-        const anchorTemplate =
-          enrolment.classAssignments.find((assignment) => assignment.template?.dayOfWeek != null)?.template ??
-          enrolment.template;
+        const assignedTemplates = enrolment.classAssignments.length
+          ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+          : enrolment.template
+            ? [enrolment.template]
+            : [];
+        const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
         if (anchorTemplate?.dayOfWeek == null) {
           throw new Error("Class template missing for enrolment.");
         }
 
         const enrolmentEnd = normalizeOptionalDate(enrolment.endDate);
-        const templateIds = [anchorTemplate.id];
-        const levelIds = [anchorTemplate.levelId ?? null];
+        const templateIds = assignedTemplates.map((template) => template.id);
+        const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
         const holidays = await tx.holiday.findMany({
           where: buildHolidayScopeWhere({ templateIds, levelIds }),
           select: { startDate: true, endDate: true, levelId: true, templateId: true },
@@ -187,6 +190,10 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
             dayOfWeek: anchorTemplate.dayOfWeek,
             startTime: anchorTemplate.startTime ?? null,
           },
+          assignedTemplates: assignedTemplates.map((template) => ({
+            dayOfWeek: template.dayOfWeek,
+            startTime: template.startTime ?? null,
+          })),
           blocksPurchased: item.quantity,
           blockClassCount: creditsPerBlock,
           creditsPurchased: effectiveBlockLength * item.quantity,
