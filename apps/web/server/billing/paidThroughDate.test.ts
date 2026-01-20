@@ -109,3 +109,23 @@ test("block coverage advances by custom credits purchased", () => {
   assert.ok(result.coverageEnd);
   assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-03-23");
 });
+
+test("block coverage counts multiple weekly classes and skips holidays", () => {
+  const holidays: HolidayRange[] = [{ startDate: d("2026-01-14"), endDate: d("2026-01-14") }];
+  const result = computeBlockCoverageRange({
+    currentPaidThroughDate: null,
+    enrolmentStartDate: d("2026-01-12"),
+    enrolmentEndDate: null,
+    classTemplate: { dayOfWeek: 0, startTime: 9 * 60 },
+    assignedTemplates: [
+      { dayOfWeek: 0, startTime: 9 * 60 },
+      { dayOfWeek: 2, startTime: 9 * 60 },
+    ],
+    blockClassCount: 4,
+    creditsPurchased: 4,
+    holidays,
+  });
+
+  assert.ok(result.coverageEnd);
+  assert.strictEqual(result.coverageEnd?.toISOString().slice(0, 10), "2026-01-26");
+});

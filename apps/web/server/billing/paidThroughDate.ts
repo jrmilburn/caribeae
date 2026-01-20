@@ -6,6 +6,7 @@ import {
   brisbaneStartOfDay,
   toBrisbaneDayKey,
 } from "@/server/dates/brisbaneDay";
+import { computeCoverageEndDay, dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
 
 export type PaidThroughTemplate = {
   dayOfWeek: number | null;
@@ -68,28 +69,12 @@ function nextScheduledOccurrence(cursor: Date, endDate: Date | null, skippedDate
   return null;
 }
 
-function resolveNextCoverageStart(params: {
-  startDate: Date;
-  endDate?: Date | null;
-  classTemplate: PaidThroughTemplate;
-  holidays: HolidayRange[];
-}) {
-  const next = calculatePaidThroughDate({
-    startDate: brisbaneStartOfDay(params.startDate),
-    endDate: params.endDate ? brisbaneStartOfDay(params.endDate) : null,
-    creditsToCover: 0,
-    classTemplate: params.classTemplate,
-    holidays: params.holidays,
-    cancellations: [],
-  });
-  return next.nextDueDate ?? null;
-}
-
 export function computeBlockCoverageRange(params: {
   currentPaidThroughDate?: Date | null;
   enrolmentStartDate: Date;
   enrolmentEndDate?: Date | null;
   classTemplate: PaidThroughTemplate;
+  assignedTemplates?: PaidThroughTemplate[];
   blockClassCount: number;
   blocksPurchased?: number;
   creditsPurchased?: number;
@@ -111,16 +96,23 @@ export function computeBlockCoverageRange(params: {
     };
   }
 
+  const templates = params.assignedTemplates?.length ? params.assignedTemplates : [params.classTemplate];
+
   const baseDate = params.currentPaidThroughDate
     ? addDays(brisbaneStartOfDay(params.currentPaidThroughDate), 1)
     : brisbaneStartOfDay(params.enrolmentStartDate);
 
-  const coverageStart = resolveNextCoverageStart({
-    startDate: baseDate,
-    endDate: params.enrolmentEndDate ?? null,
-    classTemplate: params.classTemplate,
+  const baseDayKey = toBrisbaneDayKey(baseDate);
+  const enrolmentEndDayKey = params.enrolmentEndDate ? toBrisbaneDayKey(brisbaneStartOfDay(params.enrolmentEndDate)) : null;
+
+  const coverageStartDayKey = nextScheduledDayKey({
+    startDayKey: baseDayKey,
+    assignedTemplates: templates,
     holidays: params.holidays,
+    endDayKey: enrolmentEndDayKey,
   });
+
+  const coverageStart = dayKeyToDate(coverageStartDayKey);
 
   if (!coverageStart) {
     return {
@@ -131,37 +123,35 @@ export function computeBlockCoverageRange(params: {
     };
   }
 
-  const projection = calculatePaidThroughDate({
-    startDate: coverageStart,
-    endDate: params.enrolmentEndDate ?? null,
-    creditsToCover: creditsPurchased,
-    classTemplate: params.classTemplate,
+  const projectionDayKey = computeCoverageEndDay({
+    startDayKey: coverageStartDayKey!,
+    assignedTemplates: templates,
     holidays: params.holidays,
-    cancellations: [],
+    entitlementSessions: creditsPurchased,
+    endDayKey: enrolmentEndDayKey,
   });
 
-  const projectionBase = calculatePaidThroughDate({
-    startDate: coverageStart,
-    endDate: params.enrolmentEndDate ?? null,
-    creditsToCover: creditsPurchased,
-    classTemplate: params.classTemplate,
+  const projectionBaseDayKey = computeCoverageEndDay({
+    startDayKey: coverageStartDayKey!,
+    assignedTemplates: templates,
     holidays: [],
-    cancellations: [],
+    entitlementSessions: creditsPurchased,
+    endDayKey: enrolmentEndDayKey,
   });
 
   if (process.env.DEBUG_BLOCK_COVERAGE === "1") {
     console.debug(
       `[blockCoverage] start=${toBrisbaneDayKey(coverageStart)} ` +
-        `end=${projection.paidThroughDate ? toBrisbaneDayKey(projection.paidThroughDate) : "null"} ` +
-        `baseEnd=${projectionBase.paidThroughDate ? toBrisbaneDayKey(projectionBase.paidThroughDate) : "null"} ` +
+        `end=${projectionDayKey ?? "null"} ` +
+        `baseEnd=${projectionBaseDayKey ?? "null"} ` +
         `credits=${creditsPurchased}`
     );
   }
 
   return {
     coverageStart,
-    coverageEnd: projection.paidThroughDate ?? null,
-    coverageEndBase: projectionBase.paidThroughDate ?? null,
+    coverageEnd: dayKeyToDate(projectionDayKey),
+    coverageEndBase: dayKeyToDate(projectionBaseDayKey),
     creditsPurchased,
   };
 }

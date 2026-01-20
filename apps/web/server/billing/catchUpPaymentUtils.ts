@@ -29,6 +29,7 @@ export type BlockCatchUpParams = {
   enrolmentEndDate: Date | null;
   paidThroughDate: Date | null;
   classTemplate: { dayOfWeek: number | null; startTime?: number | null };
+  assignedTemplates?: { dayOfWeek: number | null; startTime?: number | null }[];
   blockClassCount: number;
   holidays: HolidayRange[];
 };
@@ -175,6 +176,7 @@ export function resolveBlockCatchUpCoverage(params: BlockCatchUpParams, blocksBi
     enrolmentStartDate: params.enrolmentStartDate,
     enrolmentEndDate: params.enrolmentEndDate ?? null,
     classTemplate: params.classTemplate,
+    assignedTemplates: params.assignedTemplates,
     blockClassCount,
     blocksPurchased: blocksBilled,
     creditsPurchased: blockClassCount * blocksBilled,

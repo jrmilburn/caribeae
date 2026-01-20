@@ -294,6 +294,10 @@ export function resolveCoverageForPlan(params: {
       dayOfWeek: anchorTemplate.dayOfWeek,
       startTime: anchorTemplate.startTime ?? null,
     },
+    assignedTemplates: assignedTemplates.map((template) => ({
+      dayOfWeek: template.dayOfWeek,
+      startTime: template.startTime ?? null,
+    })),
     blockClassCount: planBlockLength,
     blocksPurchased: 1,
     creditsPurchased,
