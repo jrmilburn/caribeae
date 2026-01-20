@@ -240,7 +240,7 @@ export default function FamilyInvoices({ family, billing, billingPosition, payme
               {formatCurrencyFromCents(totalOwingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on open invoice balances
+              Based on open invoices and overdue coverage
             </div>
           </div>
 
