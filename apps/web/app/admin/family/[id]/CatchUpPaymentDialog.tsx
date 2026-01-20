@@ -105,12 +105,12 @@ export function CatchUpPaymentDialog({ familyId, familyName }: Props) {
           Catch up payment
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-[calc(100vw-3rem)] max-w-[1100px]">
+      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-3rem)] max-w-[1100px] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Catch up payment for {familyName}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto pr-1">
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-2">
               <Label>Pay ahead blocks</Label>
