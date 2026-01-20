@@ -78,7 +78,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
               {formatCurrencyFromCents(billing.totalOwingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on open invoices and overdue coverage
+              Based on open invoice balances
             </div>
           </div>
 
@@ -93,10 +93,10 @@ export function FamilyBillingPositionCard({ billing }: Props) {
           <div className="rounded-lg border bg-card p-4">
             <div className="text-xs text-muted-foreground">Next payment due</div>
             <div className="mt-1 text-2xl font-semibold">
-              {billing.nextPaymentDueDayKey ? formatDate(billing.nextPaymentDueDayKey) : "—"}
+              {billing.nextDueInvoice?.dueAt ? formatDate(billing.nextDueInvoice.dueAt) : "—"}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Earliest paid-through date across active enrolments
+              {billing.nextDueInvoice?.dueAt ? "Upcoming open invoice" : "No upcoming payment due date"}
             </div>
           </div>
         </div>

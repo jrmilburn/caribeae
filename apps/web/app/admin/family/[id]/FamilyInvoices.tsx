@@ -113,7 +113,7 @@ export default function FamilyInvoices({ family, billing, billingPosition, payme
     balanceCents: getInvoiceBalanceCents(invoice),
   }));
 
-  const totalOwingCents = billingPosition.totalOwingCents;
+  const totalOwingCents = billingPosition.outstandingCents;
 
   const nextDue = [...openInvoices]
     .filter((i) => i.balanceCents > 0)

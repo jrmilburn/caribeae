@@ -346,7 +346,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     }
   };
 
-  const outstanding = summary?.totalOwingCents ?? 0;
+  const outstanding = summary?.outstandingCents ?? 0;
   const lastPayment = summary?.payments?.[0] ?? null;
   const [activeTab, setActiveTab] = React.useState("billing");
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(new Set(["billing"]));
@@ -625,9 +625,11 @@ function BillingTab({
         />
         <SummaryCard
           label="Next payment due"
-          value={summary.nextPaymentDueDayKey ? formatBrisbaneDate(summary.nextPaymentDueDayKey) : "—"}
+          value={summary.nextDueInvoice?.dueAt ? formatDate(summary.nextDueInvoice.dueAt) : "—"}
           sublabel={
-            summary.nextPaymentDueDayKey ? "Earliest paid-through date across active enrolments" : "No upcoming payment due date"
+            summary.nextDueInvoice?.dueAt
+              ? `Upcoming open invoice · ${formatCurrencyFromCents(summary.nextDueInvoice.balanceCents)}`
+              : "No upcoming payment due date"
           }
           icon={<CreditCard className="h-4 w-4 text-muted-foreground" />}
         />

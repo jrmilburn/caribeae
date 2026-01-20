@@ -275,10 +275,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents: summary.invoiceOwingCents,
-    invoiceOwingCents: summary.invoiceOwingCents,
-    overdueOwingCents: summary.overdueOwingCents,
-    totalOwingCents: summary.totalOwingCents,
+    outstandingCents: openInvoicesWithBalance.reduce((sum : any, inv : any) => sum + inv.balanceCents, 0),
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {
