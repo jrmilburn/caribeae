@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
+import { ClassTemplateForm } from "./ClassTemplateForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
 
