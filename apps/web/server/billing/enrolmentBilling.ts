@@ -277,6 +277,75 @@ async function recordCreditEvent(
   }
 }
 
+async function computeCreditsRequiredForPaidThroughDate(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate,
+  targetPaidThroughDate: Date | null
+) {
+  if (!targetPaidThroughDate) return 0;
+  if (!enrolment.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) return 0;
+
+  const assignedTemplates = buildCoverageTemplates(enrolment);
+  if (!assignedTemplates.length) return 0;
+
+  const today = normalizeDate(new Date());
+  const startWindow = isAfter(today, enrolment.startDate) ? today : normalizeDate(enrolment.startDate);
+  const targetDate = normalizeDate(targetPaidThroughDate);
+  const endWindow = enrolment.endDate ? normalizeDate(enrolment.endDate) : null;
+  const effectiveTarget = endWindow && isAfter(targetDate, endWindow) ? endWindow : targetDate;
+
+  if (isAfter(startWindow, effectiveTarget)) return 0;
+
+  const coverageData = await loadCoverageData(tx, {
+    templates: assignedTemplates,
+    startDate: startWindow,
+    endDate: effectiveTarget,
+  });
+
+  const occurrences = buildOccurrenceSchedule({
+    startDate: startWindow,
+    endDate: effectiveTarget,
+    templates: assignedTemplates.map((template) => ({
+      templateId: template.id,
+      dayOfWeek: template.dayOfWeek,
+      startDate: template.startDate ?? null,
+      endDate: template.endDate ?? null,
+    })),
+    cancellations: [],
+    occurrencesNeeded: 1,
+    sessionsPerWeek: sessionsPerWeek(enrolment.plan),
+    horizon: effectiveTarget,
+    shouldSkipOccurrence: ({ templateId, date }) =>
+      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+  });
+
+  return occurrences.length;
+}
+
+export async function adjustCreditsForManualPaidThroughDate(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate,
+  targetPaidThroughDate: Date | null
+) {
+  if (!enrolment.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) return null;
+
+  const currentBalance = await updateCachedCreditBalance(tx, enrolment.id);
+  const requiredCredits = await computeCreditsRequiredForPaidThroughDate(tx, enrolment, targetPaidThroughDate);
+  const delta = requiredCredits - currentBalance;
+
+  if (delta === 0) return currentBalance;
+
+  await recordCreditEvent(tx, {
+    enrolmentId: enrolment.id,
+    type: EnrolmentCreditEventType.MANUAL_ADJUST,
+    creditsDelta: delta,
+    occurredOn: new Date(),
+    note: "Manual paid-through adjustment",
+  });
+
+  return requiredCredits;
+}
+
 async function ensureConsumptionEvents(
   tx: Prisma.TransactionClient,
   enrolment: EnrolmentWithPlanTemplate,

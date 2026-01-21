@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
 
@@ -21,7 +22,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import type { ClassPageData } from "./types";
-import { ClassTemplateForm } from "./ClassTemplateForm";
 import { EnrolmentsSection } from "./EnrolmentsSection";
 import { AttendanceSection } from "./AttendanceSection";
 import { DateSelector } from "./DateSelector";
