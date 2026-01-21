@@ -5,6 +5,8 @@ import type { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { saveAttendance } from "@/server/attendance/saveAttendance";
 import type { AttendanceChangeDTO, ClassOccurrenceRoster } from "./types";
 import type { AttendanceRowState } from "./AttendanceTable";
@@ -29,8 +31,6 @@ export function AttendanceSection({
 }: AttendanceSectionProps) {
   const [rows, setRows] = React.useState<AttendanceRowState[]>(() => buildRows(roster));
   const [saving, startSaving] = React.useTransition();
-  const [message, setMessage] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setRows(buildRows(roster));
@@ -46,21 +46,17 @@ export function AttendanceSection({
     setRows((prev) =>
       prev.map((row) => (row.studentId === studentId ? { ...row, status } : row))
     );
-    setMessage(null);
-    setError(null);
   };
 
   const handleSave = () => {
     if (!dateKey) {
-      setError("Select an occurrence date first.");
+      toast.error("Select an occurrence date first.");
       return;
     }
     if (!hasChanges) {
-      setMessage("No changes to save.");
+      toast("No changes to save.");
       return;
     }
-    setMessage(null);
-    setError(null);
 
     const payload: AttendanceChangeDTO[] = dirtyRows.map((row) => ({
       studentId: row.studentId,
@@ -69,32 +65,33 @@ export function AttendanceSection({
     }));
 
     startSaving(() => {
-      (async () => {
-        try {
-          const saved = await saveAttendance({
+      void runMutationWithToast(
+        () =>
+          saveAttendance({
             templateId,
             dateKey,
             changes: payload,
-          });
-
-          const savedMap = new Map(saved.map((entry) => [entry.studentId, entry]));
-          setRows((prev) =>
-            prev.map((row) => {
-              const next = savedMap.get(row.studentId);
-              const status = next?.status ?? null;
-              const note = next?.note ?? null;
-              return { ...row, status, note, initialStatus: status };
-            })
-          );
-          setMessage("Attendance saved.");
-        } catch (e) {
-          if (e instanceof Error) {
-            setError(e.message);
-          } else {
-            setError("Unable to save attendance.");
-          }
+          }),
+        {
+          pending: { title: "Saving attendance..." },
+          success: { title: "Attendance saved." },
+          error: (message) => ({
+            title: "Unable to save attendance",
+            description: message,
+          }),
+          onSuccess: (saved) => {
+            const savedMap = new Map(saved.map((entry) => [entry.studentId, entry]));
+            setRows((prev) =>
+              prev.map((row) => {
+                const next = savedMap.get(row.studentId);
+                const status = next?.status ?? null;
+                const note = next?.note ?? null;
+                return { ...row, status, note, initialStatus: status };
+              })
+            );
+          },
         }
-      })();
+      );
     });
   };
 
@@ -135,8 +132,6 @@ export function AttendanceSection({
           <AttendanceTable rows={rows} onStatusChange={handleStatusChange} disabled={saving || isCancelled} />
         )}
 
-        {message ? <p className="text-sm text-foreground">{message}</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
   );

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import type { ClientTemplateWithInclusions } from "./types";
 import { EnrolmentsTable } from "./EnrolmentsTable";
 import { CreateEnrolmentDialog } from "./CreateEnrolmentDialog";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 export function EnrolmentsSection({
   classTemplate,
@@ -17,12 +18,14 @@ export function EnrolmentsSection({
   enrolmentPlans,
   dateKey,
   levels,
+  isCancelled,
 }: {
   classTemplate: ClientTemplateWithInclusions;
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
   dateKey: string | null;
   levels: Level[];
+  isCancelled?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -32,12 +35,19 @@ export function EnrolmentsSection({
         <div>
           <CardTitle className="text-base">Enrolments</CardTitle>
           {dateKey ? (
-            <p className="text-xs text-muted-foreground">Showing enrolments active on {dateKey}</p>
+            <p className="text-xs text-muted-foreground">
+              Showing enrolments active on {formatBrisbaneDate(dateKey)}
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">No occurrence selected</p>
           )}
+          {isCancelled ? (
+            <p className="text-xs text-muted-foreground">
+              This occurrence is cancelled. Enrolment changes apply to future sessions.
+            </p>
+          ) : null}
         </div>
-        <Button onClick={() => setOpen(true)}>Add enrolment</Button>
+        <Button onClick={() => setOpen(true)}>Add student</Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <EnrolmentsTable enrolments={classTemplate.enrolments} levels={levels} />

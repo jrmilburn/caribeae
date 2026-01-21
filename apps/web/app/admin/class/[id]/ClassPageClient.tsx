@@ -2,27 +2,48 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 
 import type { ClassPageData } from "./types";
-import { ClassTemplateForm } from "./ClassTemplateForm";
 import { EnrolmentsSection } from "./EnrolmentsSection";
 import { AttendanceSection } from "./AttendanceSection";
 import { DateSelector } from "./DateSelector";
-import { ClassActionsMenu } from "./ClassActionsMenu";
 import { SubstituteTeacherDialog } from "./SubstituteTeacherDialog";
 import { minutesToTimeInput } from "./utils/time";
 import { isSameDateKey } from "@/lib/dateKey";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { cancelClassOccurrence } from "@/server/class/cancelClassOccurrence";
 import { uncancelClassOccurrence } from "@/server/class/uncancelClassOccurrence";
 
-type TabValue = "enrolments" | "attendance";
+const DAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+type TabValue = "enrolments" | "attendance" | "template";
 
 type ClassPageClientProps = {
   data: ClassPageData;
@@ -35,7 +56,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const searchParams = useSearchParams();
 
   const initialTabValue: TabValue =
-    data.selectedDateKey && (initialTab === "attendance" || requestedDateKey) ? "attendance" : "enrolments";
+    initialTab === "attendance" ? "attendance" : initialTab === "template" ? "template" : "enrolments";
   const [tab, setTab] = React.useState<TabValue>(initialTabValue);
   const [effectiveTeacher, setEffectiveTeacher] = React.useState<Teacher | null>(data.effectiveTeacher);
   const [teacherSubstitution, setTeacherSubstitution] = React.useState(data.teacherSubstitution);
@@ -43,8 +64,8 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const [cancellation, setCancellation] = React.useState(data.cancellation);
   const [cancellationCredits, setCancellationCredits] = React.useState(data.cancellationCredits);
   const [subDialogOpen, setSubDialogOpen] = React.useState(false);
-  const [actionMessage, setActionMessage] = React.useState<string | null>(null);
-  const [actionError, setActionError] = React.useState<string | null>(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = React.useState(false);
   const [actionPending, startAction] = React.useTransition();
 
   React.useEffect(() => {
@@ -53,8 +74,6 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
     setSelectedDateKey(data.selectedDateKey);
     setCancellation(data.cancellation);
     setCancellationCredits(data.cancellationCredits);
-    setActionMessage(null);
-    setActionError(null);
   }, [data]);
 
   React.useEffect(() => {
@@ -78,7 +97,9 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
     router.replace(`/admin/class/${data.template.id}?${targetSearch}`);
   }, [data.requestedDateValid, data.selectedDateKey, requestedDateKey, router, searchParams, tab, data.template.id]);
 
-  const classHeading = buildClassHeading(data);
+  const classHeading = data.template.name?.trim() || "Untitled class";
+  const levelName = data.template.level?.name ?? "Level";
+  const scheduleSummary = buildScheduleSummary(data);
 
   const handleDateChange = (nextDateKey: string) => {
     setSelectedDateKey(nextDateKey);
@@ -89,7 +110,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   };
 
   const handleTabChange = (next: string) => {
-    const nextTab: TabValue = next === "attendance" ? "attendance" : "enrolments";
+    const nextTab: TabValue = next === "attendance" ? "attendance" : next === "template" ? "template" : "enrolments";
     setTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     if (selectedDateKey) {
@@ -101,70 +122,56 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
     router.replace(`/admin/class/${data.template.id}?${params.toString()}`);
   };
 
-  const handleCancel = () => {
-    if (!selectedDateKey) {
-      setActionError("Select an occurrence date before cancelling.");
-      return;
-    }
-
-    const confirm = window.confirm("Cancel this class occurrence? Enrolled students will be credited.");
-    if (!confirm) return;
-
-    const reason = window.prompt("Add a cancellation reason (optional):", cancellation?.reason ?? undefined) ?? undefined;
-
-    setActionError(null);
-    setActionMessage(null);
+  const handleCancel = (reason?: string | null) => {
+    if (!selectedDateKey) return;
 
     startAction(() => {
-      (async () => {
-        try {
-          await cancelClassOccurrence({
+      void runMutationWithToast(
+        () =>
+          cancelClassOccurrence({
             templateId: data.template.id,
             dateKey: selectedDateKey,
-            reason,
-          });
-          setActionMessage("Class occurrence cancelled and students credited.");
-          router.refresh();
-        } catch (e) {
-          if (e instanceof Error) {
-            setActionError(e.message);
-          } else {
-            setActionError("Unable to cancel this class occurrence.");
-          }
+            reason: reason ?? undefined,
+          }),
+        {
+          pending: { title: "Cancelling class..." },
+          success: { title: "Class cancelled", description: "Students have been credited." },
+          error: (message) => ({
+            title: "Unable to cancel class",
+            description: message,
+          }),
+          onSuccess: () => {
+            setCancelDialogOpen(false);
+            router.refresh();
+          },
         }
-      })();
+      );
     });
   };
 
   const handleUncancel = () => {
-    if (!selectedDateKey) {
-      setActionError("Select an occurrence date before reopening.");
-      return;
-    }
-
-    const confirm = window.confirm("Reopen this class occurrence and remove credits?");
-    if (!confirm) return;
-
-    setActionError(null);
-    setActionMessage(null);
+    if (!selectedDateKey) return;
 
     startAction(() => {
-      (async () => {
-        try {
-          await uncancelClassOccurrence({
+      void runMutationWithToast(
+        () =>
+          uncancelClassOccurrence({
             templateId: data.template.id,
             dateKey: selectedDateKey,
-          });
-          setActionMessage("Cancellation removed.");
-          router.refresh();
-        } catch (e) {
-          if (e instanceof Error) {
-            setActionError(e.message);
-          } else {
-            setActionError("Unable to reopen this class occurrence.");
-          }
+          }),
+        {
+          pending: { title: "Reopening class..." },
+          success: { title: "Class reopened" },
+          error: (message) => ({
+            title: "Unable to reopen class",
+            description: message,
+          }),
+          onSuccess: () => {
+            setReopenDialogOpen(false);
+            router.refresh();
+          },
         }
-      })();
+      );
     });
   };
 
@@ -173,15 +180,28 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
   return (
     <div className="mx-auto w-full space-y-4">
-      <div className="flex flex-col gap-2 border-b bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b bg-white px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold">{classHeading}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">{classHeading}</h1>
+            <Badge variant="secondary" className="text-xs">
+              {levelName}
+            </Badge>
+            {isCancelled ? (
+              <Badge variant="destructive" className="text-xs">
+                Cancelled
+              </Badge>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
-            Effective teacher:{" "}
-            <span className="font-medium text-foreground">
-              {effectiveTeacher?.name ?? "Unassigned"}
-            </span>
-            {teacherSubstitution ? " (substitution applied)" : null}
+            {[
+              scheduleSummary,
+              selectedDateKey ? formatBrisbaneDate(selectedDateKey) : "Select an occurrence date",
+              `Teacher: ${effectiveTeacher?.name ?? "Unassigned"}`,
+            ]
+              .filter(Boolean)
+              .join(" • ")}
+            {teacherSubstitution ? " • Substitution applied" : null}
           </p>
         </div>
 
@@ -193,36 +213,42 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
             disabled={!data.availableDateKeys.length}
             autoSelectKey={!data.requestedDateValid ? data.selectedDateKey : null}
           />
-          <ClassActionsMenu
-            templateId={data.template.id}
-            dateKey={selectedDateKey}
-            onSubstituteClick={() => setSubDialogOpen(true)}
-            onCancelClick={handleCancel}
-            onUncancelClick={handleUncancel}
-            isCancelled={isCancelled}
-            busy={actionPending}
-          />
+          <Button size="sm" onClick={() => handleTabChange("attendance")} disabled={!hasOccurrence}>
+            Take attendance
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSubDialogOpen(true)}
+            disabled={!hasOccurrence}
+          >
+            Substitute teacher
+          </Button>
+          {isCancelled ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setReopenDialogOpen(true)}
+              disabled={!hasOccurrence || actionPending}
+            >
+              Reopen class
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setCancelDialogOpen(true)}
+              disabled={!hasOccurrence || actionPending}
+            >
+              Cancel class
+            </Button>
+          )}
         </div>
       </div>
 
       {selectedDateKey && cancellation ? (
-        <CancellationBanner
-          dateKey={selectedDateKey}
-          cancellation={cancellation}
-          credits={cancellationCredits}
-        />
+        <CancellationBanner cancellation={cancellation} credits={cancellationCredits} />
       ) : null}
-      {actionMessage ? <p className="px-6 text-sm text-foreground">{actionMessage}</p> : null}
-      {actionError ? <p className="px-6 text-sm text-destructive">{actionError}</p> : null}
-
-      <Card className="border-l-0! border-r-0! border-b-0!">
-        <CardHeader>
-          <CardTitle className="text-base">Class details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ClassTemplateForm classTemplate={data.template} teachers={data.teachers} levels={data.levels} />
-        </CardContent>
-      </Card>
 
       <div className="px-2 sm:px-0">
         <Tabs value={tab} onValueChange={handleTabChange}>
@@ -232,9 +258,12 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               <TabsTrigger value="attendance" disabled={!hasOccurrence}>
                 Attendance
               </TabsTrigger>
+              <TabsTrigger value="template">Template</TabsTrigger>
             </TabsList>
             <div className="text-sm text-muted-foreground">
-              {hasOccurrence ? `Occurrence date: ${selectedDateKey}` : "No scheduled occurrences"}
+              {hasOccurrence
+                ? `Occurrence date: ${formatBrisbaneDate(selectedDateKey)}`
+                : "No scheduled occurrences"}
             </div>
           </div>
           <Separator className="my-2" />
@@ -246,6 +275,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               enrolmentPlans={data.enrolmentPlans}
               dateKey={selectedDateKey}
               levels={data.levels}
+              isCancelled={isCancelled}
             />
           </TabsContent>
 
@@ -257,6 +287,22 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               isCancelled={isCancelled}
               cancellationCredits={cancellationCredits}
             />
+          </TabsContent>
+
+          <TabsContent value="template">
+            <Card>
+              <CardHeader className="gap-1">
+                <CardTitle className="text-base">Template settings</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Manage the schedule, capacity, and billing rules for this class template.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline">
+                  <Link href="/admin/class/templates">Edit template</Link>
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -273,33 +319,49 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           setEffectiveTeacher(payload.effectiveTeacher);
         }}
       />
+
+      <CancelClassDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        dateKey={selectedDateKey}
+        busy={actionPending}
+        onConfirm={handleCancel}
+      />
+
+      <ReopenClassDialog
+        open={reopenDialogOpen}
+        onOpenChange={setReopenDialogOpen}
+        dateKey={selectedDateKey}
+        busy={actionPending}
+        onConfirm={handleUncancel}
+      />
     </div>
   );
 }
 
-function buildClassHeading(data: ClassPageData) {
-  const dayName = typeof data.template.dayOfWeek === "number" ? DAY_NAMES[data.template.dayOfWeek] : "Unscheduled";
-  const time =
-    typeof data.template.startTime === "number" ? minutesToTimeInput(data.template.startTime) : "—";
-  return `${data.template.level.name} - ${dayName} - ${time}`;
+function buildScheduleSummary(data: ClassPageData) {
+  const dayName = typeof data.template.dayOfWeek === "number" ? DAY_NAMES[data.template.dayOfWeek] : null;
+  const start = typeof data.template.startTime === "number" ? minutesToTimeInput(data.template.startTime) : null;
+  const end = typeof data.template.endTime === "number" ? minutesToTimeInput(data.template.endTime) : null;
+
+  if (!dayName && !start && !end) return "Schedule TBD";
+
+  const timeRange = start && end ? `${toMeridiem(start)}–${toMeridiem(end)}` : start ? toMeridiem(start) : "";
+  return [dayName, timeRange].filter(Boolean).join(" ").trim();
 }
 
-const DAY_NAMES = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+function toMeridiem(time: string) {
+  const [hours, minutes] = time.split(":").map((value) => Number(value));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return time;
+  const period = hours >= 12 ? "PM" : "AM";
+  const normalizedHour = hours % 12 === 0 ? 12 : hours % 12;
+  return `${normalizedHour}:${String(minutes).padStart(2, "0")} ${period}`;
+}
 
 function CancellationBanner({
-  dateKey,
   cancellation,
   credits,
 }: {
-  dateKey: string;
   cancellation: ClassPageData["cancellation"];
   credits: ClassPageData["cancellationCredits"];
 }) {
@@ -315,19 +377,117 @@ function CancellationBanner({
       <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="destructive">Cancelled</Badge>
-          <span className="text-sm font-medium text-destructive">
-            The class on {dateKey} has been cancelled.
-          </span>
+          <span className="text-sm font-medium text-destructive">This occurrence has been cancelled.</span>
         </div>
         {cancellation.reason ? (
           <p className="text-sm text-destructive">Reason: {cancellation.reason}</p>
         ) : null}
         {creditedNames ? (
-          <p className="text-xs text-muted-foreground">
-            Students credited: {creditedNames}.
-          </p>
+          <p className="text-xs text-muted-foreground">Students credited: {creditedNames}.</p>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function CancelClassDialog({
+  open,
+  onOpenChange,
+  dateKey,
+  busy,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  dateKey: string | null;
+  busy: boolean;
+  onConfirm: (reason?: string | null) => void;
+}) {
+  const [reason, setReason] = React.useState("");
+
+  React.useEffect(() => {
+    if (!open) return;
+    setReason("");
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Cancel class</DialogTitle>
+          <DialogDescription>
+            This will cancel the selected occurrence and credit enrolled students.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            This action is irreversible for {dateKey ? formatBrisbaneDate(dateKey) : "the selected date"}.
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Reason (optional)</label>
+            <Textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Add a note for families or staff"
+              rows={3}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            Keep class
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => onConfirm(reason)}
+            disabled={busy || !dateKey}
+          >
+            {busy ? "Cancelling..." : "Confirm cancel"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReopenClassDialog({
+  open,
+  onOpenChange,
+  dateKey,
+  busy,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  dateKey: string | null;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Reopen class</DialogTitle>
+          <DialogDescription>
+            Reopen the cancelled occurrence and remove any credits that were issued.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
+          Occurrence: {dateKey ? formatBrisbaneDate(dateKey) : "Select a date"}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            Keep cancelled
+          </Button>
+          <Button onClick={onConfirm} disabled={busy || !dateKey}>
+            {busy ? "Reopening..." : "Reopen class"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
