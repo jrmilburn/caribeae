@@ -294,13 +294,15 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               <CardHeader className="gap-1">
                 <CardTitle className="text-base">Template settings</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Manage the schedule, capacity, and billing rules for this class template.
+                  Update the schedule, capacity, and default teacher for future occurrences.
                 </p>
               </CardHeader>
               <CardContent>
-                <Button asChild variant="outline">
-                  <Link href="/admin/class/templates">Edit template</Link>
-                </Button>
+                <ClassTemplateForm
+                  classTemplate={data.template}
+                  teachers={data.teachers}
+                  levels={data.levels}
+                />
               </CardContent>
             </Card>
           </TabsContent>

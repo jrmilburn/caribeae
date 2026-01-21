@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -47,6 +55,7 @@ export function ClassTemplateForm({
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   const [form, setForm] = React.useState(() => ({
     name: classTemplate.name ?? "",
@@ -64,8 +73,12 @@ export function ClassTemplateForm({
     active: classTemplate.active,
   }));
 
-  async function onSave(e: React.FormEvent) {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setConfirmOpen(true);
+  }
+
+  async function onConfirmSave() {
     setSaving(true);
 
     try {
@@ -105,132 +118,153 @@ export function ClassTemplateForm({
   }
 
   return (
-    <form onSubmit={onSave} className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Name</Label>
-          <Input
-            value={form.name}
-            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-            placeholder="e.g. Squad A"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Level</Label>
-          <Select value={form.levelId} onValueChange={(v) => setForm((p) => ({ ...p, levelId: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select level" />
-            </SelectTrigger>
-            <SelectContent>
-              {levels.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Changing the level will affect which students are available to enrol.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Teacher</Label>
-          <Select value={form.teacherId} onValueChange={(v) => setForm((p) => ({ ...p, teacherId: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select teacher" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Unassigned</SelectItem>
-              {teachers.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name ?? "Unnamed teacher"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Day</Label>
-          <Select
-            value={String(form.dayOfWeek)}
-            onValueChange={(v) => setForm((p) => ({ ...p, dayOfWeek: Number(v) }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select day" />
-            </SelectTrigger>
-            <SelectContent>
-              {DAY_OPTIONS.map((d) => (
-                <SelectItem key={d} value={String(d)}>
-                  {dayLabel(d)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Start time</Label>
-          <Input
-            type="time"
-            value={form.startTime}
-            onChange={(e) => setForm((p) => ({ ...p, startTime: e.target.value }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>End time</Label>
-          <Input
-            type="time"
-            value={form.endTime}
-            onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Start date</Label>
-          <Input
-            type="date"
-            value={form.startDate}
-            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>End date</Label>
-          <Input
-            type="date"
-            value={form.endDate}
-            onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Capacity</Label>
-          <Input
-            inputMode="numeric"
-            value={form.capacity}
-            onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))}
-            placeholder="e.g. 8"
-          />
-        </div>
-
-        <div className="flex items-center justify-between border p-3 md:col-span-2">
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">Active</p>
-            <p className="text-xs text-muted-foreground">Inactive classes won’t appear in normal scheduling flows.</p>
+    <>
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Name</Label>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="e.g. Squad A"
+            />
           </div>
-          <Switch checked={form.active} onCheckedChange={(v) => setForm((p) => ({ ...p, active: v }))} />
-        </div>
-      </div>
 
-      <div className="flex items-center justify-end gap-2">
-        <Button type="submit" disabled={saving}>
-          {saving ? "Saving..." : "Save changes"}
-        </Button>
-      </div>
-    </form>
+          <div className="space-y-2">
+            <Label>Level</Label>
+            <Select value={form.levelId} onValueChange={(v) => setForm((p) => ({ ...p, levelId: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                {levels.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Changing the level will affect which students are available to enrol.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Teacher</Label>
+            <Select value={form.teacherId} onValueChange={(v) => setForm((p) => ({ ...p, teacherId: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select teacher" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Unassigned</SelectItem>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name ?? "Unnamed teacher"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Day</Label>
+            <Select
+              value={String(form.dayOfWeek)}
+              onValueChange={(v) => setForm((p) => ({ ...p, dayOfWeek: Number(v) }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select day" />
+              </SelectTrigger>
+              <SelectContent>
+                {DAY_OPTIONS.map((d) => (
+                  <SelectItem key={d} value={String(d)}>
+                    {dayLabel(d)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Start time</Label>
+            <Input
+              type="time"
+              value={form.startTime}
+              onChange={(e) => setForm((p) => ({ ...p, startTime: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>End time</Label>
+            <Input
+              type="time"
+              value={form.endTime}
+              onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Start date</Label>
+            <Input
+              type="date"
+              value={form.startDate}
+              onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>End date</Label>
+            <Input
+              type="date"
+              value={form.endDate}
+              onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Capacity</Label>
+            <Input
+              inputMode="numeric"
+              value={form.capacity}
+              onChange={(e) => setForm((p) => ({ ...p, capacity: e.target.value }))}
+              placeholder="e.g. 8"
+            />
+          </div>
+
+          <div className="flex items-center justify-between border p-3 md:col-span-2">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Active</p>
+              <p className="text-xs text-muted-foreground">Inactive classes won’t appear in normal scheduling flows.</p>
+            </div>
+            <Switch checked={form.active} onCheckedChange={(v) => setForm((p) => ({ ...p, active: v }))} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
+      </form>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Confirm template update</DialogTitle>
+            <DialogDescription>
+              This will change all occurrences of this class at the selected time and day.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={onConfirmSave} disabled={saving}>
+              {saving ? "Saving..." : "Confirm changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
