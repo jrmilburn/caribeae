@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { EnrolmentAdjustmentType } from "@prisma/client";
 import { addDays } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
@@ -121,16 +122,20 @@ export async function computePaidThroughAfterTemplateChange(params: {
         select: { startDate: true, endDate: true },
       }),
     params.overrides?.cancellations?.old ??
-      client.classCancellation.findMany({
+      client.enrolmentAdjustment.findMany({
         where: {
+          enrolmentId: params.enrolmentId,
+          type: EnrolmentAdjustmentType.CANCELLATION_CREDIT,
           templateId: oldTemplate.id,
           date: { gte: oldRangeStart, lte: oldRangeEnd },
         },
         select: { templateId: true, date: true },
       }),
     params.overrides?.cancellations?.new ??
-      client.classCancellation.findMany({
+      client.enrolmentAdjustment.findMany({
         where: {
+          enrolmentId: params.enrolmentId,
+          type: EnrolmentAdjustmentType.CANCELLATION_CREDIT,
           templateId: newTemplate.id,
           date: { gte: startDate, lte: horizonEndDate },
         },

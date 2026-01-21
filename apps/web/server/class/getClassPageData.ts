@@ -1,7 +1,7 @@
 "use server";
 
 import { addDays, isAfter, isBefore } from "date-fns";
-import { EnrolmentAdjustmentType } from "@prisma/client";
+import { EnrolmentAdjustmentType, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -42,7 +42,16 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
 
   const selectedDate = parseDateKey(selectedDateKey);
 
-  const [teachers, levels, students, enrolmentPlans, substitution, cancellation, cancellationCredits] =
+  const [
+    teachers,
+    levels,
+    students,
+    enrolmentPlans,
+    substitution,
+    cancellation,
+    cancellationCredits,
+    cancellationCandidates,
+  ] =
     await Promise.all([
       prisma.teacher.findMany({ orderBy: { name: "asc" } }),
       prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
@@ -74,6 +83,30 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
             orderBy: [{ enrolment: { student: { name: "asc" } } }],
           })
         : [],
+      selectedDate
+        ? prisma.enrolment.findMany({
+            where: {
+              status: { not: EnrolmentStatus.CANCELLED },
+              startDate: { lte: selectedDate },
+              OR: [{ endDate: null }, { endDate: { gte: selectedDate } }],
+              AND: [
+                {
+                  OR: [
+                    { templateId },
+                    { classAssignments: { some: { templateId } } },
+                  ],
+                },
+              ],
+            },
+            include: {
+              student: true,
+              plan: true,
+              template: true,
+              classAssignments: { include: { template: true } },
+            },
+            orderBy: [{ student: { name: "asc" } }],
+          })
+        : [],
     ]);
 
   const roster =
@@ -93,6 +126,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     attendance: roster?.attendance ?? [],
     cancellation,
     cancellationCredits,
+    cancellationCandidates,
     teachers,
     levels,
     students,
