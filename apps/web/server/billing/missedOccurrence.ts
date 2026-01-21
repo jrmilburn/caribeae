@@ -15,10 +15,10 @@ function toCancellationKey(templateId: string, dayKey: BrisbaneDayKey) {
 export function buildMissedOccurrencePredicate(params: {
   templatesById: Map<string, MissedOccurrenceTemplate>;
   holidays: HolidayRange[];
-  cancellations: Cancellation[];
+  cancellationCredits: Cancellation[];
 }) {
   const cancellationSet = new Set(
-    params.cancellations.map((c) => toCancellationKey(c.templateId, toBrisbaneDayKey(c.date)))
+    params.cancellationCredits.map((c) => toCancellationKey(c.templateId, toBrisbaneDayKey(c.date)))
   );
 
   return (templateId: string, dayKey: BrisbaneDayKey): boolean => {

@@ -9,6 +9,7 @@ import type { Teacher } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +34,7 @@ import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { cancelClassOccurrence } from "@/server/class/cancelClassOccurrence";
 import { uncancelClassOccurrence } from "@/server/class/uncancelClassOccurrence";
+import { brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 const DAY_NAMES = [
   "Monday",
@@ -65,7 +68,10 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const [cancellationCredits, setCancellationCredits] = React.useState(data.cancellationCredits);
   const [subDialogOpen, setSubDialogOpen] = React.useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false);
+  const [creditDialogOpen, setCreditDialogOpen] = React.useState(false);
   const [reopenDialogOpen, setReopenDialogOpen] = React.useState(false);
+  const [pendingCancelReason, setPendingCancelReason] = React.useState<string | null>(null);
+  const [selectedCreditIds, setSelectedCreditIds] = React.useState<string[]>([]);
   const [actionPending, startAction] = React.useTransition();
 
   React.useEffect(() => {
@@ -124,6 +130,13 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
   const handleCancel = (reason?: string | null) => {
     if (!selectedDateKey) return;
+    setPendingCancelReason(reason ?? null);
+    setCancelDialogOpen(false);
+    setCreditDialogOpen(true);
+  };
+
+  const handleCreditConfirm = (creditIds: string[]) => {
+    if (!selectedDateKey) return;
 
     startAction(() => {
       void runMutationWithToast(
@@ -131,17 +144,22 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           cancelClassOccurrence({
             templateId: data.template.id,
             dateKey: selectedDateKey,
-            reason: reason ?? undefined,
+            reason: pendingCancelReason ?? undefined,
+            creditedEnrolmentIds: creditIds,
           }),
         {
           pending: { title: "Cancelling class..." },
-          success: { title: "Class cancelled", description: "Students have been credited." },
+          success: {
+            title: "Class cancelled",
+            description: creditIds.length ? "Credits saved for selected students." : "No credits applied.",
+          },
           error: (message) => ({
             title: "Unable to cancel class",
             description: message,
           }),
           onSuccess: () => {
-            setCancelDialogOpen(false);
+            setCreditDialogOpen(false);
+            setPendingCancelReason(null);
             router.refresh();
           },
         }
@@ -330,6 +348,23 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
         onConfirm={handleCancel}
       />
 
+      <CreditStudentsDialog
+        open={creditDialogOpen}
+        onOpenChange={(open) => {
+          setCreditDialogOpen(open);
+          if (!open) {
+            setPendingCancelReason(null);
+            setSelectedCreditIds([]);
+          }
+        }}
+        dateKey={selectedDateKey}
+        busy={actionPending}
+        enrolments={data.cancellationCandidates}
+        selectedIds={selectedCreditIds}
+        onSelectionChange={setSelectedCreditIds}
+        onConfirm={handleCreditConfirm}
+      />
+
       <ReopenClassDialog
         open={reopenDialogOpen}
         onOpenChange={setReopenDialogOpen}
@@ -418,7 +453,7 @@ function CancelClassDialog({
         <DialogHeader>
           <DialogTitle>Cancel class</DialogTitle>
           <DialogDescription>
-            This will cancel the selected occurrence and credit enrolled students.
+            This will cancel the selected occurrence. You can choose which students to credit next.
           </DialogDescription>
         </DialogHeader>
 
@@ -446,8 +481,127 @@ function CancelClassDialog({
             onClick={() => onConfirm(reason)}
             disabled={busy || !dateKey}
           >
-            {busy ? "Cancelling..." : "Confirm cancel"}
+            {busy ? "Cancelling..." : "Continue"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreditStudentsDialog({
+  open,
+  onOpenChange,
+  dateKey,
+  busy,
+  enrolments,
+  selectedIds,
+  onSelectionChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  dateKey: string | null;
+  busy: boolean;
+  enrolments: ClassPageData["cancellationCandidates"];
+  selectedIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  onConfirm: (ids: string[]) => void;
+}) {
+  const eligibleIds = React.useMemo(() => {
+    if (!dateKey) return new Set<string>();
+    return new Set(
+      enrolments
+        .filter((enrolment) => {
+          const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+          if (!paidThrough) return false;
+          return brisbaneCompare(toBrisbaneDayKey(paidThrough), dateKey) >= 0;
+        })
+        .map((enrolment) => enrolment.id)
+    );
+  }, [dateKey, enrolments]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const defaults = enrolments
+      .filter((enrolment) => eligibleIds.has(enrolment.id))
+      .map((enrolment) => enrolment.id);
+    onSelectionChange(defaults);
+  }, [eligibleIds, enrolments, onSelectionChange, open]);
+
+  const toggleSelection = (enrolmentId: string, checked: boolean | "indeterminate") => {
+    const next = new Set(selectedIds);
+    if (checked) {
+      next.add(enrolmentId);
+    } else {
+      next.delete(enrolmentId);
+    }
+    onSelectionChange(Array.from(next));
+  };
+
+  const selectionCount = selectedIds.length;
+  const unpaidCount = enrolments.filter((enrolment) => !eligibleIds.has(enrolment.id)).length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>Credit students?</DialogTitle>
+          <DialogDescription>
+            Choose who should receive a credit for {dateKey ? formatBrisbaneDate(dateKey) : "this date"}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {enrolments.length ? (
+            <ScrollArea className="max-h-64 rounded-md border">
+              <div className="space-y-2 p-3">
+                {enrolments.map((enrolment) => {
+                  const checked = selectedIds.includes(enrolment.id);
+                  const eligible = eligibleIds.has(enrolment.id);
+                  return (
+                    <label key={enrolment.id} className="flex items-start gap-3 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => toggleSelection(enrolment.id, value)}
+                      />
+                      <div className="flex flex-col">
+                        <span className="font-medium">{enrolment.student.name}</span>
+                        {!eligible ? (
+                          <span className="text-xs text-muted-foreground">
+                            Not paid through this date.
+                          </span>
+                        ) : null}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
+              No enrolled students for this occurrence.
+            </div>
+          )}
+          {unpaidCount ? (
+            <p className="text-xs text-muted-foreground">
+              Unpaid students can still be credited; their coverage will update once payments catch up.
+            </p>
+          ) : null}
+        </div>
+
+        <DialogFooter className="flex flex-wrap gap-2 sm:justify-between">
+          <span className="text-xs text-muted-foreground">
+            {selectionCount} selected
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+              Back
+            </Button>
+            <Button onClick={() => onConfirm(selectedIds)} disabled={busy || !dateKey}>
+              {busy ? "Saving..." : "Confirm cancellation"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
