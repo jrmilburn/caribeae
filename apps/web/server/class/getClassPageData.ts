@@ -1,12 +1,13 @@
 "use server";
 
-import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { addDays, isAfter, isBefore } from "date-fns";
 import { EnrolmentAdjustmentType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { formatDateKey, parseDateKey } from "@/lib/dateKey";
+import { parseDateKey } from "@/lib/dateKey";
+import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/class/[id]/types";
 import { getClassOccurrenceRoster } from "./getClassOccurrenceRoster";
 
@@ -36,7 +37,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
 
   const availableDateKeys = buildRecentOccurrenceDateKeys(template, requestedDateValid ? requestedDate : null);
   const selectedDateKey = requestedDateValid
-    ? formatDateKey(requestedDate as Date)
+    ? toBrisbaneDayKey(requestedDate as Date)
     : availableDateKeys[availableDateKeys.length - 1] ?? null;
 
   const selectedDate = parseDateKey(selectedDateKey);
@@ -109,9 +110,9 @@ function includeDateIfMissing(dateKeys: string[], maybeDateKey: string | null) {
 function isValidOccurrenceDate(template: ClientTemplateWithInclusions, date: Date | null) {
   if (!date) return false;
   if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") return false;
-  const start = startOfDay(template.startDate);
-  const end = template.endDate ? startOfDay(template.endDate) : null;
-  const matchesDay = date.getDay() === ((template.dayOfWeek + 1) % 7);
+  const start = brisbaneStartOfDay(template.startDate);
+  const end = template.endDate ? brisbaneStartOfDay(template.endDate) : null;
+  const matchesDay = brisbaneDayOfWeek(date) === template.dayOfWeek;
   const afterStart = !isAfter(start, date);
   const beforeEnd = end ? !isBefore(end, date) : true;
   return matchesDay && afterStart && beforeEnd;
@@ -120,9 +121,9 @@ function isValidOccurrenceDate(template: ClientTemplateWithInclusions, date: Dat
 function buildRecentOccurrenceDateKeys(template: ClientTemplateWithInclusions, requestedDate: Date | null): string[] {
   if (template.dayOfWeek === null || typeof template.dayOfWeek === "undefined") return [];
 
-  const startDate = startOfDay(template.startDate);
-  const today = startOfDay(new Date());
-  const endDate = template.endDate ? startOfDay(template.endDate) : addDays(today, 28);
+  const startDate = brisbaneStartOfDay(template.startDate);
+  const today = brisbaneStartOfDay(new Date());
+  const endDate = template.endDate ? brisbaneStartOfDay(template.endDate) : addDays(today, 28);
 
   const firstOccurrence = nextMatchingDay(startDate, template.dayOfWeek);
   const dates: string[] = [];
@@ -132,16 +133,16 @@ function buildRecentOccurrenceDateKeys(template: ClientTemplateWithInclusions, r
     !isAfter(cursor, endDate) && dates.length < 40;
     cursor = addDays(cursor, 7)
   ) {
-    dates.push(formatDateKey(cursor));
+    dates.push(toBrisbaneDayKey(cursor));
   }
 
   if (requestedDate) {
-    const requestedKey = formatDateKey(requestedDate);
+    const requestedKey = toBrisbaneDayKey(requestedDate);
     if (!dates.includes(requestedKey)) dates.push(requestedKey);
   }
 
   dates.sort();
-  const cutoffTarget = dates.findIndex((d) => !isBeforeDateKey(d, formatDateKey(today)));
+  const cutoffTarget = dates.findIndex((d) => !isBeforeDateKey(d, toBrisbaneDayKey(today)));
   if (cutoffTarget === -1) {
     return dates.slice(-8);
   }
@@ -160,8 +161,8 @@ function isBeforeDateKey(a: string, b: string) {
 
 function nextMatchingDay(start: Date, targetDow: number) {
   const target = ((targetDow % 7) + 7) % 7; // normalize
-  let cursor = startOfDay(start);
-  while (cursor.getDay() !== ((target + 1) % 7)) {
+  let cursor = brisbaneStartOfDay(start);
+  while (brisbaneDayOfWeek(cursor) !== target) {
     cursor = addDays(cursor, 1);
   }
   return cursor;

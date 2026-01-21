@@ -2,14 +2,20 @@
 
 import * as React from "react";
 import { useRef, useState } from "react";
-import type { ClassTemplate, Level, Teacher } from "@prisma/client";
+import { useRouter } from "next/navigation";
+import type { Level, Teacher } from "@prisma/client";
 import { SlidersHorizontal } from "lucide-react";
 
-import { ScheduleView, type ScheduleViewHandle, type ScheduleFilters, type ScheduleClassClickContext } from "@/packages/schedule";
+import {
+  ScheduleView,
+  scheduleDateKey,
+  type ScheduleViewHandle,
+  type ScheduleFilters,
+  type ScheduleClassClickContext,
+} from "@/packages/schedule";
 import { TemplateModal } from "../class/templates/TemplateModal";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
-import { updateTemplate } from "@/server/classTemplate/updateTemplate";
-import type { ClientTemplate, TemplateModalTemplate } from "@/server/classTemplate/types";
+import type { ClientTemplate } from "@/server/classTemplate/types";
 import type { NormalizedScheduleClass } from "@/packages/schedule";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
@@ -17,85 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-/**
- * The schedule package often returns a "template DTO" that isn't the Prisma ClassTemplate type.
- * TemplateModal expects a full-ish record (id/createdAt/updatedAt/etc).
- *
- * This adapter converts the schedule template into a ClassTemplate shape.
- * If your schedule template already IS a ClassTemplate, this will still work.
- */
-function coerceToClassTemplate(input: unknown): TemplateModalTemplate {
-  if (!input || typeof input !== "object") {
-    throw new Error("Invalid template payload");
-  }
-
-  const t = input as Partial<ClassTemplate> & Record<string, unknown>;
-
-  // id is required to edit/update
-  if (typeof t.id !== "string" || !t.id) {
-    throw new Error("Template is missing id");
-  }
-
-  // createdAt/updatedAt are required by your TemplateModal prop type
-  // If your API returns them as strings, convert them to Dates.
-  const createdAt =
-    t.createdAt instanceof Date
-      ? t.createdAt
-      : typeof t.createdAt === "string"
-        ? new Date(t.createdAt)
-        : new Date();
-
-  const updatedAt =
-    t.updatedAt instanceof Date
-      ? t.updatedAt
-      : typeof t.updatedAt === "string"
-        ? new Date(t.updatedAt)
-        : new Date();
-
-  // Helper to allow nulls
-  const asNumberOrNull = (v: unknown) => (typeof v === "number" ? v : null);
-  const asStringOrNull = (v: unknown) => (typeof v === "string" ? v : null);
-
-  // startDate is required by your error message; if missing, we set a sensible default.
-  const startDate =
-    t.startDate instanceof Date
-      ? t.startDate
-      : typeof t.startDate === "string"
-        ? new Date(t.startDate)
-        : new Date();
-
-  const endDate =
-    t.endDate instanceof Date
-      ? t.endDate
-      : typeof t.endDate === "string"
-        ? new Date(t.endDate)
-        : null;
-
-  // levelId is required; if your schedule template doesn’t include it, that’s a backend/data issue.
-  if (typeof t.levelId !== "string" || !t.levelId) {
-    throw new Error("Template is missing levelId");
-  }
-
-  // active is required
-  const active = typeof t.active === "boolean" ? t.active : true;
-
-  return {
-    id: t.id,
-    name: (typeof t.name === "string" ? t.name : null) as ClassTemplate["name"],
-    createdAt,
-    updatedAt,
-    teacherId: asStringOrNull(t.teacherId) as ClassTemplate["teacherId"],
-    active,
-    startDate,
-    endDate,
-    levelId: t.levelId,
-    dayOfWeek: asNumberOrNull(t.dayOfWeek) as ClassTemplate["dayOfWeek"],
-    startTime: asNumberOrNull(t.startTime) as ClassTemplate["startTime"],
-    endTime: asNumberOrNull(t.endTime) as ClassTemplate["endTime"],
-    capacity: asNumberOrNull(t.capacity) as ClassTemplate["capacity"],
-  };
-}
 
 function getScheduleDescription(date?: Date | null) {
   if (!date) return undefined;
@@ -214,13 +141,12 @@ export default function ScheduleWithTemplateModal({
   levels: Level[];
   teachers: Teacher[];
 }) {
+  const router = useRouter();
   const scheduleRef = useRef<ScheduleViewHandle>(null);
 
   const [filters, setFilters] = useState<ScheduleFilters>({ teacherId: null, levelId: null });
 
   const [modalOpen, setModalOpen] = useState(false);
-  // ✅ must match TemplateModal prop expectation
-  const [selectedTemplate, setSelectedTemplate] = useState<ClassTemplate | null>(null);
 
   const [prefill, setPrefill] = useState<{
     date: Date;
@@ -232,36 +158,14 @@ export default function ScheduleWithTemplateModal({
 
   const handleSlotClick = (date: Date, _dayOfWeek: number) => {
     const minutes = date.getHours() * 60 + date.getMinutes();
-    setSelectedTemplate(null);
     setPrefill({ date, startMinutes: minutes, dayOfWeek: _dayOfWeek });
     setModalOpen(true);
   };
 
   const handleClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
-    if (!occurrence.template) return;
-
-    // ✅ convert schedule template -> ClassTemplate for TemplateModal + selectedTemplate.id usage
-    try {
-      setSelectedTemplate(coerceToClassTemplate(occurrence.template));
-    } catch (e) {
-      console.error(e);
-      // If you want a toast here, add it.
-      return;
-    }
-
-    const minutes = occurrence.startTime.getHours() * 60 + occurrence.startTime.getMinutes();
-
-    const prefillDate = context?.columnDate ?? occurrence.startTime;
-
-    setPrefill({
-      date: prefillDate,
-      startMinutes: minutes,
-      dayOfWeek: occurrence.dayOfWeek,
-      levelId: occurrence.levelId ?? undefined,
-      teacherId: occurrence.teacherId ?? undefined,
-    });
-
-    setModalOpen(true);
+    const dateKey = context?.columnDateKey ?? scheduleDateKey(context?.columnDate ?? occurrence.startTime);
+    const params = new URLSearchParams({ date: dateKey });
+    router.push(`/admin/class/${occurrence.templateId}?${params.toString()}`);
   };
 
   const handleSave = async (payload: ClientTemplate) => {
@@ -269,36 +173,20 @@ export default function ScheduleWithTemplateModal({
       payload.startDate instanceof Date ? payload.startDate : prefill?.date ?? null
     );
 
-    if (selectedTemplate) {
-      await runMutationWithToast(
-        () => updateTemplate(payload, selectedTemplate.id),
-        {
-          pending: { title: "Saving class..." },
-          success: { title: "Class updated", description },
-          error: (message) => ({
-            title: "Unable to update class",
-            description: message,
-          }),
-          throwOnError: true,
-        }
-      );
-    } else {
-      await runMutationWithToast(
-        () => createTemplate(payload),
-        {
-          pending: { title: "Creating class..." },
-          success: { title: "Class created", description },
-          error: (message) => ({
-            title: "Unable to create class",
-            description: message,
-          }),
-          throwOnError: true,
-        }
-      );
-    }
+    await runMutationWithToast(
+      () => createTemplate(payload),
+      {
+        pending: { title: "Creating class..." },
+        success: { title: "Class created", description },
+        error: (message) => ({
+          title: "Unable to create class",
+          description: message,
+        }),
+        throwOnError: true,
+      }
+    );
 
     setModalOpen(false);
-    setSelectedTemplate(null);
     scheduleRef.current?.softRefresh();
   };
 
@@ -318,9 +206,8 @@ export default function ScheduleWithTemplateModal({
         open={modalOpen}
         onOpenChange={(open) => {
           setModalOpen(open);
-          if (!open) setSelectedTemplate(null);
         }}
-        template={selectedTemplate}
+        template={null}
         levels={levels}
         teachers={teachers}
         onSave={handleSave}
