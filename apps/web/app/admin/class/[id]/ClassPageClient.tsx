@@ -270,7 +270,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
       <div className="px-2 sm:px-0">
         <Tabs value={tab} onValueChange={handleTabChange}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pr-4">
             <TabsList className="w-fit">
               <TabsTrigger value="enrolments">Enrolments</TabsTrigger>
               <TabsTrigger value="attendance" disabled={!hasOccurrence}>
@@ -308,10 +308,10 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           </TabsContent>
 
           <TabsContent value="template">
-            <Card>
+            <Card className="border-none shadow-none">
               <CardHeader className="gap-1">
                 <CardTitle className="text-base">Template settings</CardTitle>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Update the schedule, capacity, and default teacher for future occurrences.
                 </p>
               </CardHeader>

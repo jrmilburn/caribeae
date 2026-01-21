@@ -8,7 +8,8 @@ import type { InvoiceReceiptData } from "./getInvoiceReceiptData";
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "—";
-  return format(value, "d MMM yyyy");
+  const utcDate = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  return format(utcDate, "d MMM yyyy");
 }
 
 export async function renderInvoiceReceiptPdf(data: InvoiceReceiptData): Promise<Buffer> {

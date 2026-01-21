@@ -30,7 +30,7 @@ export function EnrolmentsSection({
   const [open, setOpen] = React.useState(false);
 
   return (
-    <Card>
+    <Card className="border-none shadow-none">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div>
           <CardTitle className="text-base">Enrolments</CardTitle>

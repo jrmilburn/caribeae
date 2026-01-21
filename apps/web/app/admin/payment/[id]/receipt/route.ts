@@ -11,7 +11,10 @@ const paramsSchema = z.object({
 });
 
 export async function GET(_request: Request, context: { params: unknown }) {
-  const parsed = paramsSchema.safeParse(context.params);
+
+  const params = await context.params;
+
+  const parsed = paramsSchema.safeParse(params);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payment id" }, { status: 400 });
   }
