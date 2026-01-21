@@ -290,7 +290,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           </TabsContent>
 
           <TabsContent value="template">
-            <Card>
+            <Card className="border-none shadow-none">
               <CardHeader className="gap-1">
                 <CardTitle className="text-base">Template settings</CardTitle>
                 <p className="text-sm text-muted-foreground">
