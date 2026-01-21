@@ -176,7 +176,7 @@ export async function recalculateEnrolmentCoverage(
       if (wouldShortenCoverage(previousPaidThrough, computedPaidThrough)) {
         if (opts?.confirmShorten) {
           nextPaidThrough = computedPaidThrough;
-        } else if (reason === "INVOICE_APPLIED") {
+        } else if (reason === "INVOICE_APPLIED" || reason === "CANCELLATION_CREATED" || reason === "CANCELLATION_REVERSED") {
           nextPaidThrough = previousPaidThrough;
         } else {
           throw new CoverageWouldShortenError({ oldDateKey: previousKey, newDateKey: computedKey });

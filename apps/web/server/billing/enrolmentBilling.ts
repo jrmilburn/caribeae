@@ -37,7 +37,7 @@ import { addDays, isAfter } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
-import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { brisbaneAddDays, brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "./occurrenceWalker";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { buildMissedOccurrencePredicate } from "./missedOccurrence";
@@ -349,6 +349,56 @@ export async function adjustCreditsForManualPaidThroughDate(
   });
 
   return requiredCredits;
+}
+
+export async function resolveNextPaidThroughForCredit(
+  tx: Prisma.TransactionClient,
+  enrolment: EnrolmentWithPlanTemplate
+) {
+  const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+  if (!currentPaidThrough || !enrolment.plan) return null;
+
+  const assignedTemplates = buildCoverageTemplates(enrolment);
+  if (!assignedTemplates.length) return null;
+
+  const startDayKey = brisbaneAddDays(toBrisbaneDayKey(currentPaidThrough), 1);
+  const startDate = brisbaneStartOfDay(startDayKey);
+  const endDate = enrolment.endDate ? brisbaneStartOfDay(enrolment.endDate) : null;
+
+  if (endDate && brisbaneCompare(toBrisbaneDayKey(endDate), startDayKey) < 0) return null;
+
+  const horizon = resolveOccurrenceHorizon({
+    startDate,
+    endDate,
+    occurrencesNeeded: 1,
+    sessionsPerWeek: sessionsPerWeek(enrolment.plan),
+  });
+
+  const coverageData = await loadCoverageData(tx, {
+    templates: assignedTemplates,
+    startDate,
+    endDate: horizon,
+    enrolmentId: enrolment.id,
+  });
+
+  const occurrences = buildOccurrenceSchedule({
+    startDate,
+    endDate,
+    templates: assignedTemplates.map((template) => ({
+      templateId: template.id,
+      dayOfWeek: template.dayOfWeek,
+      startDate: template.startDate ?? null,
+      endDate: template.endDate ?? null,
+    })),
+    cancellations: [],
+    occurrencesNeeded: 1,
+    sessionsPerWeek: sessionsPerWeek(enrolment.plan),
+    horizon,
+    shouldSkipOccurrence: ({ templateId, date }) =>
+      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+  });
+
+  return occurrences[0] ? brisbaneStartOfDay(occurrences[0]) : null;
 }
 
 async function ensureConsumptionEvents(
