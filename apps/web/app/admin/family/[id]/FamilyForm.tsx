@@ -3,15 +3,17 @@
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
-import { formatCurrencyFromCents } from "@/lib/currency";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 import FamilyDetails from "./FamilyDetails";
 import StudentDetails from "./StudentDetails";
@@ -333,7 +335,7 @@ function FamilyTabs({
 
           {visitedTabs.has("history") ? (
             <TabsContent value="history" className="pt-4">
-              <HistoryTab billing={billing} />
+              <HistoryTab billing={billing} family={family} />
             </TabsContent>
           ) : null}
         </Tabs>
@@ -430,29 +432,166 @@ function StudentsTab({
   );
 }
 
-function HistoryTab({ billing }: { billing: Awaited<ReturnType<typeof getFamilyBillingData>> }) {
+type AuditCategory = "ALL" | "PAIDTHROUGH" | "CLASS_CHANGE" | "LEVEL_CHANGE" | "COVERAGE";
+
+type AuditEntry = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  createdAt: Date;
+  category: AuditCategory;
+  title: string;
+  subtitle: string;
+  details?: string;
+};
+
+function HistoryTab({
+  billing,
+  family,
+}: {
+  billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
+  family: FamilyWithStudentsAndInvoices;
+}) {
+  const [selectedStudentId, setSelectedStudentId] = React.useState<string>("ALL");
+  const [selectedCategory, setSelectedCategory] = React.useState<AuditCategory>("ALL");
+
+  const students = React.useMemo(
+    () => family.students.map((student) => ({ id: student.id, name: student.name })),
+    [family.students]
+  );
+
+  const auditEntries = React.useMemo(() => {
+    const entries: AuditEntry[] = [];
+
+    const reasonMeta: Record<
+      string,
+      { label: string; source: string; category: AuditCategory }
+    > = {
+      PAIDTHROUGH_MANUAL_EDIT: { label: "Paid-through updated", source: "Manual edit", category: "PAIDTHROUGH" },
+      INVOICE_APPLIED: { label: "Payment applied", source: "Payment", category: "PAIDTHROUGH" },
+      HOLIDAY_ADDED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
+      HOLIDAY_REMOVED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
+      HOLIDAY_UPDATED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
+      CLASS_CHANGED: { label: "Schedule updated", source: "Recalculation", category: "CLASS_CHANGE" },
+      PLAN_CHANGED: { label: "Plan updated", source: "Recalculation", category: "CLASS_CHANGE" },
+      CANCELLATION_CREATED: { label: "Cancellation recorded", source: "Cancellation", category: "COVERAGE" },
+      CANCELLATION_REVERSED: { label: "Cancellation reversed", source: "Cancellation", category: "COVERAGE" },
+    };
+
+    billing.coverageAudits.forEach((audit) => {
+      const student = audit.enrolment.student;
+      const meta = reasonMeta[audit.reason] ?? {
+        label: "Coverage recalculated",
+        source: "System",
+        category: "COVERAGE" as AuditCategory,
+      };
+      const previous = formatBrisbaneDate(audit.previousPaidThroughDate ?? null);
+      const next = formatBrisbaneDate(audit.nextPaidThroughDate ?? null);
+
+      entries.push({
+        id: audit.id,
+        studentId: student.id,
+        studentName: student.name,
+        createdAt: new Date(audit.createdAt),
+        category: meta.category,
+        title: meta.label,
+        subtitle: `${meta.source} · ${format(new Date(audit.createdAt), "d MMM yyyy · h:mm a")}`,
+        details: `Paid-through changed from ${previous} to ${next}.`,
+      });
+    });
+
+    family.students.forEach((student) => {
+      student.levelChanges.forEach((change) => {
+        entries.push({
+          id: `level-${change.id}`,
+          studentId: student.id,
+          studentName: student.name,
+          createdAt: new Date(change.createdAt),
+          category: "LEVEL_CHANGE",
+          title: "Level updated",
+          subtitle: `Admin · ${format(new Date(change.createdAt), "d MMM yyyy · h:mm a")}`,
+          details: `Level changed from ${change.fromLevel?.name ?? "—"} to ${
+            change.toLevel?.name ?? "—"
+          } (effective ${formatBrisbaneDate(change.effectiveDate)}).`,
+        });
+      });
+    });
+
+    return entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [billing.coverageAudits, family.students]);
+
+  const filteredEntries = React.useMemo(() => {
+    return auditEntries.filter((entry) => {
+      if (selectedStudentId !== "ALL" && entry.studentId !== selectedStudentId) return false;
+      if (selectedCategory !== "ALL" && entry.category !== selectedCategory) return false;
+      return true;
+    });
+  }, [auditEntries, selectedCategory, selectedStudentId]);
+
   return (
     <Card className="border-l-0 border-r-0 shadow-none">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Recent payments</CardTitle>
-        <Badge variant="outline">{billing.payments.length} items</Badge>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CardTitle className="text-base">Enrolment audit log</CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{filteredEntries.length} items</Badge>
+          <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as AuditCategory)}>
+            <SelectTrigger className="h-8 w-[180px] text-xs">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All types</SelectItem>
+              <SelectItem value="PAIDTHROUGH">Paid-through</SelectItem>
+              <SelectItem value="CLASS_CHANGE">Class/plan changes</SelectItem>
+              <SelectItem value="LEVEL_CHANGE">Level changes</SelectItem>
+              <SelectItem value="COVERAGE">Coverage changes</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {billing.payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No payments yet.</p>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant={selectedStudentId === "ALL" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setSelectedStudentId("ALL")}
+          >
+            All students
+          </Button>
+          {students.map((student) => (
+            <Button
+              key={student.id}
+              type="button"
+              variant={selectedStudentId === student.id ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setSelectedStudentId(student.id)}
+            >
+              {student.name}
+            </Button>
+          ))}
+        </div>
+
+        {filteredEntries.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No enrolment changes yet.</p>
         ) : (
-          billing.payments.map((payment) => (
-            <div key={payment.id} className="rounded-lg border bg-muted/30 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{formatCurrencyFromCents(payment.amountCents)}</span>
-                  <Badge variant="secondary">{payment.paidAt ? new Date(payment.paidAt).toDateString() : "—"}</Badge>
+          <div className="space-y-2">
+            {filteredEntries.map((entry) => (
+              <div key={entry.id} className="rounded-lg border bg-muted/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="space-y-1">
+                    <div className="text-sm font-semibold">{entry.title}</div>
+                    <div className="text-xs text-muted-foreground">{entry.subtitle}</div>
+                  </div>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {entry.studentName}
+                  </Badge>
                 </div>
-                <span className="text-xs text-muted-foreground">ID: {payment.id}</span>
+                {entry.details ? (
+                  <div className="mt-2 text-xs text-muted-foreground">{entry.details}</div>
+                ) : null}
               </div>
-              {payment.note ? <p className="mt-1 text-xs text-muted-foreground">{payment.note}</p> : null}
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
