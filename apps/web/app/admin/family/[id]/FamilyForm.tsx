@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
-import { formatCurrencyFromCents } from "@/lib/currency";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 import FamilyDetails from "./FamilyDetails";
 import StudentDetails from "./StudentDetails";
@@ -431,26 +432,78 @@ function StudentsTab({
 }
 
 function HistoryTab({ billing }: { billing: Awaited<ReturnType<typeof getFamilyBillingData>> }) {
+  const auditsByStudent = React.useMemo(() => {
+    const map = new Map<string, { studentId: string; studentName: string; items: typeof billing.coverageAudits }>();
+    billing.coverageAudits.forEach((audit) => {
+      const student = audit.enrolment.student;
+      if (!map.has(student.id)) {
+        map.set(student.id, { studentId: student.id, studentName: student.name, items: [] });
+      }
+      map.get(student.id)?.items.push(audit);
+    });
+    return Array.from(map.values());
+  }, [billing.coverageAudits]);
+
+  const reasonMeta: Record<string, { label: string; source: string }> = {
+    PAIDTHROUGH_MANUAL_EDIT: { label: "Paid-through updated", source: "Manual edit" },
+    INVOICE_APPLIED: { label: "Payment applied", source: "Payment" },
+    HOLIDAY_ADDED: { label: "Holiday updated", source: "Recalculation" },
+    HOLIDAY_REMOVED: { label: "Holiday updated", source: "Recalculation" },
+    HOLIDAY_UPDATED: { label: "Holiday updated", source: "Recalculation" },
+    CLASS_CHANGED: { label: "Schedule updated", source: "Recalculation" },
+    PLAN_CHANGED: { label: "Plan updated", source: "Recalculation" },
+    CANCELLATION_CREATED: { label: "Cancellation recorded", source: "Cancellation" },
+    CANCELLATION_REVERSED: { label: "Cancellation reversed", source: "Cancellation" },
+  };
+
   return (
     <Card className="border-l-0 border-r-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Recent payments</CardTitle>
-        <Badge variant="outline">{billing.payments.length} items</Badge>
+        <CardTitle className="text-base">Enrolment audit log</CardTitle>
+        <Badge variant="outline">{billing.coverageAudits.length} items</Badge>
       </CardHeader>
       <CardContent className="space-y-2">
-        {billing.payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No payments yet.</p>
+        {billing.coverageAudits.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No enrolment changes yet.</p>
         ) : (
-          billing.payments.map((payment) => (
-            <div key={payment.id} className="rounded-lg border bg-muted/30 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{formatCurrencyFromCents(payment.amountCents)}</span>
-                  <Badge variant="secondary">{payment.paidAt ? new Date(payment.paidAt).toDateString() : "—"}</Badge>
-                </div>
-                <span className="text-xs text-muted-foreground">ID: {payment.id}</span>
+          auditsByStudent.map((group) => (
+            <div key={group.studentId} className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-semibold">{group.studentName}</div>
+                <Badge variant="outline" className="text-[11px] font-normal">
+                  {group.items.length} change{group.items.length === 1 ? "" : "s"}
+                </Badge>
               </div>
-              {payment.note ? <p className="mt-1 text-xs text-muted-foreground">{payment.note}</p> : null}
+              <div className="space-y-2">
+                {group.items.map((audit) => {
+                  const meta = reasonMeta[audit.reason] ?? {
+                    label: "Coverage recalculated",
+                    source: "System",
+                  };
+                  const previous = formatBrisbaneDate(audit.previousPaidThroughDate ?? null);
+                  const next = formatBrisbaneDate(audit.nextPaidThroughDate ?? null);
+                  return (
+                    <div key={audit.id} className="rounded-lg border bg-background p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold">
+                            {audit.enrolment.plan?.name ?? "Enrolment"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {meta.source} · {format(new Date(audit.createdAt), "d MMM yyyy · h:mm a")}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="text-[11px]">
+                          {meta.label}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Paid-through changed from {previous} to {next}.
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))
         )}

@@ -7,6 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizePaidThroughDateInput } from "@/server/enrolment/paidThroughDateInput";
+import {
+  adjustCreditsForManualPaidThroughDate,
+  getEnrolmentBillingStatus,
+} from "@/server/billing/enrolmentBilling";
 
 export type UpdateEnrolmentPaidThroughDateInput = {
   enrolmentId: string;
@@ -23,10 +27,14 @@ export async function updateEnrolmentPaidThroughDate(input: UpdateEnrolmentPaidT
   const result = await prisma.$transaction(async (tx) => {
     const enrolment = await tx.enrolment.findUnique({
       where: { id: input.enrolmentId },
-      select: {
-        id: true,
-        studentId: true,
-        paidThroughDate: true,
+      include: {
+        plan: true,
+        template: true,
+        classAssignments: {
+          include: {
+            template: true,
+          },
+        },
         student: { select: { familyId: true } },
       },
     });
@@ -42,6 +50,9 @@ export async function updateEnrolmentPaidThroughDate(input: UpdateEnrolmentPaidT
         paidThroughDateComputed: nextPaidThroughDate ?? null,
       },
     });
+
+    await adjustCreditsForManualPaidThroughDate(tx, enrolment, nextPaidThroughDate);
+    await getEnrolmentBillingStatus(enrolment.id, { client: tx });
 
     await tx.enrolmentCoverageAudit.create({
       data: {
