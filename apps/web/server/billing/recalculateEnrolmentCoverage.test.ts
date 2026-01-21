@@ -25,12 +25,12 @@ function test(name: string, fn: () => void) {
 function buildPredicate(params: {
   templates: Array<{ id: string; levelId?: string | null }>;
   holidays?: Array<{ startDate: Date; endDate: Date; levelId?: string | null; templateId?: string | null }>;
-  cancellations?: Array<{ templateId: string; date: Date }>;
+  cancellationCredits?: Array<{ templateId: string; date: Date }>;
 }) {
   return buildMissedOccurrencePredicate({
     templatesById: new Map(params.templates.map((template) => [template.id, template])),
     holidays: params.holidays ?? [],
-    cancellations: params.cancellations ?? [],
+    cancellationCredits: params.cancellationCredits ?? [],
   });
 }
 
@@ -77,7 +77,7 @@ test("PER_CLASS Mon/Thu cancellation pushes to next chronological occurrence", (
   ];
   const predicate = buildPredicate({
     templates: [{ id: "mon" }, { id: "thu" }],
-    cancellations: [{ templateId: "thu", date: d("2026-01-08") }],
+    cancellationCredits: [{ templateId: "thu", date: d("2026-01-08") }],
   });
 
   const occurrences = buildOccurrenceSchedule({
@@ -187,7 +187,7 @@ test("holiday + cancellation overlap counts once", () => {
   const predicate = buildPredicate({
     templates: [{ id: "t1" }],
     holidays: [{ startDate: d("2026-01-12"), endDate: d("2026-01-12") }],
-    cancellations: [{ templateId: "t1", date: d("2026-01-12") }],
+    cancellationCredits: [{ templateId: "t1", date: d("2026-01-12") }],
   });
 
   const occurrences = buildOccurrenceSchedule({

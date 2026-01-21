@@ -53,6 +53,9 @@ export type ClassPageData = {
   cancellationCredits: Prisma.EnrolmentAdjustmentGetPayload<{
     include: { enrolment: { include: { student: true; plan: true } } };
   }>[];
+  cancellationCandidates: Prisma.EnrolmentGetPayload<{
+    include: { student: true; plan: true; classAssignments: { include: { template: true } } };
+  }>[];
   teachers: Prisma.TeacherGetPayload<true>[];
   levels: Prisma.LevelGetPayload<true>[];
   students: Prisma.StudentGetPayload<true>[];
