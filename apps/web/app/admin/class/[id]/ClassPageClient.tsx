@@ -252,7 +252,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
       <div className="px-2 sm:px-0">
         <Tabs value={tab} onValueChange={handleTabChange}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pr-4">
             <TabsList className="w-fit">
               <TabsTrigger value="enrolments">Enrolments</TabsTrigger>
               <TabsTrigger value="attendance" disabled={!hasOccurrence}>
