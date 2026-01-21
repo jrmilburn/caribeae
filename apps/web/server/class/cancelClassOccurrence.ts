@@ -7,7 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
+import { resolveNextPaidThroughForCredit } from "@/server/billing/enrolmentBilling";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
+import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
@@ -112,8 +114,24 @@ export async function cancelClassOccurrence({
     });
 
     const affectedEnrolments = new Set(newAdjustments.map((adj) => adj.enrolmentId));
-    for (const enrolmentId of affectedEnrolments) {
-      await recalculateEnrolmentCoverage(enrolmentId, "CANCELLATION_CREATED", {
+    for (const enrolment of enrolments) {
+      if (!affectedEnrolments.has(enrolment.id)) continue;
+      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+      if (paidThrough) {
+        const paidThroughKey = toBrisbaneDayKey(brisbaneStartOfDay(paidThrough));
+        const cancellationKey = toBrisbaneDayKey(brisbaneStartOfDay(date));
+        if (brisbaneCompare(paidThroughKey, cancellationKey) >= 0) {
+          const nextPaidThrough = await resolveNextPaidThroughForCredit(tx, enrolment);
+          if (nextPaidThrough && brisbaneCompare(toBrisbaneDayKey(nextPaidThrough), paidThroughKey) > 0) {
+            await tx.enrolment.update({
+              where: { id: enrolment.id },
+              data: { paidThroughDate: nextPaidThrough },
+            });
+          }
+        }
+      }
+
+      await recalculateEnrolmentCoverage(enrolment.id, "CANCELLATION_CREATED", {
         tx,
         actorId: user.id,
       });
