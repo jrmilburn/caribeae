@@ -96,7 +96,7 @@ export function AttendanceSection({
   };
 
   return (
-    <Card>
+    <Card className="border-none shadow-none">
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="text-base">Attendance</CardTitle>
