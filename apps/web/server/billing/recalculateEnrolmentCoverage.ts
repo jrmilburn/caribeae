@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   BillingType,
+  EnrolmentAdjustmentType,
   EnrolmentStatus,
   type EnrolmentCoverageReason,
   type Prisma,
@@ -214,15 +215,27 @@ export async function recalculateEnrolmentCoverage(
 
       const templateIds = templates.map((template) => template.id);
       const levelIds = templates.map((template) => template.levelId ?? null);
+      const enrolmentEndDayKey = enrolment.endDate ? toBrisbaneDayKey(brisbaneStartOfDay(enrolment.endDate)) : null;
 
-      const holidays = await tx.holiday.findMany({
-        where: {
-          startDate: { lte: paidWindowEnd },
-          endDate: { gte: paidWindowStart },
-          ...buildHolidayScopeWhere({ templateIds, levelIds }),
-        },
-        select: { startDate: true, endDate: true },
-      });
+      const [holidays, cancellationCredits] = await Promise.all([
+        tx.holiday.findMany({
+          where: {
+            startDate: { lte: paidWindowEnd },
+            endDate: { gte: paidWindowStart },
+            ...buildHolidayScopeWhere({ templateIds, levelIds }),
+          },
+          select: { startDate: true, endDate: true },
+        }),
+        tx.enrolmentAdjustment.findMany({
+          where: {
+            enrolmentId: enrolment.id,
+            type: EnrolmentAdjustmentType.CANCELLATION_CREDIT,
+            templateId: { in: templateIds },
+            date: { gte: paidWindowStart, lte: paidWindowEnd },
+          },
+          select: { date: true },
+        }),
+      ]);
 
       const scheduledSessions =
         opts?.weeklyEntitlementSessions ?? countScheduledSessionsExcludingHolidays({
@@ -232,12 +245,17 @@ export async function recalculateEnrolmentCoverage(
           holidays,
         });
 
+      const cancellationHolidays = cancellationCredits.map((credit) => ({
+        startDate: credit.date,
+        endDate: credit.date,
+      }));
+
       const proposedPaidThrough = computeCoverageEndDay({
         startDayKey,
         assignedTemplates: templates,
-        holidays,
+        holidays: [...holidays, ...cancellationHolidays],
         entitlementSessions: scheduledSessions,
-        endDayKey,
+        endDayKey: enrolmentEndDayKey,
       });
 
       const currentPaidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;
