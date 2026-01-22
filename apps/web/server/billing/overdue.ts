@@ -22,8 +22,10 @@ export function isEnrolmentOverdue(enrolment: OverdueEnrolment, nowBrisbane: Dat
   }
 
   if (billingType === BillingType.PER_CLASS) {
-    const credits = enrolment.creditsBalanceCached ?? enrolment.creditsRemaining ?? 0;
-    return credits <= 0;
+    const today = brisbaneStartOfDay(nowBrisbane);
+    const paidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;
+    if (!paidThrough) return true;
+    return paidThrough.getTime() < today.getTime();
   }
 
   return false;
