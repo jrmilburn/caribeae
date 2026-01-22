@@ -333,30 +333,50 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         where: buildHolidayScopeWhere({ templateIds, levelIds }),
         select: { startDate: true, endDate: true, levelId: true, templateId: true },
       });
-      const coverageRange = computeBlockCoverageRange({
-        currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
-        enrolmentStartDate: enrolment.startDate,
-        enrolmentEndDate: enrolment.endDate ?? null,
-        classTemplate: {
-          dayOfWeek: anchorTemplate.dayOfWeek,
-          startTime: anchorTemplate.startTime ?? null,
-        },
-        assignedTemplates: assignedTemplates.map((template) => ({
-          dayOfWeek: template.dayOfWeek,
-          startTime: template.startTime ?? null,
-        })),
-        blockClassCount: plan.blockClassCount ?? 1,
-        creditsPurchased: creditsDelta,
-        holidays,
-      });
-
-      if (coverageRange.coverageEnd) {
-        const coverageEnd = normalizeCoverageEndForStorage(coverageRange.coverageEnd);
-        const coverageEndBase = coverageRange.coverageEndBase
-          ? normalizeCoverageEndForStorage(coverageRange.coverageEndBase)
-          : coverageEnd;
+      if (invoice.coverageEnd) {
+        const coverageEnd = normalizeCoverageEndForStorage(invoice.coverageEnd);
+        let coverageEndBase = coverageEnd;
+        if (invoice.coverageStart) {
+          const coverageStart = normalizeCoverageEndForStorage(invoice.coverageStart);
+          const baseCoverageEndDayKey = computeCoverageEndDay({
+            startDayKey: toBrisbaneDayKey(coverageStart),
+            assignedTemplates,
+            holidays: [],
+            entitlementSessions: creditsDelta,
+            endDayKey: enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null,
+          });
+          if (baseCoverageEndDayKey) {
+            coverageEndBase = brisbaneStartOfDay(baseCoverageEndDayKey);
+          }
+        }
         updates.paidThroughDate = coverageEnd;
         updates.paidThroughDateComputed = coverageEndBase;
+      } else {
+        const coverageRange = computeBlockCoverageRange({
+          currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+          enrolmentStartDate: enrolment.startDate,
+          enrolmentEndDate: enrolment.endDate ?? null,
+          classTemplate: {
+            dayOfWeek: anchorTemplate.dayOfWeek,
+            startTime: anchorTemplate.startTime ?? null,
+          },
+          assignedTemplates: assignedTemplates.map((template) => ({
+            dayOfWeek: template.dayOfWeek,
+            startTime: template.startTime ?? null,
+          })),
+          blockClassCount: plan.blockClassCount ?? 1,
+          creditsPurchased: creditsDelta,
+          holidays,
+        });
+
+        if (coverageRange.coverageEnd) {
+          const coverageEnd = normalizeCoverageEndForStorage(coverageRange.coverageEnd);
+          const coverageEndBase = coverageRange.coverageEndBase
+            ? normalizeCoverageEndForStorage(coverageRange.coverageEndBase)
+            : coverageEnd;
+          updates.paidThroughDate = coverageEnd;
+          updates.paidThroughDateComputed = coverageEndBase;
+        }
       }
     }
 
