@@ -15,6 +15,7 @@ import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility"
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -204,19 +205,29 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           throw new Error("Unable to calculate pay-ahead coverage for this enrolment.");
         }
 
+        const pricing = calculateBlockPricing({
+          priceCents: plan.priceCents,
+          blockLength: creditsPerBlock,
+          customBlockLength: effectiveBlockLength,
+        });
+        const customNote =
+          item.customBlockLength != null && item.customBlockLength !== creditsPerBlock
+            ? buildCustomPayAheadNote({
+                totalClasses: effectiveBlockLength * item.quantity,
+                coverageStart: coverageRange.coverageStart,
+                coverageEnd: coverageRange.coverageEnd,
+                perClassPriceCents: pricing.perClassPriceCents,
+              })
+            : null;
         const invoice = await createInvoiceWithLineItems({
           familyId: payload.familyId,
           enrolmentId: enrolment.id,
           lineItems: [
             {
               kind: InvoiceLineItemKind.ENROLMENT,
-              description: plan.name,
+              description: customNote ? `${plan.name} · ${customNote}` : plan.name,
               quantity: item.quantity,
-              unitPriceCents: calculateBlockPricing({
-                priceCents: plan.priceCents,
-                blockLength: creditsPerBlock,
-                customBlockLength: effectiveBlockLength,
-              }).totalCents,
+              unitPriceCents: pricing.totalCents,
             },
           ],
           status: InvoiceStatus.SENT,
