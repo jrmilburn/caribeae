@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/client";
+import type { EnrolmentPlan } from "@prisma/client";
 import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
@@ -21,6 +22,9 @@ import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrol
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
+import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
+import { buildMissedOccurrencePredicate } from "@/server/billing/missedOccurrence";
+import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "@/server/billing/occurrenceWalker";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -491,9 +495,29 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     : enrolment.template
       ? [enrolment.template]
       : [];
-  const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+  const baseStart = input.startDate ? normalizeStartDate(input.startDate) : startOfDay(enrolment.startDate);
+  const templateEndDates = templates.map((template) => template.endDate).filter(Boolean) as Date[];
+  const earliestEnd =
+    templateEndDates.length > 0
+      ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
+      : null;
+  const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
 
-  const newPaidThroughDate = oldPaidThrough ?? null;
+  const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+  let newPaidThroughDate = oldPaidThrough ?? null;
+
+  if (enrolment.plan.billingType !== "PER_WEEK") {
+    const oldSnapshot = await getEnrolmentBillingStatus(enrolment.id, { asOfDate: baseStart });
+    const carriedCredits = oldSnapshot?.remainingCredits ?? enrolment.creditsRemaining ?? enrolment.creditsBalanceCached ?? 0;
+    newPaidThroughDate = await computePaidThroughPreview({
+      startDate: baseStart,
+      endDate: plannedEndDate,
+      templates,
+      credits: carriedCredits,
+      sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+    });
+  }
+
   const wouldShorten = wouldShortenCoverage(oldPaidThrough, newPaidThroughDate);
 
   return {
@@ -521,4 +545,69 @@ function resolveAnchorTemplate<T extends { id: string; dayOfWeek: number | null 
         return a.id.localeCompare(b.id);
       })[0] ?? null
   );
+}
+
+function resolveSessionsPerWeek(plan: EnrolmentPlan | null | undefined) {
+  const count = plan?.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+  return count;
+}
+
+async function computePaidThroughPreview(params: {
+  startDate: Date;
+  endDate: Date | null;
+  templates: Array<{ id: string; dayOfWeek: number | null; startDate: Date; endDate: Date | null; levelId: string | null }>;
+  credits: number;
+  sessionsPerWeek: number;
+}) {
+  if (!params.templates.length) return null;
+
+  const occurrencesNeeded = Math.max(params.credits + params.sessionsPerWeek, 1);
+  const horizon = resolveOccurrenceHorizon({
+    startDate: params.startDate,
+    endDate: params.endDate,
+    occurrencesNeeded,
+    sessionsPerWeek: params.sessionsPerWeek,
+  });
+
+  const templateIds = params.templates.map((template) => template.id);
+  const levelIds = params.templates.map((template) => template.levelId ?? null);
+
+  const holidays = await prisma.holiday.findMany({
+    where: {
+      startDate: { lte: brisbaneStartOfDay(horizon) },
+      endDate: { gte: brisbaneStartOfDay(params.startDate) },
+      ...buildHolidayScopeWhere({ templateIds, levelIds }),
+    },
+    select: { startDate: true, endDate: true, levelId: true, templateId: true },
+  });
+
+  const templatesById = new Map(
+    params.templates.map((template) => [template.id, { id: template.id, levelId: template.levelId ?? null }])
+  );
+
+  const missedOccurrencePredicate = buildMissedOccurrencePredicate({
+    templatesById,
+    holidays,
+    cancellationCredits: [],
+  });
+
+  const occurrences = buildOccurrenceSchedule({
+    startDate: params.startDate,
+    endDate: params.endDate,
+    templates: params.templates.map((template) => ({
+      templateId: template.id,
+      dayOfWeek: template.dayOfWeek,
+      startDate: template.startDate,
+      endDate: template.endDate,
+    })),
+    cancellations: [],
+    occurrencesNeeded,
+    sessionsPerWeek: params.sessionsPerWeek,
+    horizon,
+    shouldSkipOccurrence: ({ templateId, date }) =>
+      missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+  });
+
+  const walk = consumeOccurrencesForCredits({ occurrences, credits: params.credits });
+  return walk.paidThrough ? brisbaneStartOfDay(walk.paidThrough) : null;
 }
