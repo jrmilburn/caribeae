@@ -213,7 +213,7 @@ export function StudentEnrolmentsTable({
       {editingPaidThrough ? (
         <EditPaidThroughDialog
           enrolmentId={editingPaidThrough.id}
-          currentPaidThrough={editingPaidThrough.paidThroughDate ?? editingPaidThrough.paidThroughDateComputed ?? null}
+          currentPaidThrough={editingPaidThrough.paidThroughDate ?? null}
           open={Boolean(editingPaidThrough)}
           onOpenChange={(open) => !open && setEditingPaidThrough(null)}
           onUpdated={() => {

@@ -116,7 +116,7 @@ export async function cancelClassOccurrence({
     const affectedEnrolments = new Set(newAdjustments.map((adj) => adj.enrolmentId));
     for (const enrolment of enrolments) {
       if (!affectedEnrolments.has(enrolment.id)) continue;
-      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+      const paidThrough = enrolment.paidThroughDate ?? null;
       if (paidThrough) {
         const paidThroughKey = toBrisbaneDayKey(brisbaneStartOfDay(paidThrough));
         const cancellationKey = toBrisbaneDayKey(brisbaneStartOfDay(date));

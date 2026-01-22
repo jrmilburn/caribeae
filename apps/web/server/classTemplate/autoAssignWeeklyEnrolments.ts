@@ -30,7 +30,7 @@ export async function autoAssignWeeklyEnrolmentsToTemplate(params: {
   });
 
   const eligible = candidates.filter((enrolment) => {
-    const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+    const paidThrough = enrolment.paidThroughDate ?? null;
     if (paidThrough && isAfter(today, brisbaneStartOfDay(paidThrough))) {
       return false;
     }

@@ -60,12 +60,7 @@ function normalizeHolidays(holidays: HolidayRange[]) {
 }
 
 function resolveCurrentPaidThrough(enrolment: Enrolment) {
-  return (
-    asDate(enrolment.paidThroughDate) ??
-    asDate(enrolment.projectedCoverageEnd) ??
-    asDate(enrolment.latestCoverageEnd) ??
-    asDate(enrolment.startDate)
-  );
+  return asDate(enrolment.paidThroughDate);
 }
 
 function projectPaidAhead(

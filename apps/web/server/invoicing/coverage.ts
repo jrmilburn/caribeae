@@ -2,6 +2,7 @@ import { BillingType, type Prisma } from "@prisma/client";
 
 import {
   computeCoverageEndDay,
+  countScheduledSessionsExcludingHolidays,
   dayKeyToDate,
   nextScheduledDayKey,
 } from "@/server/billing/coverageEngine";
@@ -9,6 +10,7 @@ import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
 import {
   brisbaneAddDays,
   brisbaneCompare,
+  brisbaneStartOfDay,
   toBrisbaneDayKey,
 } from "@/server/dates/brisbaneDay";
 import { resolveBlockLength } from "@/lib/billing/blockPricing";
@@ -238,6 +240,7 @@ export function resolveCoverageForPlan(params: {
   holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
   customBlockLength?: number | null;
+  blocksPurchased?: number;
 }) {
   const { enrolment, plan } = params;
   const today = params.today ?? new Date();
@@ -275,7 +278,8 @@ export function resolveCoverageForPlan(params: {
       throw new Error("Custom block length must be at least the plan block length.");
     }
   }
-  const creditsPurchased = params.customBlockLength ?? planBlockLength;
+  const blocksPurchased = Math.max(params.blocksPurchased ?? 1, 1);
+  const creditsPurchased = (params.customBlockLength ?? planBlockLength) * blocksPurchased;
 
   const assignedTemplates = resolveAssignedTemplates(enrolment);
 
@@ -287,7 +291,7 @@ export function resolveCoverageForPlan(params: {
   }
 
   const coverageRange = computeBlockCoverageRange({
-    currentPaidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+    currentPaidThroughDate: enrolment.paidThroughDate ?? null,
     enrolmentStartDate: enrolment.startDate,
     enrolmentEndDate: enrolment.endDate ?? null,
     classTemplate: {
@@ -299,7 +303,7 @@ export function resolveCoverageForPlan(params: {
       startTime: template.startTime ?? null,
     })),
     blockClassCount: planBlockLength,
-    blocksPurchased: 1,
+    blocksPurchased,
     creditsPurchased,
     holidays: params.holidays,
   });
@@ -310,4 +314,28 @@ export function resolveCoverageForPlan(params: {
     coverageEndBase: coverageRange.coverageEndBase,
     creditsPurchased: coverageRange.creditsPurchased,
   };
+}
+
+export function countBlockCoverageBetweenDates(params: {
+  startDate: Date;
+  paidThroughDate: Date | null;
+  blockClassCount: number;
+  assignedTemplates: { dayOfWeek: number | null }[];
+  holidays: { startDate: Date; endDate: Date }[];
+}) {
+  if (!params.paidThroughDate) return 1;
+  const blockClassCount = Math.max(params.blockClassCount, 1);
+  const startKey = toBrisbaneDayKey(brisbaneStartOfDay(params.startDate));
+  const endKey = toBrisbaneDayKey(brisbaneStartOfDay(params.paidThroughDate));
+  if (brisbaneCompare(endKey, startKey) < 0) return 1;
+
+  const sessionCount = countScheduledSessionsExcludingHolidays({
+    startDayKey: startKey,
+    endDayKey: endKey,
+    assignedTemplates: params.assignedTemplates,
+    holidays: params.holidays,
+  });
+
+  if (sessionCount <= 0) return 1;
+  return Math.max(1, Math.ceil(sessionCount / blockClassCount));
 }

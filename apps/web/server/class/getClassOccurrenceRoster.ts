@@ -85,7 +85,7 @@ export function filterEligibleEnrolmentsForOccurrence(
     if (isWeekly && enrolment.student.levelId !== levelId) continue;
 
     if (isWeekly) {
-      const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+      const paidThrough = enrolment.paidThroughDate ?? null;
       if (paidThrough && isAfter(date, paidThrough)) continue;
     }
 

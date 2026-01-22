@@ -9,7 +9,8 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { getEnrolmentBillingStatus } from "@/server/billing/enrolmentBilling";
 import { createInvoiceWithLineItems, recalculateInvoiceTotals } from "@/server/billing/invoiceMutations";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
-import { enrolmentWithPlanInclude, resolveCoverageForPlan } from "@/server/invoicing/coverage";
+import { computeBlockCoverageRange } from "@/server/billing/paidThroughDate";
+import { enrolmentWithPlanInclude, countBlockCoverageBetweenDates, resolveCoverageForPlan } from "@/server/invoicing/coverage";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
@@ -101,13 +102,48 @@ export async function createInitialInvoiceForEnrolment(
       where: buildHolidayScopeWhere({ templateIds, levelIds }),
       select: { startDate: true, endDate: true, levelId: true, templateId: true },
     });
-    const { coverageStart, coverageEnd, creditsPurchased } = resolveCoverageForPlan({
-      enrolment,
-      plan: enrolment.plan,
-      holidays,
-      today: enrolment.startDate,
-      customBlockLength: options?.customBlockLength ?? null,
-    });
+    const blocksToBill =
+      enrolment.plan.billingType === BillingType.PER_CLASS
+        ? countBlockCoverageBetweenDates({
+            startDate: enrolment.startDate,
+            paidThroughDate: enrolment.paidThroughDate ?? null,
+            blockClassCount: planBlockLength,
+            assignedTemplates: assignedTemplates.map((template) => ({
+              dayOfWeek: template.dayOfWeek,
+            })),
+            holidays,
+          })
+        : 1;
+
+    const effectiveBlockLength = options?.customBlockLength ?? planBlockLength;
+
+    const coverage =
+      enrolment.plan.billingType === BillingType.PER_CLASS
+        ? computeBlockCoverageRange({
+            currentPaidThroughDate: null,
+            enrolmentStartDate: enrolment.startDate,
+            enrolmentEndDate: enrolment.endDate ?? null,
+            classTemplate: {
+              dayOfWeek: enrolment.template.dayOfWeek,
+              startTime: enrolment.template.startTime ?? null,
+            },
+            assignedTemplates: assignedTemplates.map((template) => ({
+              dayOfWeek: template.dayOfWeek,
+              startTime: template.startTime ?? null,
+            })),
+            blockClassCount: planBlockLength,
+            blocksPurchased: blocksToBill,
+            creditsPurchased: effectiveBlockLength * blocksToBill,
+            holidays,
+          })
+        : resolveCoverageForPlan({
+            enrolment,
+            plan: enrolment.plan,
+            holidays,
+            today: enrolment.startDate,
+            customBlockLength: options?.customBlockLength ?? null,
+            blocksPurchased: blocksToBill,
+          });
     const blockPricing =
       enrolment.plan.billingType === BillingType.PER_CLASS
         ? calculateBlockPricing({
@@ -128,14 +164,14 @@ export async function createInitialInvoiceForEnrolment(
         {
           kind: InvoiceLineItemKind.ENROLMENT,
           description: enrolment.plan.name,
-          quantity: 1,
+          quantity: blocksToBill,
           unitPriceCents: enrolmentUnitPrice,
         },
       ],
       status: InvoiceStatus.SENT,
-      coverageStart: coverageStart ?? null,
-      coverageEnd: coverageEnd ?? null,
-      creditsPurchased,
+      coverageStart: coverage.coverageStart ?? null,
+      coverageEnd: coverage.coverageEnd ?? null,
+      creditsPurchased: coverage.creditsPurchased,
       issuedAt: new Date(),
       dueAt: addDays(new Date(), DEFAULT_DUE_IN_DAYS),
       client: tx,

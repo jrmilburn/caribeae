@@ -513,7 +513,7 @@ function CreditStudentsDialog({
     return new Set(
       enrolments
         .filter((enrolment) => {
-          const paidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
+          const paidThrough = enrolment.paidThroughDate ?? null;
           if (!paidThrough) return false;
           return brisbaneCompare(toBrisbaneDayKey(paidThrough), dateKey) >= 0;
         })
