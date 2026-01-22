@@ -403,11 +403,7 @@ export function ChangeEnrolmentDialog({
                 : "—"}
             </div>
             <div>
-              <span className="font-medium">Current paid-through:</span>{" "}
-              {confirming?.oldDateKey ?? "—"}
-            </div>
-            <div>
-              <span className="font-medium">New paid-through:</span>{" "}
+              <span className="font-medium">Paid-through after change:</span>{" "}
               {confirming?.newDateKey ?? "—"}
             </div>
           </div>
