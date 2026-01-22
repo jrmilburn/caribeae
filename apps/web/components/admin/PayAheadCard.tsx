@@ -63,6 +63,20 @@ function resolveCurrentPaidThrough(enrolment: Enrolment) {
   return asDate(enrolment.paidThroughDate);
 }
 
+function hasUnpaidCoverage(enrolment: Enrolment) {
+  const paidThrough = resolveCurrentPaidThrough(enrolment);
+  const endDate = asDate(enrolment.endDate);
+  if (!paidThrough) return true;
+  if (!endDate) return false;
+  return paidThrough < endDate;
+}
+
+function isPaymentEligible(enrolment: Enrolment) {
+  if (enrolment.status === "ACTIVE") return true;
+  if (enrolment.status === "CHANGEOVER") return hasUnpaidCoverage(enrolment);
+  return false;
+}
+
 function projectPaidAhead(
   enrolment: Enrolment,
   quantity: number,
@@ -148,13 +162,17 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
   const [submitting, setSubmitting] = React.useState(false);
 
   const enrolments = React.useMemo(() => summary?.enrolments ?? [], [summary?.enrolments]);
+  const paymentEligibleEnrolments = React.useMemo(
+    () => enrolments.filter((enrolment : any) => isPaymentEligible(enrolment)),
+    [enrolments]
+  );
 
   React.useEffect(() => {
     if (!summary) return;
-    const activeIds = enrolments.filter((e : any) => e.status === "ACTIVE").map((e : any) => e.id);
-    setSelected(activeIds);
+    const eligibleIds = paymentEligibleEnrolments.map((e : any) => e.id);
+    setSelected(eligibleIds);
     setQuantities(
-      activeIds.reduce<Record<string, number>>((acc : any, id : string) => {
+      eligibleIds.reduce<Record<string, number>>((acc : any, id : string) => {
         acc[id] = 1;
         return acc;
       }, {})
@@ -226,7 +244,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     }
   };
 
-  const selectedEnrolments = enrolments.filter((e : any) => selected.includes(e.id));
+  const selectedEnrolments = paymentEligibleEnrolments.filter((e : any) => selected.includes(e.id));
     const totalCents = selectedEnrolments.reduce((sum : any, enrolment : any) => {
     const qty = quantities[enrolment.id] ?? 1;
     if (enrolment.billingType === "PER_CLASS" && customBlockEnabled[enrolment.id]) {
@@ -256,8 +274,8 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
       <CardContent className="space-y-4">
         {!summary ? (
           <p className="text-sm text-muted-foreground">Select a family to start.</p>
-        ) : enrolments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No enrolments found for this family.</p>
+        ) : paymentEligibleEnrolments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No enrolments eligible for pay-ahead.</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -266,7 +284,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  const all = enrolments.map((e : any) => e.id);
+                  const all = paymentEligibleEnrolments.map((e : any) => e.id);
                   setSelected(all);
                   setQuantities(
                     all.reduce<Record<string, number>>((acc : any, id : any) => {
@@ -286,12 +304,12 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                   setSelected([]);
                 }}
               >
-                Clear
-              </Button>
-            </div>
+              Clear
+            </Button>
+          </div>
 
             <div className="space-y-2">
-              {enrolments.map((enrolment : any) => {
+              {paymentEligibleEnrolments.map((enrolment : any) => {
                 const qty = quantities[enrolment.id] ?? 1;
                 const parsedCustom = Number(customBlockLengths[enrolment.id]);
                 const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
@@ -339,7 +357,14 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                           onChange={() => handleToggle(enrolment.id)}
                         />
                         <div>
-                          <div className="font-semibold leading-tight">{enrolment.studentName}</div>
+                          <div className="flex flex-wrap items-center gap-2 font-semibold leading-tight">
+                            <span>{enrolment.studentName}</span>
+                            {enrolment.status === "CHANGEOVER" ? (
+                              <Badge variant="outline" className="text-[10px] uppercase">
+                                Changeover
+                              </Badge>
+                            ) : null}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {enrolment.planName} · {currentLabel} {projectedLabel}
                           </div>

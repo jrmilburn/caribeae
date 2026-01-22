@@ -253,7 +253,7 @@ export async function createEnrolmentsFromSelection(
           { templateId: { in: templateIds } },
           { classAssignments: { some: { templateId: { in: templateIds } } } },
         ],
-        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED, EnrolmentStatus.CHANGEOVER] },
       },
       select: {
         id: true,

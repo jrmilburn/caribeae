@@ -13,7 +13,7 @@ export async function autoAssignWeeklyEnrolmentsToTemplate(params: {
 
   const candidates = await params.tx.enrolment.findMany({
     where: {
-      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED, EnrolmentStatus.CHANGEOVER] },
       startDate: { lte: today },
       OR: [{ endDate: null }, { endDate: { gte: today } }],
       plan: { is: { billingType: BillingType.PER_WEEK } },

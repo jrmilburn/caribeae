@@ -309,6 +309,7 @@ enum AttendanceStatus {
 enum EnrolmentStatus {
   ACTIVE
   PAUSED
+  CHANGEOVER
   CANCELLED
 }
 

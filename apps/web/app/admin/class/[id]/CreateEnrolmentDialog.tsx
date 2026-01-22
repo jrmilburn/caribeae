@@ -315,6 +315,7 @@ export function CreateEnrolmentDialog({
               <SelectContent>
                 <SelectItem value="ACTIVE">ACTIVE</SelectItem>
                 <SelectItem value="PAUSED">PAUSED</SelectItem>
+                <SelectItem value="CHANGEOVER">CHANGEOVER</SelectItem>
                 <SelectItem value="CANCELLED">CANCELLED</SelectItem>
               </SelectContent>
             </Select>
