@@ -1,7 +1,7 @@
 "use server";
 
 import { addDays } from "date-fns";
-import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type EnrolmentPlan, type Invoice } from "@prisma/client";
+import { BillingType, InvoiceLineItemKind, InvoiceStatus, type EnrolmentPlan, type Invoice } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -16,6 +16,7 @@ import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
+import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -38,20 +39,6 @@ function blockSize(plan: EnrolmentPlan | null) {
   if (!plan) return 0;
   const size = resolveBlockLength(plan.blockClassCount);
   return size > 0 ? size : 0;
-}
-
-function hasUnpaidCoverage(enrolment: { paidThroughDate: Date | null; endDate: Date | null }) {
-  if (!enrolment.paidThroughDate) return true;
-  if (!enrolment.endDate) return false;
-  return enrolment.paidThroughDate < enrolment.endDate;
-}
-
-function isPaymentEligibleStatus(enrolment: { status: EnrolmentStatus; paidThroughDate: Date | null; endDate: Date | null }) {
-  if (enrolment.status === EnrolmentStatus.ACTIVE) return true;
-  if (enrolment.status === EnrolmentStatus.CHANGEOVER) {
-    return hasUnpaidCoverage(enrolment);
-  }
-  return false;
 }
 
 export async function payAheadAndPay(input: PayAheadAndPayInput) {
@@ -102,7 +89,13 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       if (item.customBlockLength != null && enrolment.plan.billingType !== BillingType.PER_CLASS) {
         throw new Error("Custom block length is only available for per-class plans.");
       }
-      if (!isPaymentEligibleStatus(enrolment)) {
+      if (
+        !enrolmentIsPayable({
+          status: enrolment.status,
+          paidThroughDate: enrolment.paidThroughDate ?? null,
+          endDate: enrolment.endDate ?? null,
+        })
+      ) {
         throw new Error("Only active or unpaid changeover enrolments can be billed ahead.");
       }
 

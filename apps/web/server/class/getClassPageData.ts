@@ -10,6 +10,7 @@ import { parseDateKey } from "@/lib/dateKey";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/class/[id]/types";
 import { getClassOccurrenceRoster } from "./getClassOccurrenceRoster";
+import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
 
 export async function getClassPageData(templateId: string, requestedDateKey: string | undefined): Promise<ClassPageData | null> {
   await getOrCreateUser();
@@ -86,7 +87,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
       selectedDate
         ? prisma.enrolment.findMany({
             where: {
-              status: { not: EnrolmentStatus.CANCELLED },
+              status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
               startDate: { lte: selectedDate },
               OR: [{ endDate: null }, { endDate: { gte: selectedDate } }],
               AND: [
@@ -109,6 +110,10 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
         : [],
     ]);
 
+  const visibleCancellationCandidates = selectedDate
+    ? cancellationCandidates.filter((enrolment) => enrolmentIsVisibleOnClass(enrolment, selectedDate))
+    : [];
+
   const roster =
     selectedDateKey && selectedDate ? await getClassOccurrenceRoster(templateId, selectedDateKey) : null;
 
@@ -126,7 +131,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     attendance: roster?.attendance ?? [],
     cancellation,
     cancellationCredits,
-    cancellationCandidates,
+    cancellationCandidates: visibleCancellationCandidates,
     teachers,
     levels,
     students,
