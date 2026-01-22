@@ -10,6 +10,8 @@ import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolm
 import { normalizeCoverageEndForStorage } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
+import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -85,8 +87,10 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       include: {
         plan: true,
         student: { select: { familyId: true } },
-        template: { select: { id: true, dayOfWeek: true, name: true, levelId: true } },
-        classAssignments: { include: { template: { select: { id: true, dayOfWeek: true, levelId: true } } } },
+        template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } },
+        classAssignments: {
+          include: { template: { select: { id: true, dayOfWeek: true, startTime: true, levelId: true } } },
+        },
       },
     });
 
@@ -221,6 +225,37 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         throw new Error("PER_CLASS plans require blockClassCount to be greater than zero when provided.");
       }
 
+      const assignedTemplates = enrolment.classAssignments.length
+        ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
+        : enrolment.template
+          ? [enrolment.template]
+          : [];
+      const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
+      if (anchorTemplate?.dayOfWeek != null) {
+        const templateIds = assignedTemplates.map((template) => template.id);
+        const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+        const holidays = await tx.holiday.findMany({
+          where: buildHolidayScopeWhere({ templateIds, levelIds }),
+          select: { startDate: true, endDate: true, levelId: true, templateId: true },
+        });
+        const coverageRange = computeBlockPayAheadCoverage({
+          currentPaidThroughDate: enrolment.paidThroughDate ?? null,
+          enrolmentStartDate: enrolment.startDate,
+          enrolmentEndDate: enrolment.endDate ?? null,
+          classTemplate: { dayOfWeek: anchorTemplate.dayOfWeek, startTime: anchorTemplate.startTime ?? null },
+          assignedTemplates: assignedTemplates.map((template) => ({
+            dayOfWeek: template.dayOfWeek,
+            startTime: template.startTime ?? null,
+          })),
+          blocksPurchased: 1,
+          blockClassCount: planBlockLength,
+          creditsPurchased: creditsToAdd,
+          holidays,
+        });
+        coverageStart = coverageRange.coverageStart;
+        coverageEnd = coverageRange.coverageEnd;
+      }
+
       creditsPurchased = creditsToAdd;
       await tx.enrolmentCreditEvent.create({
         data: {
@@ -269,7 +304,15 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       data: {
         invoiceId: receiptInvoice.id,
         kind: InvoiceLineItemKind.ENROLMENT,
-        description: plan.name,
+        description:
+          customBlockLength != null && customBlockLength !== planBlockLength
+            ? `${plan.name} · ${buildCustomPayAheadNote({
+                totalClasses: creditsPurchased ?? creditsToAdd,
+                coverageStart,
+                coverageEnd,
+                perClassPriceCents: pricing.perClassPriceCents,
+              })}`
+            : plan.name,
         quantity: 1,
         unitPriceCents: payment.amountCents,
         amountCents: payment.amountCents,

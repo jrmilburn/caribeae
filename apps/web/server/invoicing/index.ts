@@ -17,6 +17,7 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -158,13 +159,25 @@ export async function createInitialInvoiceForEnrolment(
         ? blockPricing.totalCents
         : enrolment.plan.priceCents;
 
+    const customNote =
+      enrolment.plan.billingType === BillingType.PER_CLASS &&
+      options?.customBlockLength != null &&
+      options.customBlockLength !== planBlockLength &&
+      blockPricing
+        ? buildCustomPayAheadNote({
+            totalClasses: effectiveBlockLength * blocksToBill,
+            coverageStart: coverage.coverageStart,
+            coverageEnd: coverage.coverageEnd,
+            perClassPriceCents: blockPricing.perClassPriceCents,
+          })
+        : null;
     const invoice = await createInvoiceWithLineItems({
       familyId: enrolment.student.familyId,
       enrolmentId: enrolment.id,
       lineItems: [
         {
           kind: InvoiceLineItemKind.ENROLMENT,
-          description: enrolment.plan.name,
+          description: customNote ? `${enrolment.plan.name} · ${customNote}` : enrolment.plan.name,
           quantity: blocksToBill,
           unitPriceCents: enrolmentUnitPrice,
         },
