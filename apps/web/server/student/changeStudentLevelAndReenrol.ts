@@ -423,7 +423,7 @@ export async function changeStudentLevelAndReenrol(
         creditsBalanceCached: accounting.creditsRemaining ?? null,
         paidThroughDateComputed: accounting.paidThroughDate ?? null,
       },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
     await tx.enrolment.update({
