@@ -307,7 +307,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         description:
           customBlockLength != null && customBlockLength !== planBlockLength
             ? `${plan.name} · ${buildCustomPayAheadNote({
-                totalClasses: creditsPurchased ?? creditsToAdd,
+                totalClasses: creditsPurchased ?? customBlockLength ?? planBlockLength,
                 coverageStart,
                 coverageEnd,
                 perClassPriceCents: pricing.perClassPriceCents,
