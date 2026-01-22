@@ -14,6 +14,7 @@ import { enrolmentWithPlanInclude, countBlockCoverageBetweenDates, resolveCovera
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
+import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
@@ -361,7 +362,7 @@ export async function getUnpaidFamiliesSummary() {
       paidThroughDate: true,
       creditsRemaining: true,
       creditsBalanceCached: true,
-      plan: { select: { billingType: true, priceCents: true } },
+      plan: { select: { billingType: true, priceCents: true, sessionsPerWeek: true, blockClassCount: true } },
       student: { select: { familyId: true, family: { select: { id: true, name: true } } } },
     },
   });
@@ -394,9 +395,15 @@ export async function getUnpaidFamiliesSummary() {
       };
 
     const price = enrolment.plan?.priceCents ?? 0;
-    const paidThrough = enrolment.plan?.billingType === BillingType.PER_WEEK ? asDate(enrolment.paidThroughDate) : null;
+    const paidThrough = asDate(enrolment.paidThroughDate);
+    const unpaidBlocks = calculateUnpaidBlocks({
+      paidThroughDate: paidThrough,
+      sessionsPerWeek: enrolment.plan?.sessionsPerWeek ?? null,
+      blockClassCount: enrolment.plan?.blockClassCount ?? null,
+      today: now,
+    });
 
-    existing.amountDueCents += price;
+    existing.amountDueCents += unpaidBlocks * price;
     existing.overdueEnrolments += 1;
     if (paidThrough) {
       if (!existing.dueSince || paidThrough.getTime() < existing.dueSince.getTime()) {

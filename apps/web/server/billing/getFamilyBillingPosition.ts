@@ -2,13 +2,12 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { differenceInCalendarDays, isAfter } from "date-fns";
+import { differenceInCalendarDays } from "date-fns";
 import {
   BillingType,
   PaymentStatus,
   PrismaClient,
   type Prisma,
-  type EnrolmentPlan,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -18,6 +17,7 @@ import { getBillingStatusForEnrolments } from "@/server/billing/enrolmentBilling
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
+import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -32,8 +32,8 @@ type EntitlementStatus = "AHEAD" | "DUE_SOON" | "OVERDUE" | "UNKNOWN";
 function evaluateEntitlement(params: {
   billingType: BillingType | null | undefined;
   paidThroughDate: Date | null;
-  creditsRemaining: number | null;
-  thresholdCredits: number;
+  sessionsPerWeek: number | null;
+  blockClassCount: number | null;
 }) {
   /**
    * Status rules (kept deterministic and documented):
@@ -41,41 +41,25 @@ function evaluateEntitlement(params: {
    *   - OVERDUE when missing OR the paid-through date is before today.
    *   - DUE_SOON when the paid-through date is within the next 14 days (inclusive).
    *   - AHEAD when the paid-through date is more than 14 days away.
-   * - Credit-based plans rely on enrolment.creditsRemaining (includes adjustments and paid invoices).
-   *   - OVERDUE when creditsRemaining <= 0.
-   *   - DUE_SOON when creditsRemaining is positive but at or below one block’s worth of credits.
-   *   - AHEAD when more than a block is available.
+   * - Credit-based plans follow the same paid-through logic to match enrolment owing.
    */
   const today = brisbaneStartOfDay(new Date());
 
-  if (params.billingType === BillingType.PER_WEEK) {
-    const paidThrough = params.paidThroughDate ? brisbaneStartOfDay(params.paidThroughDate) : null;
-    if (!paidThrough || isAfter(today, paidThrough)) return { status: "OVERDUE" as EntitlementStatus };
-    const daysAhead = differenceInCalendarDays(paidThrough, today);
-    if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };
-    return { status: "AHEAD" as EntitlementStatus };
-  }
+  if (!params.billingType) return { status: "UNKNOWN" as EntitlementStatus };
 
-  if (params.billingType === BillingType.PER_CLASS) {
-    const paidThrough = params.paidThroughDate ? brisbaneStartOfDay(params.paidThroughDate) : null;
-    if (paidThrough && !isAfter(today, paidThrough)) {
-      const daysAhead = differenceInCalendarDays(paidThrough, today);
-      if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };
-      return { status: "AHEAD" as EntitlementStatus };
-    }
-    const credits = params.creditsRemaining ?? 0;
-    if (credits <= 0) return { status: "OVERDUE" as EntitlementStatus };
-    if (credits <= Math.max(params.thresholdCredits, 1)) return { status: "DUE_SOON" as EntitlementStatus };
-    return { status: "AHEAD" as EntitlementStatus };
-  }
+  const unpaidBlocks = calculateUnpaidBlocks({
+    paidThroughDate: params.paidThroughDate,
+    sessionsPerWeek: params.sessionsPerWeek,
+    blockClassCount: params.blockClassCount,
+    today,
+  });
+  if (unpaidBlocks > 0) return { status: "OVERDUE" as EntitlementStatus };
 
-  return { status: "UNKNOWN" as EntitlementStatus };
-}
-
-function blockSize(plan: EnrolmentPlan | null | undefined) {
-  if (!plan) return 0;
-  const size = plan.blockClassCount ?? 1;
-  return size > 0 ? size : 0;
+  const paidThrough = params.paidThroughDate ? brisbaneStartOfDay(params.paidThroughDate) : null;
+  if (!paidThrough) return { status: "UNKNOWN" as EntitlementStatus };
+  const daysAhead = differenceInCalendarDays(paidThrough, today);
+  if (daysAhead <= 14) return { status: "DUE_SOON" as EntitlementStatus };
+  return { status: "AHEAD" as EntitlementStatus };
 }
 
 export async function getFamilyBillingPosition(familyId: string, options?: { client?: PrismaClientOrTx }) {
@@ -191,13 +175,11 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       const creditsRemaining = snapshot?.remainingCredits ?? enrolment.creditsRemaining ?? 0;
       const latestCoverageEnd = latestCoverageMap.get(enrolment.id) ?? null;
       const projectedCoverageEnd = paidThroughDate ?? snapshot?.paidThroughDate ?? latestCoverageEnd;
-      const thresholdCredits = blockSize(plan);
-
       const { status } = evaluateEntitlement({
         billingType: plan?.billingType ?? null,
         paidThroughDate,
-        creditsRemaining,
-        thresholdCredits,
+        sessionsPerWeek: plan?.sessionsPerWeek ?? null,
+        blockClassCount: plan?.blockClassCount ?? null,
       });
 
       const assignments = enrolment.classAssignments?.length
@@ -243,7 +225,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   const enrolmentsFlat = students.flatMap((s : any) => s.enrolments);
   const summary = computeFamilyBillingSummary({
     enrolments: enrolmentsFlat,
-    openInvoices: openInvoicesWithBalance,
     today: new Date(),
   });
   const latestPaidThroughDates = enrolmentsFlat
@@ -275,7 +256,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents: openInvoicesWithBalance.reduce((sum : any, inv : any) => sum + inv.balanceCents, 0),
+    outstandingCents: summary.totalOwingCents,
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {
