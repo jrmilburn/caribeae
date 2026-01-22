@@ -20,6 +20,7 @@ import { payAheadAndPay } from "@/server/billing/payAheadAndPay";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -61,20 +62,6 @@ function normalizeHolidays(holidays: HolidayRange[]) {
 
 function resolveCurrentPaidThrough(enrolment: Enrolment) {
   return asDate(enrolment.paidThroughDate);
-}
-
-function hasUnpaidCoverage(enrolment: Enrolment) {
-  const paidThrough = resolveCurrentPaidThrough(enrolment);
-  const endDate = asDate(enrolment.endDate);
-  if (!paidThrough) return true;
-  if (!endDate) return false;
-  return paidThrough < endDate;
-}
-
-function isPaymentEligible(enrolment: Enrolment) {
-  if (enrolment.status === "ACTIVE") return true;
-  if (enrolment.status === "CHANGEOVER") return hasUnpaidCoverage(enrolment);
-  return false;
 }
 
 function projectPaidAhead(
@@ -163,7 +150,14 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
 
   const enrolments = React.useMemo(() => summary?.enrolments ?? [], [summary?.enrolments]);
   const paymentEligibleEnrolments = React.useMemo(
-    () => enrolments.filter((enrolment : any) => isPaymentEligible(enrolment)),
+    () =>
+      enrolments.filter((enrolment : any) =>
+        enrolmentIsPayable({
+          status: enrolment.status,
+          paidThroughDate: enrolment.paidThroughDate ?? null,
+          endDate: enrolment.endDate ?? null,
+        })
+      ),
     [enrolments]
   );
 

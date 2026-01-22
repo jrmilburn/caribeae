@@ -5,7 +5,6 @@
 import { differenceInCalendarDays } from "date-fns";
 import {
   BillingType,
-  EnrolmentStatus,
   PaymentStatus,
   PrismaClient,
   type Prisma,
@@ -19,6 +18,7 @@ import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
+import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -26,20 +26,6 @@ function asDate(value?: Date | string | null) {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function hasUnpaidCoverage(enrolment: { paidThroughDate: Date | null; endDate: Date | null }) {
-  if (!enrolment.paidThroughDate) return true;
-  if (!enrolment.endDate) return false;
-  return enrolment.paidThroughDate < enrolment.endDate;
-}
-
-function isPaymentEligibleEnrolment(enrolment: { status: EnrolmentStatus; paidThroughDate: Date | null; endDate: Date | null }) {
-  if (enrolment.status === EnrolmentStatus.ACTIVE) return true;
-  if (enrolment.status === EnrolmentStatus.CHANGEOVER) {
-    return hasUnpaidCoverage(enrolment);
-  }
-  return false;
 }
 
 type EntitlementStatus = "AHEAD" | "DUE_SOON" | "OVERDUE" | "UNKNOWN";
@@ -185,7 +171,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   const students = family.students.map((student : any) => {
     const enrolments = (student.enrolments ?? [])
       .filter((enrolment: any) =>
-        isPaymentEligibleEnrolment({
+        enrolmentIsPayable({
           status: enrolment.status,
           paidThroughDate: asDate(enrolment.paidThroughDate),
           endDate: asDate(enrolment.endDate),

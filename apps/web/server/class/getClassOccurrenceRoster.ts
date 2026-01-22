@@ -7,6 +7,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { ClassOccurrenceRoster } from "@/app/admin/class/[id]/types";
+import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
 
 type ContextOptions = { skipAuth?: boolean; includeAttendance?: boolean };
 
@@ -75,9 +76,7 @@ export function filterEligibleEnrolmentsForOccurrence(
   const roster = new Map<string, EligibleEnrolmentCandidate>();
 
   for (const enrolment of candidates) {
-    if (enrolment.status === EnrolmentStatus.CANCELLED) continue;
-    if (isAfter(enrolment.startDate, date)) continue;
-    if (enrolment.endDate && isAfter(date, enrolment.endDate)) continue;
+    if (!enrolmentIsVisibleOnClass(enrolment, date)) continue;
     const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
     const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
     const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
@@ -110,7 +109,7 @@ async function fetchEnrolmentCandidates(
 ) {
   return client.enrolment.findMany({
     where: {
-      status: { not: EnrolmentStatus.CANCELLED },
+      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
       startDate: { lte: date },
       OR: [{ endDate: null }, { endDate: { gte: date } }],
       AND: [

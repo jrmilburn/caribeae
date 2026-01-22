@@ -1,11 +1,12 @@
 "use server";
 
-import { PaymentStatus } from "@prisma/client";
+import { EnrolmentStatus, PaymentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
+import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 
 export async function getFamilyBillingData(familyId: string) {
   await getOrCreateUser();
@@ -48,11 +49,14 @@ export async function getFamilyBillingData(familyId: string) {
       },
     }),
     prisma.enrolment.findMany({
-      where: { student: { familyId }, status: "ACTIVE", planId: { not: null } },
+      where: { student: { familyId }, status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] }, planId: { not: null } },
       select: {
         id: true,
         student: { select: { name: true } },
         plan: { select: { name: true, billingType: true, priceCents: true, blockClassCount: true } },
+        status: true,
+        paidThroughDate: true,
+        endDate: true,
       },
       orderBy: { startDate: "asc" },
     }),
@@ -72,10 +76,18 @@ export async function getFamilyBillingData(familyId: string) {
     }),
   ]);
 
+  const payableEnrolments = enrolments.filter((enrolment) =>
+    enrolmentIsPayable({
+      status: enrolment.status,
+      paidThroughDate: enrolment.paidThroughDate,
+      endDate: enrolment.endDate,
+    })
+  );
+
   return {
     openInvoices,
     payments,
-    enrolments,
+    enrolments: payableEnrolments,
     coverageAudits,
   };
 }
