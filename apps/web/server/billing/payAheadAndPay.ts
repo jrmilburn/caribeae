@@ -40,6 +40,20 @@ function blockSize(plan: EnrolmentPlan | null) {
   return size > 0 ? size : 0;
 }
 
+function hasUnpaidCoverage(enrolment: { paidThroughDate: Date | null; endDate: Date | null }) {
+  if (!enrolment.paidThroughDate) return true;
+  if (!enrolment.endDate) return false;
+  return enrolment.paidThroughDate < enrolment.endDate;
+}
+
+function isPaymentEligibleStatus(enrolment: { status: EnrolmentStatus; paidThroughDate: Date | null; endDate: Date | null }) {
+  if (enrolment.status === EnrolmentStatus.ACTIVE) return true;
+  if (enrolment.status === EnrolmentStatus.CHANGEOVER) {
+    return hasUnpaidCoverage(enrolment);
+  }
+  return false;
+}
+
 export async function payAheadAndPay(input: PayAheadAndPayInput) {
   await getOrCreateUser();
   await requireAdmin();
@@ -88,8 +102,8 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       if (item.customBlockLength != null && enrolment.plan.billingType !== BillingType.PER_CLASS) {
         throw new Error("Custom block length is only available for per-class plans.");
       }
-      if (enrolment.status !== EnrolmentStatus.ACTIVE) {
-        throw new Error("Only active enrolments can be billed ahead.");
+      if (!isPaymentEligibleStatus(enrolment)) {
+        throw new Error("Only active or unpaid changeover enrolments can be billed ahead.");
       }
 
       const plan = enrolment.plan;

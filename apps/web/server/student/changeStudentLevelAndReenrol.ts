@@ -334,7 +334,7 @@ export async function changeStudentLevelAndReenrol(
     const existingEnrolments = await tx.enrolment.findMany({
       where: {
         studentId: input.studentId,
-        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED, EnrolmentStatus.CHANGEOVER] },
       },
       include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });

@@ -213,7 +213,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
           { templateId: { in: payload.templateIds } },
           { classAssignments: { some: { templateId: { in: payload.templateIds } } } },
         ],
-        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED, EnrolmentStatus.CHANGEOVER] },
       },
       select: { id: true, templateId: true, startDate: true, endDate: true, status: true },
     });

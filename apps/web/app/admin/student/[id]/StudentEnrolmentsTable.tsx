@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { MoreHorizontal } from "lucide-react";
 
 import type { ClientStudentWithRelations } from "./types";
@@ -147,7 +148,11 @@ export function StudentEnrolmentsTable({
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>{enrolment.status}</TableCell>
+                  <TableCell>
+                    <Badge variant={enrolment.status === "CHANGEOVER" ? "outline" : "secondary"}>
+                      {enrolment.status === "CHANGEOVER" ? "Changeover" : enrolment.status}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{fmtDate(enrolment.startDate)}</TableCell>
                   <TableCell>{fmtDate(enrolment.endDate ?? null)}</TableCell>
                   <TableCell className="text-right">
