@@ -25,7 +25,7 @@ import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
-import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
+import { computeBlockCoverageRange, listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
@@ -41,100 +41,142 @@ type ChangeStudentLevelInput = {
 };
 
 type EnrolmentWithRelations = Prisma.EnrolmentGetPayload<{
-  include: { plan: true; template: true };
+  include: { plan: true; template: true; classAssignments: { include: { template: true } } };
 }>;
 
-type InvoiceWithCoverage = Prisma.InvoiceGetPayload<{
-  select: {
-    id: true;
-    enrolmentId: true;
-    amountCents: true;
-    amountPaidCents: true;
-    status: true;
-    coverageStart: true;
-    coverageEnd: true;
-  };
-}>;
+type CreditResult = {
+  creditCents: number;
+  creditUnits: number;
+};
+
+type TemplateWithScope = {
+  id: string;
+  dayOfWeek: number | null;
+  levelId?: string | null;
+};
+
+function resolveAssignedTemplates(enrolment: EnrolmentWithRelations): TemplateWithScope[] {
+  if (enrolment.classAssignments.length) {
+    return enrolment.classAssignments
+      .map((assignment) => assignment.template)
+      .filter((template): template is NonNullable<typeof template> => Boolean(template))
+      .map((template) => ({
+        id: template.id,
+        dayOfWeek: template.dayOfWeek ?? null,
+        levelId: template.levelId ?? null,
+      }));
+  }
+  return enrolment.template
+    ? [{
+        id: enrolment.template.id,
+        dayOfWeek: enrolment.template.dayOfWeek ?? null,
+        levelId: enrolment.template.levelId ?? null,
+      }]
+    : [];
+}
+
+function filterHolidaysForTemplate(
+  holidays: Array<{ startDate: Date; endDate: Date; levelId?: string | null; templateId?: string | null }>,
+  template: TemplateWithScope
+) {
+  return holidays.filter((holiday) => {
+    if (holiday.templateId && holiday.templateId !== template.id) return false;
+    if (holiday.levelId && holiday.levelId !== template.levelId) return false;
+    return true;
+  });
+}
 
 async function computeWeeklyCredit(params: {
   enrolment: EnrolmentWithRelations;
   effectiveDate: Date;
-  invoice?: InvoiceWithCoverage | null;
+  paidThroughDate?: Date | null;
   client: Prisma.TransactionClient;
-}) {
-  if (!params.enrolment.plan || !params.enrolment.template || !params.invoice) return 0;
-  const coverageStart = params.invoice.coverageStart ? startOfDay(params.invoice.coverageStart) : null;
-  const coverageEnd = params.invoice.coverageEnd ? startOfDay(params.invoice.coverageEnd) : null;
-  if (!coverageStart || !coverageEnd) return 0;
+}): Promise<CreditResult> {
+  if (!params.enrolment.plan) return { creditCents: 0, creditUnits: 0 };
+  const paidThroughDate = params.paidThroughDate ? startOfDay(params.paidThroughDate) : null;
+  const unusedStart = startOfDay(params.effectiveDate);
+  if (!paidThroughDate || isBefore(paidThroughDate, unusedStart)) {
+    return { creditCents: 0, creditUnits: 0 };
+  }
 
-  const boundary = startOfDay(params.effectiveDate);
-  if (isBefore(coverageEnd, boundary)) return 0;
+  const templates = resolveAssignedTemplates(params.enrolment);
+  if (!templates.length) return { creditCents: 0, creditUnits: 0 };
 
-  const holidays = await params.client.holiday.findMany({
-    where: {
-      startDate: { lte: coverageEnd },
-      endDate: { gte: coverageStart },
-      ...buildHolidayScopeWhere({
-        templateIds: [params.enrolment.template.id],
-        levelIds: [params.enrolment.template.levelId ?? null],
-      }),
-    },
-    orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
-  });
+  const templateIds = templates.map((template) => template.id);
+  const levelIds = templates.map((template) => template.levelId ?? null);
 
-  const cancellations = await params.client.classCancellation.findMany({
-    where: {
-      templateId: params.enrolment.template.id,
-      date: { gte: coverageStart, lte: coverageEnd },
-    },
-    select: { date: true },
-  });
+  const [holidays, cancellations] = await Promise.all([
+    params.client.holiday.findMany({
+      where: {
+        startDate: { lte: paidThroughDate },
+        endDate: { gte: unusedStart },
+        ...buildHolidayScopeWhere({ templateIds, levelIds }),
+      },
+      select: { startDate: true, endDate: true, levelId: true, templateId: true },
+      orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
+    }),
+    params.client.classCancellation.findMany({
+      where: {
+        templateId: { in: templateIds },
+        date: { gte: unusedStart, lte: paidThroughDate },
+      },
+      select: { templateId: true, date: true },
+    }),
+  ]);
 
-  const occurrences = listScheduledOccurrences({
-    startDate: coverageStart,
-    endDate: coverageEnd,
-    classTemplate: { dayOfWeek: params.enrolment.template.dayOfWeek },
-    holidays,
-    cancellations: cancellations.map((c) => c.date),
-  });
+  let totalOccurrences = 0;
+  for (const template of templates) {
+    const templateHolidays = filterHolidaysForTemplate(holidays, template);
+    const templateCancellations = cancellations
+      .filter((cancellation) => cancellation.templateId === template.id)
+      .map((cancellation) => cancellation.date);
+    const occurrences = listScheduledOccurrences({
+      startDate: unusedStart,
+      endDate: paidThroughDate,
+      classTemplate: { dayOfWeek: template.dayOfWeek },
+      holidays: templateHolidays,
+      cancellations: templateCancellations,
+    });
+    totalOccurrences += occurrences.length;
+  }
 
-  const totalLessons = occurrences.length;
-  if (totalLessons <= 0) return 0;
-
-  const lessonsCompleted = occurrences.filter((date) => isBefore(date, boundary)).length;
-  const remainingLessons = Math.max(totalLessons - lessonsCompleted, 0);
-  if (remainingLessons <= 0) return 0;
-
-  const paidBasis = Math.max(params.invoice?.amountPaidCents ?? params.invoice?.amountCents ?? 0, 0);
-  if (paidBasis <= 0) return 0;
-
-  return Math.round((paidBasis / totalLessons) * remainingLessons);
+  if (totalOccurrences <= 0) return { creditCents: 0, creditUnits: 0 };
+  const sessionsPerWeek = params.enrolment.plan.sessionsPerWeek && params.enrolment.plan.sessionsPerWeek > 0
+    ? params.enrolment.plan.sessionsPerWeek
+    : 1;
+  const perSession = params.enrolment.plan.priceCents / sessionsPerWeek;
+  return {
+    creditCents: Math.round(perSession * totalOccurrences),
+    creditUnits: totalOccurrences,
+  };
 }
 
 async function computeCreditForEnrolment(params: {
   enrolment: EnrolmentWithRelations;
   snapshot: Awaited<ReturnType<typeof getEnrolmentBillingStatus>>;
   effectiveDate: Date;
-  invoice?: InvoiceWithCoverage | null;
   client: Prisma.TransactionClient;
-}) {
-  if (!params.enrolment.plan) return 0;
+}): Promise<CreditResult> {
+  if (!params.enrolment.plan) return { creditCents: 0, creditUnits: 0 };
   if (params.enrolment.plan.billingType === BillingType.PER_WEEK) {
     return computeWeeklyCredit({
       enrolment: params.enrolment,
       effectiveDate: params.effectiveDate,
-      invoice: params.invoice,
+      paidThroughDate: params.snapshot.paidThroughDate ?? params.enrolment.paidThroughDate,
       client: params.client,
     });
   }
 
   const remainingCredits = params.snapshot.remainingCredits ?? params.enrolment.creditsRemaining ?? 0;
-  if (!remainingCredits || remainingCredits <= 0) return 0;
+  if (!remainingCredits || remainingCredits <= 0) return { creditCents: 0, creditUnits: 0 };
   const blockSize = params.enrolment.plan.blockClassCount && params.enrolment.plan.blockClassCount > 0
     ? params.enrolment.plan.blockClassCount
     : 1;
   const perCredit = params.enrolment.plan.priceCents / blockSize;
-  return Math.round(remainingCredits * perCredit);
+  return {
+    creditCents: Math.round(remainingCredits * perCredit),
+    creditUnits: remainingCredits,
+  };
 }
 
 type ChangeStudentLevelResult =
@@ -294,61 +336,42 @@ export async function changeStudentLevelAndReenrol(
         studentId: input.studentId,
         status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
       },
-      include: { plan: true, template: true },
-    });
-
-    const existingInvoices = existingEnrolments.length
-      ? await tx.invoice.findMany({
-          where: {
-            enrolmentId: { in: existingEnrolments.map((e) => e.id) },
-            status: { not: InvoiceStatus.VOID },
-          },
-          select: {
-            id: true,
-            enrolmentId: true,
-            amountCents: true,
-            amountPaidCents: true,
-            status: true,
-            coverageStart: true,
-            coverageEnd: true,
-          },
-          orderBy: [{ issuedAt: "desc" }],
-        })
-      : [];
-
-    const invoiceByEnrolment = new Map<string, InvoiceWithCoverage | null>();
-    existingInvoices.forEach((inv) => {
-      if (!inv.enrolmentId) return;
-      const existing = invoiceByEnrolment.get(inv.enrolmentId);
-      if (!existing) {
-        invoiceByEnrolment.set(inv.enrolmentId, inv);
-      }
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
     let totalCreditCents = 0;
+    let totalCreditUnits = 0;
     for (const enrolment of existingEnrolments) {
       const snapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: effectiveDate });
-      const invoice = invoiceByEnrolment.get(enrolment.id) ?? null;
-      totalCreditCents += await computeCreditForEnrolment({
+      const credit = await computeCreditForEnrolment({
         enrolment,
         snapshot,
         effectiveDate,
-        invoice,
         client: tx,
       });
+      totalCreditCents += credit.creditCents;
+      totalCreditUnits += credit.creditUnits;
     }
 
     const endBoundary = addDays(effectiveDate, -1);
+    const today = startOfDay(new Date());
     for (const enrolment of existingEnrolments) {
-      const alignedEnd = isBefore(endBoundary, startOfDay(enrolment.startDate))
-        ? startOfDay(enrolment.startDate)
-        : endBoundary;
+      const enrolmentStart = startOfDay(enrolment.startDate);
+      const enrolmentEnd = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
+      let alignedEnd = endBoundary;
+      if (enrolmentEnd && isBefore(enrolmentEnd, alignedEnd)) {
+        alignedEnd = enrolmentEnd;
+      }
+      if (isBefore(alignedEnd, enrolmentStart)) {
+        alignedEnd = enrolmentStart;
+      }
+      const shouldCancel = isBefore(alignedEnd, today);
       await tx.enrolment.update({
         where: { id: enrolment.id },
         data: {
           endDate: alignedEnd,
-          status: EnrolmentStatus.CANCELLED,
-          cancelledAt: enrolment.cancelledAt ?? new Date(),
+          status: shouldCancel ? EnrolmentStatus.CANCELLED : enrolment.status,
+          cancelledAt: shouldCancel ? enrolment.cancelledAt ?? new Date() : null,
         },
       });
     }
@@ -400,7 +423,7 @@ export async function changeStudentLevelAndReenrol(
         creditsBalanceCached: accounting.creditsRemaining ?? null,
         paidThroughDateComputed: accounting.paidThroughDate ?? null,
       },
-      include: { plan: true, template: true },
+      include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
     await tx.enrolment.update({
@@ -422,6 +445,76 @@ export async function changeStudentLevelAndReenrol(
 
     const enrolments: EnrolmentWithRelations[] = [enrolment];
 
+    const newPlanUnitPriceCents = plan.billingType === BillingType.PER_WEEK
+      ? Math.round(plan.priceCents / (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1))
+      : Math.round(
+          plan.priceCents /
+            (plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1)
+        );
+    const priorUnitPriceCents = totalCreditUnits > 0 ? totalCreditCents / totalCreditUnits : 0;
+    const applyCreditToCoverage = totalCreditCents > 0 && newPlanUnitPriceCents > 0
+      && newPlanUnitPriceCents <= priorUnitPriceCents;
+
+    let remainingCreditCents = totalCreditCents;
+    if (applyCreditToCoverage) {
+      const unitsToApply = Math.floor(totalCreditCents / newPlanUnitPriceCents);
+      if (unitsToApply > 0) {
+        if (plan.billingType === BillingType.PER_CLASS) {
+          await tx.enrolmentCreditEvent.create({
+            data: {
+              enrolmentId: enrolment.id,
+              type: "MANUAL_ADJUST",
+              creditsDelta: unitsToApply,
+              occurredOn: startOfDay(effectiveDate),
+              note: "Level change credit",
+            },
+          });
+          await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+        } else {
+          const templateIdsForPlan = templates.map((template) => template.id);
+          const levelIdsForPlan = templates.map((template) => template.levelId ?? null);
+          const horizonWeeks = Math.max(
+            1,
+            Math.ceil(unitsToApply / (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1)) + 4
+          );
+          const horizonEnd = enrolment.endDate
+            ? startOfDay(enrolment.endDate)
+            : addDays(startOfDay(enrolment.startDate), horizonWeeks * 7);
+          const holidays = await tx.holiday.findMany({
+            where: {
+              startDate: { lte: horizonEnd },
+              endDate: { gte: startOfDay(enrolment.startDate) },
+              ...buildHolidayScopeWhere({ templateIds: templateIdsForPlan, levelIds: levelIdsForPlan }),
+            },
+            select: { startDate: true, endDate: true },
+          });
+          const coverage = computeBlockCoverageRange({
+            currentPaidThroughDate: enrolment.paidThroughDate,
+            enrolmentStartDate: enrolment.startDate,
+            enrolmentEndDate: enrolment.endDate ?? null,
+            classTemplate: {
+              dayOfWeek: anchorTemplate?.dayOfWeek ?? templates[0]?.dayOfWeek ?? null,
+            },
+            assignedTemplates: templates.map((template) => ({ dayOfWeek: template.dayOfWeek ?? null })),
+            blockClassCount: 1,
+            creditsPurchased: unitsToApply,
+            holidays,
+          });
+          if (coverage.coverageEnd) {
+            await tx.enrolment.update({
+              where: { id: enrolment.id },
+              data: {
+                paidThroughDate: coverage.coverageEnd,
+                paidThroughDateComputed: coverage.coverageEnd,
+              },
+            });
+            await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
+          }
+        }
+        remainingCreditCents -= unitsToApply * newPlanUnitPriceCents;
+      }
+    }
+
     const newInvoices = enrolments.length
       ? await tx.invoice.findMany({
           where: { enrolmentId: { in: enrolments.map((e) => e.id) } },
@@ -434,16 +527,21 @@ export async function changeStudentLevelAndReenrol(
         })
       : [];
 
+    const creditToBalanceCents = Math.max(
+      applyCreditToCoverage ? remainingCreditCents : totalCreditCents,
+      0
+    );
+
     const creditInvoice =
-      totalCreditCents > 0
+      creditToBalanceCents > 0
         ? await createInvoiceWithLineItems({
             familyId: student.familyId,
             lineItems: [
               {
                 kind: InvoiceLineItemKind.ADJUSTMENT,
-                description: "Credit for unused enrolment after level change",
+                description: "Level change credit",
                 quantity: 1,
-                amountCents: -totalCreditCents,
+                amountCents: -creditToBalanceCents,
               },
             ],
             status: InvoiceStatus.PAID,
@@ -462,8 +560,8 @@ export async function changeStudentLevelAndReenrol(
       .filter((inv) => inv.remaining > 0);
 
     const creditAllocations: { invoiceId: string; amountCents: number }[] = [];
-    if (totalCreditCents > 0 && outstandingTargets.length) {
-      let remainingCredit = totalCreditCents;
+    if (creditToBalanceCents > 0 && outstandingTargets.length) {
+      let remainingCredit = creditToBalanceCents;
       for (const target of outstandingTargets) {
         if (remainingCredit <= 0) break;
         const applied = Math.min(target.remaining, remainingCredit);
@@ -473,13 +571,13 @@ export async function changeStudentLevelAndReenrol(
     }
 
     const payment =
-      creditAllocations.length > 0
+      creditToBalanceCents > 0
         ? await createPaymentAndAllocate({
             familyId: student.familyId,
-            amountCents: creditAllocations.reduce((sum, a) => sum + a.amountCents, 0),
+            amountCents: creditToBalanceCents,
             method: "credit",
-            note: "Auto-applied credit for level change",
-            allocations: creditAllocations,
+            note: "Level change credit",
+            allocations: creditAllocations.length ? creditAllocations : undefined,
             client: tx,
             skipAuth: true,
           })
