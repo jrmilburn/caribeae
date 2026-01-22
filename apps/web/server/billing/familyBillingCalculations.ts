@@ -6,40 +6,51 @@ import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/
 type OwingEnrolment = {
   billingType: BillingType | null;
   paidThroughDate: Date | null;
-  creditsRemaining: number | null;
   planPriceCents: number | null;
   blockClassCount: number | null;
+  sessionsPerWeek: number | null;
 };
 
-function calculateWeeklyOwingCents(paidThroughDate: Date | null, priceCents: number, today: Date) {
-  if (!paidThroughDate || priceCents <= 0) return 0;
-  const paidThrough = brisbaneStartOfDay(paidThroughDate);
-  if (!isAfter(today, paidThrough)) return 0;
-  const daysBehind = differenceInCalendarDays(today, paidThrough);
-  const weeksBehind = Math.ceil(daysBehind / 7);
-  return weeksBehind * priceCents;
+type UnpaidBlockInput = {
+  paidThroughDate: Date | null;
+  sessionsPerWeek: number | null;
+  blockClassCount: number | null;
+  today: Date;
+};
+
+function resolveClassesPerWeek(sessionsPerWeek: number | null) {
+  return Math.max(sessionsPerWeek ?? 1, 1);
 }
 
-function calculateBlockOwingCents(creditsRemaining: number | null, priceCents: number, blockClassCount: number | null) {
-  if (priceCents <= 0) return 0;
-  const credits = creditsRemaining ?? 0;
-  if (credits > 0) return 0;
-  const blockSize = Math.max(blockClassCount ?? 1, 1);
-  const blocksBehind = Math.max(1, Math.ceil(-credits / blockSize));
-  return blocksBehind * priceCents;
+function resolveBlockSize(blockClassCount: number | null, sessionsPerWeek: number | null) {
+  return Math.max(blockClassCount ?? resolveClassesPerWeek(sessionsPerWeek), 1);
+}
+
+export function calculateUnpaidBlocks(params: UnpaidBlockInput) {
+  const today = brisbaneStartOfDay(params.today);
+  if (!params.paidThroughDate) return 1;
+  const paidThrough = brisbaneStartOfDay(params.paidThroughDate);
+  if (!isAfter(today, paidThrough)) return 0;
+
+  const daysBehind = differenceInCalendarDays(today, paidThrough);
+  const classesPerWeek = resolveClassesPerWeek(params.sessionsPerWeek);
+  const blockSize = resolveBlockSize(params.blockClassCount, params.sessionsPerWeek);
+  const classesBehind = (daysBehind / 7) * classesPerWeek;
+  return Math.max(1, Math.ceil(classesBehind / blockSize));
 }
 
 export function calculateAmountOwingCents(enrolments: OwingEnrolment[], todayInput: Date = new Date()) {
   const today = brisbaneStartOfDay(todayInput);
   return enrolments.reduce((sum, enrolment) => {
+    if (!enrolment.billingType) return sum;
     const priceCents = enrolment.planPriceCents ?? 0;
-    if (enrolment.billingType === BillingType.PER_WEEK) {
-      return sum + calculateWeeklyOwingCents(enrolment.paidThroughDate, priceCents, today);
-    }
-    if (enrolment.billingType === BillingType.PER_CLASS) {
-      return sum + calculateBlockOwingCents(enrolment.creditsRemaining, priceCents, enrolment.blockClassCount);
-    }
-    return sum;
+    const unpaidBlocks = calculateUnpaidBlocks({
+      paidThroughDate: enrolment.paidThroughDate,
+      sessionsPerWeek: enrolment.sessionsPerWeek,
+      blockClassCount: enrolment.blockClassCount,
+      today,
+    });
+    return sum + unpaidBlocks * priceCents;
   }, 0);
 }
 

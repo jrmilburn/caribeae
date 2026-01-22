@@ -20,7 +20,7 @@ function test(name: string, fn: () => void) {
   }
 }
 
-test("paid-through current and no open invoices => owing 0", () => {
+test("paid-through current => owing 0", () => {
   const summary = computeFamilyBillingSummary({
     enrolments: [
       {
@@ -30,11 +30,11 @@ test("paid-through current and no open invoices => owing 0", () => {
         billingType: BillingType.PER_WEEK,
         planPriceCents: 2500,
         blockClassCount: null,
+        sessionsPerWeek: 1,
         paidThroughDate: d("2026-01-15"),
         creditsRemaining: 0,
       },
     ],
-    openInvoices: [],
     today: d("2026-01-15"),
   });
 
@@ -42,7 +42,7 @@ test("paid-through current and no open invoices => owing 0", () => {
   assert.strictEqual(summary.overdueOwingCents, 0);
 });
 
-test("paid-through behind and no open invoices => overdue owing", () => {
+test("paid-through behind => overdue owing", () => {
   const summary = computeFamilyBillingSummary({
     enrolments: [
       {
@@ -52,11 +52,11 @@ test("paid-through behind and no open invoices => overdue owing", () => {
         billingType: BillingType.PER_WEEK,
         planPriceCents: 2500,
         blockClassCount: null,
+        sessionsPerWeek: 1,
         paidThroughDate: d("2026-01-01"),
         creditsRemaining: 0,
       },
     ],
-    openInvoices: [],
     today: d("2026-01-15"),
   });
 
@@ -64,35 +64,7 @@ test("paid-through behind and no open invoices => overdue owing", () => {
   assert.strictEqual(summary.totalOwingCents, 5000);
 });
 
-test("open invoice coverage removes overdue owing", () => {
-  const summary = computeFamilyBillingSummary({
-    enrolments: [
-      {
-        id: "e1",
-        studentId: "s1",
-        planId: "p1",
-        billingType: BillingType.PER_WEEK,
-        planPriceCents: 2500,
-        blockClassCount: null,
-        paidThroughDate: d("2026-01-01"),
-        creditsRemaining: 0,
-      },
-    ],
-    openInvoices: [
-      {
-        enrolmentId: "e1",
-        balanceCents: 2500,
-        coverageEnd: d("2026-01-20"),
-      },
-    ],
-    today: d("2026-01-15"),
-  });
-
-  assert.strictEqual(summary.overdueOwingCents, 0);
-  assert.strictEqual(summary.invoiceOwingCents, 2500);
-});
-
-test("per-class overdue uses block counts when credits are negative", () => {
+test("per-class overdue uses block counts based on sessions per week", () => {
   const summary = computeFamilyBillingSummary({
     enrolments: [
       {
@@ -102,12 +74,12 @@ test("per-class overdue uses block counts when credits are negative", () => {
         billingType: BillingType.PER_CLASS,
         planPriceCents: 3000,
         blockClassCount: 5,
-        paidThroughDate: null,
+        sessionsPerWeek: 2,
+        paidThroughDate: d("2026-01-01"),
         creditsRemaining: -6,
       },
     ],
-    openInvoices: [],
-    today: d("2026-01-10"),
+    today: d("2026-01-31"),
   });
 
   assert.strictEqual(summary.overdueOwingCents, 6000);
@@ -123,6 +95,7 @@ test("next payment due uses earliest overdue date", () => {
         billingType: BillingType.PER_WEEK,
         planPriceCents: 2500,
         blockClassCount: null,
+        sessionsPerWeek: 1,
         paidThroughDate: d("2026-01-05"),
         creditsRemaining: 0,
       },
@@ -133,11 +106,11 @@ test("next payment due uses earliest overdue date", () => {
         billingType: BillingType.PER_WEEK,
         planPriceCents: 2500,
         blockClassCount: null,
+        sessionsPerWeek: 1,
         paidThroughDate: d("2026-01-12"),
         creditsRemaining: 0,
       },
     ],
-    openInvoices: [],
     today: d("2026-01-10"),
   });
 

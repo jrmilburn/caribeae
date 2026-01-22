@@ -63,7 +63,7 @@ async function familiesFromFilters(filters: BroadcastFilters) {
           paidThroughDate: true,
           creditsRemaining: true,
           creditsBalanceCached: true,
-          plan: { select: { billingType: true } },
+          plan: { select: { billingType: true, sessionsPerWeek: true, blockClassCount: true } },
           student: { select: { familyId: true } },
         },
       });

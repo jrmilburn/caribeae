@@ -78,7 +78,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
               {formatCurrencyFromCents(billing.outstandingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on open invoice balances
+              Based on unpaid blocks since paid-through dates
             </div>
           </div>
 

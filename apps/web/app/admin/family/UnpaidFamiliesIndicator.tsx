@@ -40,7 +40,7 @@ export function UnpaidFamiliesIndicator({ summary }: Props) {
           <SheetHeader>
             <SheetTitle>Unpaid families</SheetTitle>
             <SheetDescription>
-              Families with overdue enrolments based on paid-through dates or credits.
+              Families with unpaid blocks since paid-through dates.
             </SheetDescription>
           </SheetHeader>
 
