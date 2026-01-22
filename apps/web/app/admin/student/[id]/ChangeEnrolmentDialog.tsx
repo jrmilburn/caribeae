@@ -284,7 +284,7 @@ export function ChangeEnrolmentDialog({
         <DialogHeader>
           <DialogTitle>Change enrolment</DialogTitle>
           <DialogDescription>
-            Select the new class templates for this enrolment. Start date updates apply to all selected classes.
+            Select the new class templates for this enrolment. The change date applies to all selected classes.
           </DialogDescription>
         </DialogHeader>
 
@@ -301,7 +301,7 @@ export function ChangeEnrolmentDialog({
             </div>
             <div className="space-y-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Start date
+                Change date
               </div>
               <input
                 type="date"
@@ -347,7 +347,7 @@ export function ChangeEnrolmentDialog({
                 {selectionRequirement.requiredCount === 0
                   ? `${selectedTemplateIds.length}/${selectionRequirement.maxCount} selected (optional)`
                   : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
-                • {startDate ? `Start date ${startDate}` : "Select a start date"}
+                • {startDate ? `Change date ${startDate}` : "Select a change date"}
               </div>
               {selectedTemplateIds.length ? (
                 <div className="flex flex-wrap gap-2">
