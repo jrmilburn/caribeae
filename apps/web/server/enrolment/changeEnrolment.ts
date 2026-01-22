@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { EnrolmentStatus } from "@prisma/client";
-import { isAfter, startOfDay } from "date-fns";
+import { EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/client";
+import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -15,10 +15,8 @@ import {
   recalculateEnrolmentCoverage,
   wouldShortenCoverage,
 } from "@/server/billing/recalculateEnrolmentCoverage";
-import {
-  computePaidThroughAfterTemplateChange,
-  describeTemplate,
-} from "@/server/billing/paidThroughTemplateChange";
+import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
+import { describeTemplate } from "@/server/billing/paidThroughTemplateChange";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
@@ -252,36 +250,13 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       });
     }
 
-    const existingAssignments = new Set(enrolment.classAssignments.map((a) => a.templateId));
-    const nextAssignments = new Set(payload.templateIds);
-
-    const toAdd = payload.templateIds.filter((id) => !existingAssignments.has(id));
-    const toRemove = enrolment.classAssignments
-      .map((a) => a.templateId)
-      .filter((id) => !nextAssignments.has(id));
-
-    if (toAdd.length) {
-      await tx.enrolmentClassAssignment.createMany({
-        data: toAdd.map((templateId) => ({ enrolmentId: enrolment.id, templateId })),
-        skipDuplicates: true,
-      });
-    }
-
-    if (toRemove.length) {
-      await tx.enrolmentClassAssignment.deleteMany({
-        where: { enrolmentId: enrolment.id, templateId: { in: toRemove } },
-      });
-    }
-
     const anchorTemplate = resolveAnchorTemplate(templates);
 
-    const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
     const oldTemplates = enrolment.classAssignments.length
       ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
       : enrolment.template
         ? [enrolment.template]
         : [];
-    const oldAnchorTemplate = resolveAnchorTemplate(oldTemplates);
 
     // Compute the earliest template end date (if any) to cap the planned end date.
     const templateEndDates = windows.map((w) => w.endDate).filter(Boolean) as Date[];
@@ -290,80 +265,97 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
         : null;
 
-    // This is the FINAL planned end date according to plan rules + any caps.
     const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
+
+    const endBoundary = addDays(baseStart, -1);
+    const enrolmentStart = startOfDay(enrolment.startDate);
+    const effectiveEnd = isBefore(endBoundary, enrolmentStart) ? enrolmentStart : endBoundary;
+
+    const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+    const carriedPaidThrough =
+      enrolment.plan.billingType === "PER_WEEK" ? currentPaidThrough : null;
+
+    const oldSnapshot =
+      enrolment.plan.billingType === "PER_CLASS"
+        ? await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: baseStart })
+        : null;
+    const carriedCredits = oldSnapshot?.remainingCredits ?? enrolment.creditsRemaining ?? enrolment.creditsBalanceCached ?? 0;
+
+    const nextEnrolment = await tx.enrolment.create({
+      data: {
+        templateId: anchorTemplate?.id ?? enrolment.templateId,
+        studentId: enrolment.studentId,
+        startDate: baseStart,
+        endDate: plannedEndDate,
+        status: EnrolmentStatus.ACTIVE,
+        planId: enrolment.planId,
+        billingGroupId: enrolment.billingGroupId ?? null,
+        paidThroughDate: carriedPaidThrough,
+        paidThroughDateComputed: carriedPaidThrough,
+        creditsRemaining: enrolment.plan.billingType === "PER_CLASS" ? 0 : null,
+        creditsBalanceCached: enrolment.plan.billingType === "PER_CLASS" ? 0 : null,
+      },
+      include: { student: true, template: true, plan: true, classAssignments: true },
+    });
+
+    await tx.enrolmentClassAssignment.createMany({
+      data: payload.templateIds.map((templateId) => ({
+        enrolmentId: nextEnrolment.id,
+        templateId,
+      })),
+      skipDuplicates: true,
+    });
+
+    if (enrolment.plan.billingType === "PER_CLASS" && carriedCredits !== 0) {
+      await tx.enrolmentCreditEvent.create({
+        data: {
+          enrolmentId: nextEnrolment.id,
+          type: EnrolmentCreditEventType.MANUAL_ADJUST,
+          creditsDelta: carriedCredits,
+          occurredOn: baseStart,
+          note: "Transfer credits from enrolment change",
+        },
+      });
+    }
+
+    const newSnapshot = await recomputeEnrolmentComputedFields(nextEnrolment.id, {
+      client: tx,
+      asOfDate: baseStart,
+    });
+
+    if (!input.confirmShorten && wouldShortenCoverage(currentPaidThrough, newSnapshot.paidThroughDate)) {
+      throw new CoverageWouldShortenError({
+        oldDateKey: currentPaidThrough ? toBrisbaneDayKey(brisbaneStartOfDay(currentPaidThrough)) : null,
+        newDateKey: newSnapshot.paidThroughDate ? toBrisbaneDayKey(brisbaneStartOfDay(newSnapshot.paidThroughDate)) : null,
+      });
+    }
 
     await tx.enrolment.update({
       where: { id: enrolment.id },
       data: {
-        templateId: anchorTemplate?.id ?? enrolment.templateId,
-        startDate: baseStart,
-        endDate: plannedEndDate,
+        endDate: effectiveEnd,
+        status: EnrolmentStatus.CANCELLED,
+        cancelledAt: enrolment.cancelledAt ?? new Date(),
       },
     });
 
-    const updated = await tx.enrolment.findUnique({
-      where: { id: enrolment.id },
-      include: { student: true, template: true, plan: true, classAssignments: true },
+    await recalculateEnrolmentCoverage(nextEnrolment.id, "CLASS_CHANGED", {
+      tx,
+      actorId: user.id,
+      confirmShorten: input.confirmShorten,
     });
-
-    if (!updated) throw new Error("Enrolment not found after update.");
-
-    if (updated.plan?.billingType === "PER_WEEK") {
-      const nextPaidThrough =
-        oldPaidThrough && oldAnchorTemplate?.id && anchorTemplate?.id
-          ? await computePaidThroughAfterTemplateChange({
-              enrolmentId: updated.id,
-              oldTemplateId: oldAnchorTemplate.id,
-              newTemplateId: anchorTemplate.id,
-              paidThroughDate: oldPaidThrough,
-              tx,
-            })
-          : oldPaidThrough ?? null;
-      const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
-
-      if (!input.confirmShorten && wouldShortenCoverage(currentPaidThrough, nextPaidThrough)) {
-        throw new CoverageWouldShortenError({
-          oldDateKey: currentPaidThrough ? toBrisbaneDayKey(brisbaneStartOfDay(currentPaidThrough)) : null,
-          newDateKey: nextPaidThrough ? toBrisbaneDayKey(brisbaneStartOfDay(nextPaidThrough)) : null,
-        });
-      }
-
-      if (currentPaidThrough?.getTime() !== nextPaidThrough?.getTime()) {
-        await tx.enrolment.update({
-          where: { id: enrolment.id },
-          data: { paidThroughDate: nextPaidThrough },
-        });
-
-        await tx.enrolmentCoverageAudit.create({
-          data: {
-            enrolmentId: enrolment.id,
-            reason: "CLASS_CHANGED",
-            previousPaidThroughDate: currentPaidThrough,
-            nextPaidThroughDate: nextPaidThrough,
-            actorId: user.id,
-          },
-        });
-      }
-    } else {
-      await recalculateEnrolmentCoverage(updated.id, "CLASS_CHANGED", {
-        tx,
-        actorId: user.id,
-        confirmShorten: input.confirmShorten,
-      });
-    }
 
     return {
       data: {
         enrolments: [
           {
-            id: updated.id,
-            studentId: updated.studentId,
-            familyId: updated.student?.familyId ?? null,
-            templateId: updated.templateId,
+            id: nextEnrolment.id,
+            studentId: nextEnrolment.studentId,
+            familyId: nextEnrolment.student?.familyId ?? null,
+            templateId: nextEnrolment.templateId,
           },
         ],
-        templateIds: Array.from(new Set([...toAdd, ...toRemove])),
+        templateIds: payload.templateIds,
         studentId: enrolment.studentId,
         familyId: enrolment.student?.familyId ?? null,
         originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
@@ -474,8 +466,6 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       dayOfWeek: true,
     },
   });
-  const anchorTemplate = resolveAnchorTemplate(templates);
-
   assertPlanMatchesTemplates(enrolment.plan, templates);
 
   const selectionValidation = validateSelection({
@@ -501,19 +491,9 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     : enrolment.template
       ? [enrolment.template]
       : [];
-  const oldAnchorTemplate = resolveAnchorTemplate(oldTemplates);
-
   const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
 
-  const newPaidThroughDate =
-    enrolment.plan.billingType === "PER_WEEK" && oldPaidThrough && oldAnchorTemplate?.id && anchorTemplate?.id
-      ? await computePaidThroughAfterTemplateChange({
-          enrolmentId: enrolment.id,
-          oldTemplateId: oldAnchorTemplate.id,
-          newTemplateId: anchorTemplate.id,
-          paidThroughDate: oldPaidThrough,
-        })
-      : oldPaidThrough ?? null;
+  const newPaidThroughDate = oldPaidThrough ?? null;
   const wouldShorten = wouldShortenCoverage(oldPaidThrough, newPaidThroughDate);
 
   return {
