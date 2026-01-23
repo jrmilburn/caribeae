@@ -31,7 +31,7 @@ type TemplateSummary = {
   endDate: Date | null;
   name: string | null;
   dayOfWeek: number | null;
-  startTime?: number | null;
+  startTime: number | null;
   capacity: number | null;
 };
 
