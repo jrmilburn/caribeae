@@ -206,7 +206,9 @@ export async function recalculateEnrolmentCoverage(
       const basePaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed;
       if (!basePaidThrough) return null;
 
-      const paidWindowStart = brisbaneStartOfDay(enrolment.startDate);
+      const paidWindowStart = enrolment.paidThroughDate
+        ? brisbaneStartOfDay(enrolment.paidThroughDate)
+        : brisbaneStartOfDay(enrolment.startDate);
       const paidWindowEnd = brisbaneStartOfDay(basePaidThrough);
 
       const startDayKey = toBrisbaneDayKey(paidWindowStart);
