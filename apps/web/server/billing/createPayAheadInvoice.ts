@@ -12,7 +12,6 @@ import { getEnrolmentBillingStatus, getWeeklyPaidThrough } from "./enrolmentBill
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeOptionalDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
-import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 
 const inputSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -62,12 +61,7 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
     : enrolment.template
       ? [enrolment.template]
       : [];
-  const templateIds = assignedTemplates.map((template) => template.id);
-  const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
-  const holidays = await prisma.holiday.findMany({
-    where: buildHolidayScopeWhere({ templateIds, levelIds }),
-    select: { startDate: true, endDate: true, levelId: true, templateId: true },
-  });
+  const holidays = [];
 
   const payAhead = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,

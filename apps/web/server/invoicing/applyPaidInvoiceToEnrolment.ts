@@ -305,7 +305,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
       updates.paidThroughDateComputed = baseCoverageEndDayKey
         ? brisbaneStartOfDay(baseCoverageEndDayKey)
         : null;
-      updates.paidThroughDate = coverageEnd;
+      updates.paidThroughDate = updates.paidThroughDateComputed;
     } else {
       const creditsDelta = resolveCreditsPurchased(invoice, plan);
       if (creditsDelta > 0) {
