@@ -88,14 +88,18 @@ function filterHolidaysForTemplate(
 
 async function computeWeeklyCredit(params: {
   enrolment: EnrolmentWithRelations;
-  effectiveDate: Date;
+  endDate: Date;
   paidThroughDate?: Date | null;
   client: Prisma.TransactionClient;
 }): Promise<CreditResult> {
   if (!params.enrolment.plan) return { creditCents: 0, creditUnits: 0 };
   const paidThroughDate = params.paidThroughDate ? startOfDay(params.paidThroughDate) : null;
-  const unusedStart = startOfDay(params.effectiveDate);
-  if (!paidThroughDate || isBefore(paidThroughDate, unusedStart)) {
+  const endDate = startOfDay(params.endDate);
+  if (!paidThroughDate || !isAfter(paidThroughDate, endDate)) {
+    return { creditCents: 0, creditUnits: 0 };
+  }
+  const unusedStart = addDays(endDate, 1);
+  if (isAfter(unusedStart, paidThroughDate)) {
     return { creditCents: 0, creditUnits: 0 };
   }
 
@@ -154,14 +158,14 @@ async function computeWeeklyCredit(params: {
 async function computeCreditForEnrolment(params: {
   enrolment: EnrolmentWithRelations;
   snapshot: Awaited<ReturnType<typeof getEnrolmentBillingStatus>>;
-  effectiveDate: Date;
+  endDate: Date;
   client: Prisma.TransactionClient;
 }): Promise<CreditResult> {
   if (!params.enrolment.plan) return { creditCents: 0, creditUnits: 0 };
   if (params.enrolment.plan.billingType === BillingType.PER_WEEK) {
     return computeWeeklyCredit({
       enrolment: params.enrolment,
-      effectiveDate: params.effectiveDate,
+      endDate: params.endDate,
       paidThroughDate: params.snapshot.paidThroughDate ?? params.enrolment.paidThroughDate,
       client: params.client,
     });
@@ -339,22 +343,8 @@ export async function changeStudentLevelAndReenrol(
       include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
 
-    let totalCreditCents = 0;
-    let totalCreditUnits = 0;
-    for (const enrolment of existingEnrolments) {
-      const snapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: effectiveDate });
-      const credit = await computeCreditForEnrolment({
-        enrolment,
-        snapshot,
-        effectiveDate,
-        client: tx,
-      });
-      totalCreditCents += credit.creditCents;
-      totalCreditUnits += credit.creditUnits;
-    }
-
     const endBoundary = addDays(effectiveDate, -1);
-    const today = startOfDay(new Date());
+    const alignedEndDates = new Map<string, Date>();
     for (const enrolment of existingEnrolments) {
       const enrolmentStart = startOfDay(enrolment.startDate);
       const enrolmentEnd = enrolment.endDate ? startOfDay(enrolment.endDate) : null;
@@ -365,15 +355,28 @@ export async function changeStudentLevelAndReenrol(
       if (isBefore(alignedEnd, enrolmentStart)) {
         alignedEnd = enrolmentStart;
       }
-      const shouldCancel = isBefore(alignedEnd, today);
+      alignedEndDates.set(enrolment.id, alignedEnd);
       await tx.enrolment.update({
         where: { id: enrolment.id },
         data: {
           endDate: alignedEnd,
-          status: shouldCancel ? EnrolmentStatus.CANCELLED : enrolment.status,
-          cancelledAt: shouldCancel ? enrolment.cancelledAt ?? new Date() : null,
+          status: EnrolmentStatus.CHANGEOVER,
+          cancelledAt: null,
         },
       });
+    }
+
+    let totalCreditCents = 0;
+    for (const enrolment of existingEnrolments) {
+      const alignedEnd = alignedEndDates.get(enrolment.id) ?? endBoundary;
+      const snapshot = await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: alignedEnd });
+      const credit = await computeCreditForEnrolment({
+        enrolment,
+        snapshot,
+        endDate: alignedEnd,
+        client: tx,
+      });
+      totalCreditCents += credit.creditCents;
     }
 
     const levelChange = await tx.studentLevelChange.create({
@@ -451,12 +454,8 @@ export async function changeStudentLevelAndReenrol(
           plan.priceCents /
             (plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1)
         );
-    const priorUnitPriceCents = totalCreditUnits > 0 ? totalCreditCents / totalCreditUnits : 0;
-    const applyCreditToCoverage = totalCreditCents > 0 && newPlanUnitPriceCents > 0
-      && newPlanUnitPriceCents <= priorUnitPriceCents;
-
     let remainingCreditCents = totalCreditCents;
-    if (applyCreditToCoverage) {
+    if (totalCreditCents > 0 && newPlanUnitPriceCents > 0) {
       const unitsToApply = Math.floor(totalCreditCents / newPlanUnitPriceCents);
       if (unitsToApply > 0) {
         if (plan.billingType === BillingType.PER_CLASS) {
@@ -528,7 +527,7 @@ export async function changeStudentLevelAndReenrol(
       : [];
 
     const creditToBalanceCents = Math.max(
-      applyCreditToCoverage ? remainingCreditCents : totalCreditCents,
+      remainingCreditCents,
       0
     );
 
