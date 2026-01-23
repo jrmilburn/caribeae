@@ -31,7 +31,7 @@ type TemplateSummary = {
   endDate: Date | null;
   name: string | null;
   dayOfWeek: number | null;
-  startTime?: number | null;
+  startTime: number | null;
   capacity: number | null;
 };
 
@@ -145,35 +145,9 @@ export async function createEnrolmentsFromSelection(
     }
 
     let templateIds = templateIdsInput;
-    const selectionRequirement = getSelectionRequirement(plan);
+    let templates: TemplateSummary[] = [];
     if (plan.billingType === BillingType.PER_WEEK) {
-      if (templateIds.length > selectionRequirement.maxCount) {
-        throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this weekly plan.`);
-      }
-    } else if (!templateIds.length) {
-      throw new Error("Select at least one class for this plan.");
-    }
-
-    let templates =
-      templateIds.length > 0
-        ? await prisma.classTemplate.findMany({
-            where: { id: { in: templateIds } },
-            select: {
-              id: true,
-              levelId: true,
-              active: true,
-              startDate: true,
-              endDate: true,
-              name: true,
-              dayOfWeek: true,
-              startTime: true,
-              capacity: true,
-            },
-          })
-        : [];
-
-    if (plan.billingType === BillingType.PER_WEEK && templates.length === 0) {
-      const anchorTemplate = await prisma.classTemplate.findFirst({
+      templates = await prisma.classTemplate.findMany({
         where: {
           levelId: plan.levelId,
           active: true,
@@ -191,19 +165,36 @@ export async function createEnrolmentsFromSelection(
           startTime: true,
           capacity: true,
         },
-        orderBy: [{ startDate: "asc" }, { id: "asc" }],
       });
 
-      if (!anchorTemplate) {
+      if (!templates.length) {
         throw new Error("No active classes are available for this level. Add a class first.");
       }
 
-      templateIds = [anchorTemplate.id];
-      templates = [anchorTemplate];
-    }
+      templateIds = templates.map((template) => template.id);
+    } else {
+      if (!templateIds.length) {
+        throw new Error("Select at least one class for this plan.");
+      }
 
-    if (templates.length !== templateIds.length) {
-      throw new Error("Some selected classes could not be found.");
+      templates = await prisma.classTemplate.findMany({
+        where: { id: { in: templateIds } },
+        select: {
+          id: true,
+          levelId: true,
+          active: true,
+          startDate: true,
+          endDate: true,
+          name: true,
+          dayOfWeek: true,
+          startTime: true,
+          capacity: true,
+        },
+      });
+
+      if (templates.length !== templateIds.length) {
+        throw new Error("Some selected classes could not be found.");
+      }
     }
 
     const missingLevelTemplate = templates.find((template) => !template.levelId);
@@ -217,9 +208,11 @@ export async function createEnrolmentsFromSelection(
 
     assertPlanMatchesTemplates(plan, templates);
 
-    const selectionCheck = validateSelection({ plan, templateIds, templates });
-    if (!selectionCheck.ok) {
-      throw new Error(selectionCheck.message ?? "Invalid selection for plan.");
+    if (plan.billingType !== BillingType.PER_WEEK) {
+      const selectionCheck = validateSelection({ plan, templateIds, templates });
+      if (!selectionCheck.ok) {
+        throw new Error(selectionCheck.message ?? "Invalid selection for plan.");
+      }
     }
 
     const normalizedPlan = normalizePlan(plan);
