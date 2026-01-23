@@ -61,7 +61,7 @@ export async function createPayAheadInvoice(input: CreatePayAheadInvoiceInput) {
     : enrolment.template
       ? [enrolment.template]
       : [];
-  const holidays = [];
+  const holidays: { startDate: Date; endDate: Date }[] = [];
 
   const payAhead = resolveWeeklyPayAheadSequence({
     startDate: enrolment.startDate,
