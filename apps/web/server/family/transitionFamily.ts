@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { addDays, differenceInCalendarDays, isAfter } from "date-fns";
 import { BillingType, EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
 import { formatDateKey, parseDateKey } from "@/lib/dateKey";
+import { brisbaneDayOfWeek, brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import {
   resolveAnchorTemplate,
   resolveTransitionTemplates,
@@ -57,8 +59,44 @@ type TransitionFamilyResult =
         | {
             code: "VALIDATION_ERROR" | "UNKNOWN_ERROR";
             message: string;
-          };
+      };
     };
+
+function resolveTransitionStartDate(params: {
+  requestedStart: Date;
+  paidThrough: Date;
+  anchorTemplate: TemplateSummary;
+}): Date {
+  if (!isAfter(params.requestedStart, params.paidThrough)) {
+    return params.requestedStart;
+  }
+
+  const templateDay = params.anchorTemplate.dayOfWeek;
+  if (templateDay === null || templateDay === undefined) {
+    return params.paidThrough;
+  }
+
+  const templateStart = brisbaneStartOfDay(params.anchorTemplate.startDate);
+  const templateEnd = params.anchorTemplate.endDate ? brisbaneStartOfDay(params.anchorTemplate.endDate) : null;
+  const paidThrough = brisbaneStartOfDay(params.paidThrough);
+  const effectiveEnd = templateEnd && isAfter(paidThrough, templateEnd) ? templateEnd : paidThrough;
+
+  if (isAfter(templateStart, effectiveEnd)) {
+    return paidThrough;
+  }
+
+  const startDow = brisbaneDayOfWeek(templateStart);
+  const delta = (templateDay - startDow + 7) % 7;
+  const firstOccurrence = addDays(templateStart, delta);
+
+  if (isAfter(firstOccurrence, effectiveEnd)) {
+    return paidThrough;
+  }
+
+  const daysBetween = differenceInCalendarDays(effectiveEnd, firstOccurrence);
+  const weeksBetween = Math.floor(daysBetween / 7);
+  return addDays(firstOccurrence, weeksBetween * 7);
+}
 
 export async function transitionFamily(input: TransitionFamilyInput): Promise<TransitionFamilyResult> {
   const user = await getOrCreateUser();
@@ -139,16 +177,17 @@ export async function transitionFamily(input: TransitionFamilyInput): Promise<Tr
           throw new Error("Missing enrolment plan.");
         }
 
-        const normalizedStart = normalizeStartDate(selection.startDate);
+        const requestedStart = normalizeStartDate(selection.startDate);
         const paidThrough = normalizeStartDate(selection.paidThroughDate);
+        const templateStart = isAfter(requestedStart, paidThrough) ? paidThrough : requestedStart;
         const levelTemplates =
           plan.billingType === BillingType.PER_WEEK && selectedIds.length === 0
             ? await tx.classTemplate.findMany({
                 where: {
                   levelId: plan.levelId,
                   active: true,
-                  startDate: { lte: normalizedStart },
-                  OR: [{ endDate: null }, { endDate: { gte: normalizedStart } }],
+                  startDate: { lte: templateStart },
+                  OR: [{ endDate: null }, { endDate: { gte: templateStart } }],
                 },
               })
             : [];
@@ -158,7 +197,7 @@ export async function transitionFamily(input: TransitionFamilyInput): Promise<Tr
           selectedIds,
           templatesById: templateMap,
           levelTemplates,
-          startDate: normalizedStart,
+          startDate: templateStart,
         });
 
         const anchorTemplate = resolveAnchorTemplate(templatesForSelection);
@@ -169,6 +208,11 @@ export async function transitionFamily(input: TransitionFamilyInput): Promise<Tr
         if (!anchorTemplateFull) {
           throw new Error("Anchor template not found.");
         }
+        const normalizedStart = resolveTransitionStartDate({
+          requestedStart,
+          paidThrough,
+          anchorTemplate: anchorTemplateFull,
+        });
 
         for (const template of templatesForSelection) {
           const templateForCapacity = {
