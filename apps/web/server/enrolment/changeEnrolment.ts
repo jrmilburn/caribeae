@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { EnrolmentCreditEventType, EnrolmentStatus } from "@prisma/client";
-import type { EnrolmentPlan } from "@prisma/client";
+import type { EnrolmentPlan, Prisma, PrismaClient } from "@prisma/client";
 import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getSelectionRequirement, normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
-import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { validateSelection } from "@/server/enrolment/validateSelection";
 import {
   CoverageWouldShortenError,
@@ -25,6 +25,10 @@ import type { CapacityExceededDetails } from "@/lib/capacityError";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { buildMissedOccurrencePredicate } from "@/server/billing/missedOccurrence";
 import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "@/server/billing/occurrenceWalker";
+import {
+  computeCoverageEndDay,
+  countScheduledSessionsExcludingHolidays,
+} from "@/server/billing/coverageEngine";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -277,7 +281,17 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 
     const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
     const carriedPaidThrough =
-      enrolment.plan.billingType === "PER_WEEK" ? currentPaidThrough : null;
+      enrolment.plan.billingType === "PER_WEEK" && currentPaidThrough
+        ? await computeWeeklyChangeoverPaidThrough({
+            client: tx,
+            changeoverDate: baseStart,
+            oldPaidThrough: currentPaidThrough,
+            oldTemplates,
+            newTemplates: templates,
+            plannedEndDate,
+            sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+          })
+        : null;
 
     const oldSnapshot =
       enrolment.plan.billingType === "PER_CLASS"
@@ -338,8 +352,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       where: { id: enrolment.id },
       data: {
         endDate: effectiveEnd,
-        status: EnrolmentStatus.CANCELLED,
-        cancelledAt: enrolment.cancelledAt ?? new Date(),
+        status: EnrolmentStatus.CHANGEOVER,
+        cancelledAt: null,
       },
     });
 
@@ -506,7 +520,17 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
   const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
   let newPaidThroughDate = oldPaidThrough ?? null;
 
-  if (enrolment.plan.billingType !== "PER_WEEK") {
+  if (enrolment.plan.billingType === "PER_WEEK" && oldPaidThrough) {
+    newPaidThroughDate = await computeWeeklyChangeoverPaidThrough({
+      client: prisma,
+      changeoverDate: baseStart,
+      oldPaidThrough,
+      oldTemplates,
+      newTemplates: templates,
+      plannedEndDate,
+      sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+    });
+  } else if (enrolment.plan.billingType !== "PER_WEEK") {
     const oldSnapshot = await getEnrolmentBillingStatus(enrolment.id, { asOfDate: baseStart });
     const carriedCredits = oldSnapshot?.remainingCredits ?? enrolment.creditsRemaining ?? enrolment.creditsBalanceCached ?? 0;
     newPaidThroughDate = await computePaidThroughPreview({
@@ -550,6 +574,82 @@ function resolveAnchorTemplate<T extends { id: string; dayOfWeek: number | null 
 function resolveSessionsPerWeek(plan: EnrolmentPlan | null | undefined) {
   const count = plan?.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
   return count;
+}
+
+async function computeWeeklyChangeoverPaidThrough(params: {
+  client: Prisma.TransactionClient | PrismaClient;
+  changeoverDate: Date;
+  oldPaidThrough: Date;
+  oldTemplates: Array<{ id: string; dayOfWeek: number | null; levelId?: string | null }>;
+  newTemplates: Array<{ id: string; dayOfWeek: number | null; levelId?: string | null }>;
+  plannedEndDate: Date | null;
+  sessionsPerWeek: number;
+}) {
+  if (!params.oldTemplates.length || !params.newTemplates.length) {
+    return brisbaneStartOfDay(params.oldPaidThrough);
+  }
+
+  const startDate = brisbaneStartOfDay(params.changeoverDate);
+  const paidThroughDate = brisbaneStartOfDay(params.oldPaidThrough);
+  const startDayKey = toBrisbaneDayKey(startDate);
+  const endDayKey = toBrisbaneDayKey(paidThroughDate);
+
+  if (brisbaneCompare(endDayKey, startDayKey) < 0) {
+    return paidThroughDate;
+  }
+
+  const oldTemplateIds = params.oldTemplates.map((template) => template.id);
+  const oldLevelIds = params.oldTemplates.map((template) => template.levelId ?? null);
+  const newTemplateIds = params.newTemplates.map((template) => template.id);
+  const newLevelIds = params.newTemplates.map((template) => template.levelId ?? null);
+
+  const oldHolidays = await params.client.holiday.findMany({
+    where: {
+      startDate: { lte: paidThroughDate },
+      endDate: { gte: startDate },
+      ...buildHolidayScopeWhere({ templateIds: oldTemplateIds, levelIds: oldLevelIds }),
+    },
+    select: { startDate: true, endDate: true },
+  });
+
+  const scheduledSessions = countScheduledSessionsExcludingHolidays({
+    startDayKey,
+    endDayKey,
+    assignedTemplates: params.oldTemplates,
+    holidays: oldHolidays,
+  });
+
+  if (scheduledSessions <= 0) {
+    return paidThroughDate;
+  }
+
+  const horizon = resolveOccurrenceHorizon({
+    startDate,
+    endDate: params.plannedEndDate ?? null,
+    occurrencesNeeded: scheduledSessions,
+    sessionsPerWeek: params.sessionsPerWeek,
+  });
+
+  const newHolidays = await params.client.holiday.findMany({
+    where: {
+      startDate: { lte: brisbaneStartOfDay(horizon) },
+      endDate: { gte: startDate },
+      ...buildHolidayScopeWhere({ templateIds: newTemplateIds, levelIds: newLevelIds }),
+    },
+    select: { startDate: true, endDate: true },
+  });
+
+  const enrolmentEndDayKey = params.plannedEndDate ? toBrisbaneDayKey(brisbaneStartOfDay(params.plannedEndDate)) : null;
+
+  const newPaidThroughKey = computeCoverageEndDay({
+    startDayKey,
+    assignedTemplates: params.newTemplates,
+    holidays: newHolidays,
+    entitlementSessions: scheduledSessions,
+    endDayKey: enrolmentEndDayKey,
+  });
+
+  return newPaidThroughKey ? brisbaneStartOfDay(newPaidThroughKey) : paidThroughDate;
 }
 
 async function computePaidThroughPreview(params: {
