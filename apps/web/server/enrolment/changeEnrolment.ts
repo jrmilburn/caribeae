@@ -86,13 +86,6 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
   const user = await getOrCreateUser();
   await requireAdmin();
 
-  if (!input.templateIds.length) {
-    return {
-      ok: false,
-      error: { code: "VALIDATION_ERROR", message: "Select at least one class template." },
-    };
-  }
-
   const payload = {
     enrolmentId: input.enrolmentId,
     templateIds: Array.from(new Set(input.templateIds)),
@@ -126,20 +119,65 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       throw new Error("Enrolment plan level must match the selected level.");
     }
 
-    const templates = await tx.classTemplate.findMany({
-      where: { id: { in: payload.templateIds } },
-      select: {
-        id: true,
-        levelId: true,
-        active: true,
-        startDate: true,
-        endDate: true,
-        name: true,
-        dayOfWeek: true,
-        startTime: true,
-        capacity: true,
-      },
-    });
+    let templateIds = payload.templateIds;
+    let templates: Array<{
+      id: string;
+      levelId: string;
+      active: boolean | null;
+      startDate: Date;
+      endDate: Date | null;
+      name: string | null;
+      dayOfWeek: number | null;
+      startTime?: number | null;
+      capacity: number | null;
+    }> = [];
+
+    if (enrolment.plan.billingType === "PER_WEEK") {
+      templates = await tx.classTemplate.findMany({
+        where: {
+          levelId: enrolment.plan.levelId,
+          active: true,
+          startDate: { lte: payload.startDate ?? startOfDay(enrolment.startDate) },
+          OR: [{ endDate: null }, { endDate: { gte: payload.startDate ?? startOfDay(enrolment.startDate) } }],
+        },
+        select: {
+          id: true,
+          levelId: true,
+          active: true,
+          startDate: true,
+          endDate: true,
+          name: true,
+          dayOfWeek: true,
+          startTime: true,
+          capacity: true,
+        },
+      });
+
+      if (!templates.length) {
+        throw new Error("No active classes are available for this level. Add a class first.");
+      }
+
+      templateIds = templates.map((template) => template.id);
+    } else {
+      if (!templateIds.length) {
+        throw new Error("Select at least one class template.");
+      }
+
+      templates = await tx.classTemplate.findMany({
+        where: { id: { in: templateIds } },
+        select: {
+          id: true,
+          levelId: true,
+          active: true,
+          startDate: true,
+          endDate: true,
+          name: true,
+          dayOfWeek: true,
+          startTime: true,
+          capacity: true,
+        },
+      });
+    }
 
     const missingLevelTemplate = templates.find((template) => !template.levelId);
     if (missingLevelTemplate) {
@@ -155,22 +193,24 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 
     assertPlanMatchesTemplates(enrolment.plan, templates);
 
-    const selectionValidation = validateSelection({
-      plan: enrolment.plan,
-      templateIds: payload.templateIds,
-      templates,
-    });
+    if (enrolment.plan.billingType !== "PER_WEEK") {
+      const selectionValidation = validateSelection({
+        plan: enrolment.plan,
+        templateIds,
+        templates,
+      });
 
-    if (!selectionValidation.ok) {
-      throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
-    }
+      if (!selectionValidation.ok) {
+        throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
+      }
 
-    const selectionRequirement = getSelectionRequirement(enrolment.plan);
-    if (selectionRequirement.requiredCount > 0 && payload.templateIds.length !== selectionRequirement.requiredCount) {
-      throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
-    }
-    if (selectionRequirement.requiredCount === 0 && payload.templateIds.length > selectionRequirement.maxCount) {
-      throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
+      const selectionRequirement = getSelectionRequirement(enrolment.plan);
+      if (selectionRequirement.requiredCount > 0 && templateIds.length !== selectionRequirement.requiredCount) {
+        throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
+      }
+      if (selectionRequirement.requiredCount === 0 && templateIds.length > selectionRequirement.maxCount) {
+        throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
+      }
     }
 
     // -----------------------------
@@ -214,8 +254,8 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       where: {
         studentId: enrolment.studentId,
         OR: [
-          { templateId: { in: payload.templateIds } },
-          { classAssignments: { some: { templateId: { in: payload.templateIds } } } },
+          { templateId: { in: templateIds } },
+          { classAssignments: { some: { templateId: { in: templateIds } } } },
         ],
         status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED, EnrolmentStatus.CHANGEOVER] },
       },
@@ -317,7 +357,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
     });
 
     await tx.enrolmentClassAssignment.createMany({
-      data: payload.templateIds.map((templateId) => ({
+      data: templateIds.map((templateId) => ({
         enrolmentId: nextEnrolment.id,
         templateId,
       })),
@@ -373,7 +413,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
             templateId: nextEnrolment.templateId,
           },
         ],
-        templateIds: payload.templateIds,
+        templateIds,
         studentId: enrolment.studentId,
         familyId: enrolment.student?.familyId ?? null,
         originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
@@ -443,10 +483,6 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput) {
   await requireAdmin();
 
-  if (!input.templateIds.length) {
-    throw new Error("Select at least one class template.");
-  }
-
   const enrolment = await prisma.enrolment.findUnique({
     where: { id: input.enrolmentId },
     include: {
@@ -472,36 +508,81 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     throw new Error("Enrolment plan level must match the selected level.");
   }
 
-  const templates = await prisma.classTemplate.findMany({
-    where: { id: { in: input.templateIds } },
-    select: {
-      id: true,
-      levelId: true,
-      active: true,
-      startDate: true,
-      endDate: true,
-      name: true,
-      dayOfWeek: true,
-    },
-  });
+  const baseStart = input.startDate ? normalizeStartDate(input.startDate) : startOfDay(enrolment.startDate);
+  let templateIds = Array.from(new Set(input.templateIds));
+  let templates: Array<{
+    id: string;
+    levelId: string;
+    active: boolean | null;
+    startDate: Date;
+    endDate: Date | null;
+    name: string | null;
+    dayOfWeek: number | null;
+  }> = [];
+
+  if (enrolment.plan.billingType === "PER_WEEK") {
+    templates = await prisma.classTemplate.findMany({
+      where: {
+        levelId: enrolment.plan.levelId,
+        active: true,
+        startDate: { lte: baseStart },
+        OR: [{ endDate: null }, { endDate: { gte: baseStart } }],
+      },
+      select: {
+        id: true,
+        levelId: true,
+        active: true,
+        startDate: true,
+        endDate: true,
+        name: true,
+        dayOfWeek: true,
+      },
+    });
+
+    if (!templates.length) {
+      throw new Error("No active classes are available for this level. Add a class first.");
+    }
+
+    templateIds = templates.map((template) => template.id);
+  } else {
+    if (!templateIds.length) {
+      throw new Error("Select at least one class template.");
+    }
+
+    templates = await prisma.classTemplate.findMany({
+      where: { id: { in: templateIds } },
+      select: {
+        id: true,
+        levelId: true,
+        active: true,
+        startDate: true,
+        endDate: true,
+        name: true,
+        dayOfWeek: true,
+      },
+    });
+  }
+
   assertPlanMatchesTemplates(enrolment.plan, templates);
 
-  const selectionValidation = validateSelection({
-    plan: enrolment.plan,
-    templateIds: input.templateIds,
-    templates,
-  });
+  if (enrolment.plan.billingType !== "PER_WEEK") {
+    const selectionValidation = validateSelection({
+      plan: enrolment.plan,
+      templateIds,
+      templates,
+    });
 
-  if (!selectionValidation.ok) {
-    throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
-  }
+    if (!selectionValidation.ok) {
+      throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
+    }
 
-  const selectionRequirement = getSelectionRequirement(enrolment.plan);
-  if (selectionRequirement.requiredCount > 0 && input.templateIds.length !== selectionRequirement.requiredCount) {
-    throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
-  }
-  if (selectionRequirement.requiredCount === 0 && input.templateIds.length > selectionRequirement.maxCount) {
-    throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
+    const selectionRequirement = getSelectionRequirement(enrolment.plan);
+    if (selectionRequirement.requiredCount > 0 && templateIds.length !== selectionRequirement.requiredCount) {
+      throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
+    }
+    if (selectionRequirement.requiredCount === 0 && templateIds.length > selectionRequirement.maxCount) {
+      throw new Error(`Select up to ${selectionRequirement.maxCount} classes for this plan.`);
+    }
   }
 
   const oldTemplates = enrolment.classAssignments.length
@@ -509,7 +590,6 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     : enrolment.template
       ? [enrolment.template]
       : [];
-  const baseStart = input.startDate ? normalizeStartDate(input.startDate) : startOfDay(enrolment.startDate);
   const templateEndDates = templates.map((template) => template.endDate).filter(Boolean) as Date[];
   const earliestEnd =
     templateEndDates.length > 0
