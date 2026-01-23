@@ -175,7 +175,6 @@ export function resolveWeeklyPayAheadSequence(params: {
     return { coverageStart: null as Date | null, coverageEnd: null as Date | null, periods: 0 };
   }
 
-  const today = params.today ?? new Date();
   const endDayKey = params.endDate ? toBrisbaneDayKey(params.endDate) : null;
 
   const sessionsPerWeek =
@@ -184,13 +183,15 @@ export function resolveWeeklyPayAheadSequence(params: {
   const entitlementSessions = params.durationWeeks * sessionsPerWeek;
   const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
 
-  const firstStartDayKey = resolveCoverageStartDayKey({
-    enrolmentStart: params.startDate,
-    paidThroughDate: params.paidThroughDate,
-    today,
+  const baselineDayKey = params.paidThroughDate
+    ? brisbaneAddDays(toBrisbaneDayKey(params.paidThroughDate), 1)
+    : toBrisbaneDayKey(params.startDate);
+
+  const firstStartDayKey = nextScheduledDayKey({
+    startDayKey: baselineDayKey,
     assignedTemplates: effectiveTemplates,
     holidays: params.holidays,
-    enrolmentEndDayKey: endDayKey,
+    endDayKey,
   });
 
   if (!firstStartDayKey) {
