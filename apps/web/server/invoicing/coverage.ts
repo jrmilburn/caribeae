@@ -1,3 +1,4 @@
+import { addDays, isAfter, isEqual } from "date-fns";
 import { BillingType, type Prisma } from "@prisma/client";
 
 import {
@@ -175,63 +176,20 @@ export function resolveWeeklyPayAheadSequence(params: {
     return { coverageStart: null as Date | null, coverageEnd: null as Date | null, periods: 0 };
   }
 
-  const endDayKey = params.endDate ? toBrisbaneDayKey(params.endDate) : null;
+  const coverageStart = brisbaneStartOfDay(params.paidThroughDate ?? params.startDate);
+  const endDate = params.endDate ? brisbaneStartOfDay(params.endDate) : null;
 
-  const sessionsPerWeek =
-    params.sessionsPerWeek && params.sessionsPerWeek > 0 ? params.sessionsPerWeek : 1;
-
-  const entitlementSessions = params.durationWeeks * sessionsPerWeek;
-  const effectiveTemplates = limitWeeklyTemplates(params.assignedTemplates, sessionsPerWeek);
-
-  const baselineDayKey = params.paidThroughDate
-    ? brisbaneAddDays(toBrisbaneDayKey(params.paidThroughDate), 1)
-    : toBrisbaneDayKey(params.startDate);
-
-  const firstStartDayKey = nextScheduledDayKey({
-    startDayKey: baselineDayKey,
-    assignedTemplates: effectiveTemplates,
-    holidays: params.holidays,
-    endDayKey,
-  });
-
-  if (!firstStartDayKey) {
+  if (endDate && (isAfter(coverageStart, endDate) || isEqual(coverageStart, endDate))) {
     return { coverageStart: null, coverageEnd: null, periods: 0 };
   }
 
-  let currentStart = firstStartDayKey;
-  let coverageEndDayKey = firstStartDayKey;
-  let periods = 0;
-
-  for (let i = 0; i < params.quantity; i += 1) {
-    const endKey = computeCoverageEndDay({
-      startDayKey: currentStart,
-      assignedTemplates: effectiveTemplates,
-      holidays: params.holidays,
-      entitlementSessions,
-      endDayKey,
-    });
-
-    if (!endKey) break;
-
-    coverageEndDayKey = endKey;
-    periods += 1;
-
-    const nextStartCandidate = brisbaneAddDays(endKey, 1);
-    const nextStart = nextScheduledDayKey({
-      startDayKey: nextStartCandidate,
-      assignedTemplates: effectiveTemplates,
-      holidays: params.holidays,
-      endDayKey,
-    });
-
-    if (!nextStart) break;
-    currentStart = nextStart;
-  }
+  const weeksCovered = params.durationWeeks * params.quantity;
+  const coverageEnd = addDays(coverageStart, weeksCovered * 7);
 
   return {
-    coverageStart: dayKeyToDate(firstStartDayKey),
-    coverageEnd: dayKeyToDate(coverageEndDayKey),
-    periods,
+    coverageStart,
+    coverageEnd,
+    periods: params.quantity,
   };
 }
 

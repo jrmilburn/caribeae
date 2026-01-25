@@ -63,11 +63,6 @@ export function resolveCreditsPurchased(invoice: InvoiceWithRelations, plan: Enr
   return computed;
 }
 
-function resolveEnrolmentQuantity(invoice: InvoiceWithRelations) {
-  const enrolmentLines = invoice.lineItems.filter((li) => li.kind === InvoiceLineItemKind.ENROLMENT);
-  return enrolmentLines.reduce((sum, li) => sum + (li.quantity ?? 1), 0) || 1;
-}
-
 export function normalizeCoverageEndForStorage(value: Date) {
   const dayKey = toBrisbaneDayKey(value);
   const [year, month, day] = dayKey.split("-").map(Number);
@@ -278,34 +273,16 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
     const paidAt = asDate(invoice.paidAt) ?? new Date();
 
     if (plan.billingType === BillingType.PER_WEEK) {
-      const coverageEnd = invoice.coverageEnd ? normalizeDate(invoice.coverageEnd) : null;
-      const coverageStart = invoice.coverageStart ? normalizeDate(invoice.coverageStart) : null;
+      const coverageEnd = invoice.coverageEnd ? normalizeCoverageEndForStorage(invoice.coverageEnd) : null;
+      const coverageStart = invoice.coverageStart ? normalizeCoverageEndForStorage(invoice.coverageStart) : null;
       if (!coverageEnd) {
         throw new Error("Weekly invoices must include a coverage end date.");
       }
       if (!coverageStart) {
         throw new Error("Weekly invoices must include a coverage start date.");
       }
-      const assignedTemplates = enrolment.classAssignments.length
-        ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
-        : enrolment.template
-          ? [enrolment.template]
-          : [];
-      const entitlementSessions =
-        (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1) *
-        (plan.durationWeeks && plan.durationWeeks > 0 ? plan.durationWeeks : 1) *
-        resolveEnrolmentQuantity(invoice);
-      const baseCoverageEndDayKey = computeCoverageEndDay({
-        startDayKey: toBrisbaneDayKey(coverageStart),
-        assignedTemplates,
-        holidays: [],
-        entitlementSessions,
-        endDayKey: enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null,
-      });
-      updates.paidThroughDateComputed = baseCoverageEndDayKey
-        ? brisbaneStartOfDay(baseCoverageEndDayKey)
-        : null;
-      updates.paidThroughDate = updates.paidThroughDateComputed;
+      updates.paidThroughDate = coverageEnd;
+      updates.paidThroughDateComputed = coverageEnd;
     } else {
       const creditsDelta = resolveCreditsPurchased(invoice, plan);
       if (creditsDelta > 0) {

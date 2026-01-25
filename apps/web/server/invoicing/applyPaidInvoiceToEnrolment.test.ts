@@ -205,3 +205,21 @@ test("Scenario G: weekly coverage skips holidays after paid-through", () => {
   assert.strictEqual(coverage.coverageStart?.toISOString().slice(0, 10), "2026-02-16");
   assert.strictEqual(coverage.coverageEnd?.toISOString().slice(0, 10), "2026-03-16");
 });
+
+test("Scenario H: PER_WEEK pay-ahead uses paid-through boundary without holiday adjustments", () => {
+  const payAhead = resolveWeeklyPayAheadSequence({
+    startDate: d("2026-01-05"),
+    endDate: null,
+    paidThroughDate: d("2026-02-02"),
+    durationWeeks: 4,
+    sessionsPerWeek: 1,
+    quantity: 1,
+    assignedTemplates: mondayTemplate,
+    holidays: [{ startDate: d("2026-02-16"), endDate: d("2026-02-16") }],
+    today: d("2026-02-02"),
+  });
+
+  assert.strictEqual(payAhead.coverageStart?.toISOString().slice(0, 10), "2026-02-02");
+  assert.strictEqual(payAhead.coverageEnd?.toISOString().slice(0, 10), "2026-03-02");
+  assert.strictEqual(payAhead.periods, 1);
+});
