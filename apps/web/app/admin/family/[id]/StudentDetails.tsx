@@ -149,6 +149,7 @@ export default function StudentDetails({
                 enrolContext={enrolContext ?? null}
                 onChangeLevel={setChangingStudent}
                 searchParams={searchParams}
+                familyId={familyId}
               />
             ))}
           </div>
@@ -199,6 +200,7 @@ function StudentCard({
   enrolContext,
   onChangeLevel,
   searchParams,
+  familyId,
 }: {
   student: StudentWithHistory;
   onEdit: (student: StudentWithHistory) => void;
@@ -206,6 +208,7 @@ function StudentCard({
   enrolContext?: { templateId: string; startDate?: string } | null;
   onChangeLevel: (student: StudentWithHistory) => void;
   searchParams: ReturnType<typeof useSearchParams>;
+  familyId: string;
 }) {
   const router = useRouter();
   const levelChanges: LevelChangeRecord[] = Array.isArray(student.levelChanges)
