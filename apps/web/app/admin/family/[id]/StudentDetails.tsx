@@ -148,6 +148,7 @@ export default function StudentDetails({
                 onDelete={handleDelete}
                 enrolContext={enrolContext ?? null}
                 onChangeLevel={setChangingStudent}
+                searchParams={searchParams}
               />
             ))}
           </div>
@@ -197,12 +198,14 @@ function StudentCard({
   onDelete,
   enrolContext,
   onChangeLevel,
+  searchParams,
 }: {
   student: StudentWithHistory;
   onEdit: (student: StudentWithHistory) => void;
   onDelete: (id: string) => void;
   enrolContext?: { templateId: string; startDate?: string } | null;
   onChangeLevel: (student: StudentWithHistory) => void;
+  searchParams: ReturnType<typeof useSearchParams>;
 }) {
   const router = useRouter();
   const levelChanges: LevelChangeRecord[] = Array.isArray(student.levelChanges)
