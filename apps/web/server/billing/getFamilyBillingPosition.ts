@@ -19,6 +19,7 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
+import { filterWeeklyPlanOptions, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -102,8 +103,15 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
   if (!family) throw new Error("Family not found.");
 
   const enrolmentIds = family.students.flatMap((s : any) => s.enrolments?.map((e : any) => e.id) ?? []);
+  const levelIds = Array.from(
+    new Set(
+      family.students
+        .flatMap((student) => student.enrolments?.map((enrolment) => enrolment.plan?.levelId).filter(Boolean) ?? [])
+        .filter((levelId): levelId is string => Boolean(levelId))
+    )
+  );
 
-  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays] = await Promise.all([
+  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays, weeklyPlans] = await Promise.all([
     client.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       include: {
@@ -153,7 +161,32 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     }),
     getBillingStatusForEnrolments(enrolmentIds, { client }),
     client.holiday.findMany({ select: { startDate: true, endDate: true } }),
+    levelIds.length
+      ? client.enrolmentPlan.findMany({
+          where: {
+            levelId: { in: levelIds },
+            billingType: BillingType.PER_WEEK,
+          },
+          select: {
+            id: true,
+            name: true,
+            priceCents: true,
+            durationWeeks: true,
+            sessionsPerWeek: true,
+            isSaturdayOnly: true,
+            billingType: true,
+            levelId: true,
+          },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const weeklyPlansByLevel = weeklyPlans.reduce<Map<string, typeof weeklyPlans>>((map, plan) => {
+    const entry = map.get(plan.levelId) ?? [];
+    entry.push(plan);
+    map.set(plan.levelId, entry);
+    return map;
+  }, new Map());
 
   const latestCoverageMap = new Map<string, Date | null>(
     latestCoverage.map((entry : any) => [entry.enrolmentId, asDate(entry._max.coverageEnd)])
@@ -198,6 +231,29 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         : enrolment.template
           ? [enrolment.template]
           : [];
+      const templates = resolveEnrolmentTemplates({
+        template: enrolment.template
+          ? {
+              dayOfWeek: enrolment.template.dayOfWeek ?? null,
+              name: enrolment.template.name ?? null,
+              levelId: enrolment.template.levelId ?? null,
+            }
+          : null,
+        assignedTemplates: assignments.map((template) => ({
+          dayOfWeek: template?.dayOfWeek ?? null,
+          name: template?.name ?? null,
+          levelId: template?.levelId ?? null,
+        })),
+      });
+      const currentLevelId = plan?.levelId ?? templates[0]?.levelId ?? null;
+      const weeklyPlanOptions =
+        plan?.billingType === BillingType.PER_WEEK
+          ? filterWeeklyPlanOptions({
+              plans: weeklyPlansByLevel.get(currentLevelId ?? "") ?? [],
+              currentLevelId,
+              templates,
+            })
+          : [];
 
       return {
         id: enrolment.id,
@@ -210,6 +266,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         durationWeeks: plan?.durationWeeks ?? null,
         sessionsPerWeek: plan?.sessionsPerWeek ?? null,
         blockClassCount: plan?.blockClassCount ?? null,
+        weeklyPlanOptions,
         creditsRemaining,
         paidThroughDate,
         projectedCoverageEnd,
