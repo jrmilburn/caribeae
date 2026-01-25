@@ -5,6 +5,7 @@ import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { MoreVerticalIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { buildReturnUrl } from "@/lib/returnContext";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -17,22 +18,25 @@ export default function FamilyListItem({
   family,
   onEdit,
   onDelete,
+  returnTo,
 }: {
   family: FamilyListEntry;
   onEdit: (family: FamilyListEntry) => void;
   onDelete: (family: FamilyListEntry) => void;
+  returnTo?: string | null;
 }) {
   const router = useRouter();
+  const targetUrl = buildReturnUrl(`/admin/family/${family.id}`, returnTo);
 
   return (
     <div
       role="link"
       tabIndex={0}
-      onClick={() => router.push(`/admin/family/${family.id}`)}
+      onClick={() => router.push(targetUrl)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          router.push(`/admin/family/${family.id}`);
+          router.push(targetUrl);
         }
       }}
       className={cn(
@@ -66,7 +70,7 @@ export default function FamilyListItem({
           >
             <DropdownMenuItem
               onSelect={() => {
-                router.push(`/admin/family/${family.id}`);
+                router.push(targetUrl);
               }}
             >
               View
