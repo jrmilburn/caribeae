@@ -44,6 +44,7 @@ import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
+import { WeeklyPlanSelect } from "@/components/admin/WeeklyPlanSelect";
 import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
@@ -223,7 +224,7 @@ export default function FamilyInvoices({ family, billing, billingPosition, payme
           <PayAheadSheet familyId={family.id} />
           <RecordPaymentSheet
             familyId={family.id}
-            enrolments={billing.enrolments}
+            enrolments={billingPosition.enrolments}
             openInvoices={openInvoices}
             open={paymentSheetOpen}
             onOpenChange={onPaymentSheetChange}
@@ -645,7 +646,7 @@ function RecordPaymentSheet({
   onOpenChange,
 }: {
   familyId: string;
-  enrolments: BillingData["enrolments"];
+  enrolments: FamilyBillingPosition["enrolments"];
   openInvoices: Array<
     BillingData["openInvoices"][number] & {
       balanceCents: number;
@@ -670,15 +671,26 @@ function RecordPaymentSheet({
   const [paidDate, setPaidDate] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
   const [customBlockLength, setCustomBlockLength] = React.useState("");
+  const [selectedPlanId, setSelectedPlanId] = React.useState<string | null>(null);
   const [isSubmitting, startSubmit] = React.useTransition();
 
   const enrolmentOptions = React.useMemo(() => {
     return enrolments
-      .filter((enrolment) => enrolment.plan?.billingType)
+      .filter((enrolment) => enrolment.billingType)
       .map((enrolment) => ({
         id: enrolment.id,
-        label: `${enrolment.student.name} · ${enrolment.plan?.name ?? "Plan"}`,
-        plan: enrolment.plan,
+        label: `${enrolment.studentName} · ${enrolment.planName ?? "Plan"}`,
+        plan: enrolment.planId
+          ? {
+              id: enrolment.planId,
+              name: enrolment.planName,
+              billingType: enrolment.billingType,
+              priceCents: enrolment.planPriceCents,
+              blockClassCount: enrolment.blockClassCount,
+              durationWeeks: enrolment.durationWeeks,
+            }
+          : null,
+        weeklyPlanOptions: enrolment.weeklyPlanOptions ?? [],
       }));
   }, [enrolments]);
 
@@ -701,6 +713,7 @@ function RecordPaymentSheet({
     setPaidDate(new Date().toISOString().slice(0, 10));
     setCustomBlockEnabled(false);
     setCustomBlockLength("");
+    setSelectedPlanId(null);
   }, [sheetOpen, openInvoices]);
 
   React.useEffect(() => {
@@ -727,7 +740,20 @@ function RecordPaymentSheet({
   const allocatedTotalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
   const explicitAmountCents = dollarsToCents(amount || "0");
   const selectedEnrolment = enrolmentOptions.find((option) => option.id === applyTarget) ?? null;
+  const weeklyPlanOptions = selectedEnrolment?.plan?.billingType === "PER_WEEK" ? selectedEnrolment.weeklyPlanOptions : [];
+  const activePlanId = selectedPlanId ?? selectedEnrolment?.plan?.id ?? null;
+  const selectedPlan =
+    weeklyPlanOptions?.find((plan) => plan.id === activePlanId) ??
+    (selectedEnrolment?.plan
+      ? {
+          id: selectedEnrolment.plan.id,
+          name: selectedEnrolment.plan.name,
+          priceCents: selectedEnrolment.plan.priceCents,
+          durationWeeks: selectedEnrolment.plan.durationWeeks ?? null,
+        }
+      : null);
   const isBlockPlan = selectedEnrolment?.plan?.billingType === "PER_CLASS";
+  const isWeeklyPlan = selectedEnrolment?.plan?.billingType === "PER_WEEK";
   const planBlockLength = selectedEnrolment?.plan ? resolveBlockLength(selectedEnrolment.plan.blockClassCount) : 1;
   const parsedCustomBlockLength = Number(customBlockLength);
   const customBlockValue = Number.isInteger(parsedCustomBlockLength) ? parsedCustomBlockLength : null;
@@ -739,7 +765,13 @@ function RecordPaymentSheet({
           customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
         })
       : null;
-  const amountCents = customBlockEnabled && blockPricing ? blockPricing.totalCents : explicitAmountCents;
+  const planAmountCents = isWeeklyPlan && selectedPlan ? selectedPlan.priceCents : 0;
+  const amountCents =
+    customBlockEnabled && blockPricing
+      ? blockPricing.totalCents
+      : isWeeklyPlan && selectedPlan
+        ? planAmountCents
+        : explicitAmountCents;
   const totalCents = applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents : amountCents;
 
   React.useEffect(() => {
@@ -753,6 +785,23 @@ function RecordPaymentSheet({
       setCustomBlockLength(String(planBlockLength));
     }
   }, [applyTarget, sheetOpen, isBlockPlan, planBlockLength, customBlockEnabled]);
+
+  React.useEffect(() => {
+    if (!sheetOpen) return;
+    if (!isWeeklyPlan || !selectedEnrolment?.plan) {
+      setSelectedPlanId(null);
+      return;
+    }
+    setSelectedPlanId(selectedEnrolment.plan.id);
+    setAmount(centsToDollarString(selectedEnrolment.plan.priceCents));
+  }, [sheetOpen, applyTarget, isWeeklyPlan, selectedEnrolment?.plan]);
+
+  React.useEffect(() => {
+    if (!sheetOpen) return;
+    if (isWeeklyPlan && selectedPlan) {
+      setAmount(centsToDollarString(selectedPlan.priceCents));
+    }
+  }, [sheetOpen, isWeeklyPlan, selectedPlan?.id, selectedPlan?.priceCents]);
 
   const toggleSelection = (invoiceId: string) => {
     setSelected((prev) => (prev.includes(invoiceId) ? prev.filter((id) => id !== invoiceId) : [...prev, invoiceId]));
@@ -806,6 +855,7 @@ function RecordPaymentSheet({
               : undefined,
           enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
           customBlockLength: customBlockEnabled && isBlockPlan && customBlockValue ? customBlockValue : undefined,
+          planId: isWeeklyPlan && selectedPlan ? selectedPlan.id : undefined,
           idempotencyKey: crypto.randomUUID(),
         });
         toast.success("Payment recorded.");
@@ -849,6 +899,15 @@ function RecordPaymentSheet({
               </SelectContent>
             </Select>
           </div>
+
+          {applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" && isWeeklyPlan && weeklyPlanOptions.length > 1 ? (
+            <WeeklyPlanSelect
+              value={activePlanId ?? ""}
+              onValueChange={(value) => setSelectedPlanId(value)}
+              options={weeklyPlanOptions}
+              label="Pay-ahead plan"
+            />
+          ) : null}
 
           {applyTarget === "ALLOCATE_INVOICES" ? (
             <div className="rounded-lg border">
@@ -927,9 +986,15 @@ function RecordPaymentSheet({
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
+                value={
+                  customBlockEnabled && blockPricing
+                    ? centsToDollarString(blockPricing.totalCents)
+                    : isWeeklyPlan && selectedPlan
+                      ? centsToDollarString(selectedPlan.priceCents)
+                      : amount
+                }
                 onChange={(e) => setAmount(e.target.value)}
-                disabled={customBlockEnabled && isBlockPlan}
+                disabled={(customBlockEnabled && isBlockPlan) || (isWeeklyPlan && Boolean(selectedPlan))}
                 placeholder="0.00"
               />
               {isBlockPlan && selectedEnrolment?.plan ? (

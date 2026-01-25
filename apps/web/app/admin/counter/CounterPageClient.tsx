@@ -25,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
@@ -36,6 +37,7 @@ import { createPayment } from "@/server/billing/createPayment";
 import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
 import { undoPayment } from "@/server/billing/undoPayment";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
+import { WeeklyPlanSelect } from "@/components/admin/WeeklyPlanSelect";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
 type AllocationMap = Record<string, string>;
@@ -76,6 +78,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
   const [method, setMethod] = React.useState("Cash");
   const [note, setNote] = React.useState("");
   const [paidOn, setPaidOn] = React.useState(new Date().toISOString().slice(0, 10));
+  const [paymentApplyTarget, setPaymentApplyTarget] = React.useState<string>("ALLOCATE_INVOICES");
+  const [paymentPlanId, setPaymentPlanId] = React.useState<string | null>(null);
   const [allocationMode, setAllocationMode] = React.useState<"AUTO" | "MANUAL">("AUTO");
   const [allocations, setAllocations] = React.useState<AllocationMap>({});
   const [submittingPayment, setSubmittingPayment] = React.useState(false);
@@ -193,6 +197,54 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     setAllocations((prev) => ({ ...prev, [invoiceId]: value }));
   };
 
+  const paymentEnrolmentOptions = React.useMemo(() => {
+    if (!summary) return [];
+    return summary.enrolments
+      .filter((enrolment) => enrolment.billingType)
+      .map((enrolment) => ({
+        id: enrolment.id,
+        label: `${enrolment.studentName} · ${enrolment.planName ?? "Plan"}`,
+        enrolment,
+      }));
+  }, [summary]);
+
+  const selectedPaymentEnrolment =
+    paymentApplyTarget !== "ALLOCATE_INVOICES"
+      ? paymentEnrolmentOptions.find((option) => option.id === paymentApplyTarget)?.enrolment ?? null
+      : null;
+  const weeklyPlanOptions =
+    selectedPaymentEnrolment?.billingType === "PER_WEEK" ? selectedPaymentEnrolment.weeklyPlanOptions ?? [] : [];
+  const activePaymentPlanId = paymentPlanId ?? selectedPaymentEnrolment?.planId ?? null;
+  const selectedPaymentPlan =
+    weeklyPlanOptions.find((plan) => plan.id === activePaymentPlanId) ??
+    (selectedPaymentEnrolment
+      ? {
+          id: selectedPaymentEnrolment.planId,
+          name: selectedPaymentEnrolment.planName,
+          priceCents: selectedPaymentEnrolment.planPriceCents,
+          durationWeeks: selectedPaymentEnrolment.durationWeeks,
+        }
+      : null);
+  const isPaymentWeekly = selectedPaymentEnrolment?.billingType === "PER_WEEK";
+  const paymentApplysToEnrolment = paymentApplyTarget !== "ALLOCATE_INVOICES";
+
+  React.useEffect(() => {
+    if (!paymentApplysToEnrolment) {
+      setPaymentPlanId(null);
+      return;
+    }
+    if (isPaymentWeekly && selectedPaymentEnrolment?.planId) {
+      setPaymentPlanId(selectedPaymentEnrolment.planId);
+      setPaymentAmount(centsToDollarString(selectedPaymentEnrolment.planPriceCents));
+    }
+  }, [paymentApplysToEnrolment, isPaymentWeekly, selectedPaymentEnrolment?.planId, selectedPaymentEnrolment?.planPriceCents]);
+
+  React.useEffect(() => {
+    if (isPaymentWeekly && selectedPaymentPlan) {
+      setPaymentAmount(centsToDollarString(selectedPaymentPlan.priceCents));
+    }
+  }, [isPaymentWeekly, selectedPaymentPlan?.id, selectedPaymentPlan?.priceCents]);
+
   const handleUndoPayment = (paymentId: string) => {
     if (!selectedFamily) return;
     const confirmed = window.confirm(
@@ -267,8 +319,15 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       toast.error("Select a family first.");
       return;
     }
+    if (paymentApplysToEnrolment && !selectedPaymentEnrolment) {
+      toast.error("Select an enrolment to apply this payment.");
+      return;
+    }
 
-    const amountCents = dollarsToCents(paymentAmount || "0");
+    const amountCents =
+      paymentApplysToEnrolment && isPaymentWeekly && selectedPaymentPlan
+        ? selectedPaymentPlan.priceCents
+        : dollarsToCents(paymentAmount || "0");
     if (amountCents <= 0) {
       toast.error("Enter a payment amount.");
       return;
@@ -276,7 +335,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
 
     let allocationsPayload: { invoiceId: string; amountCents: number }[] | undefined = undefined;
 
-    if (allocationMode === "MANUAL") {
+    if (!paymentApplysToEnrolment && allocationMode === "MANUAL") {
       allocationsPayload = Object.entries(allocations)
         .map(([invoiceId, value]) => ({
           invoiceId,
@@ -316,8 +375,10 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
         paidAt: paidOn ? new Date(paidOn) : undefined,
         method: method.trim() || undefined,
         note: note.trim() || undefined,
-        allocations: allocationsPayload,
-        allocationMode,
+        allocations: paymentApplysToEnrolment ? undefined : allocationsPayload,
+        allocationMode: paymentApplysToEnrolment ? undefined : allocationMode,
+        enrolmentId: paymentApplysToEnrolment ? paymentApplyTarget : undefined,
+        planId: paymentApplysToEnrolment && isPaymentWeekly && selectedPaymentPlan ? selectedPaymentPlan.id : undefined,
         idempotencyKey: crypto.randomUUID(),
       });
 
@@ -332,6 +393,8 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
 
       setPaymentAmount("");
       setAllocations({});
+      setPaymentApplyTarget("ALLOCATE_INVOICES");
+      setPaymentPlanId(null);
       try {
         const refreshed = await getFamilyBillingSummary(selectedFamily.id);
         setSummary(refreshed);
@@ -360,6 +423,12 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
       return next;
     });
   }, [activeTab]);
+
+  React.useEffect(() => {
+    if (actionMode !== "PAYMENT") return;
+    setPaymentApplyTarget("ALLOCATE_INVOICES");
+    setPaymentPlanId(null);
+  }, [actionMode, selectedFamily?.id]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -495,6 +564,15 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
         setMethod={setMethod}
         setNote={setNote}
         setPaidOn={setPaidOn}
+        paymentApplyTarget={paymentApplyTarget}
+        setPaymentApplyTarget={setPaymentApplyTarget}
+        paymentEnrolmentOptions={paymentEnrolmentOptions}
+        paymentPlanId={activePaymentPlanId ?? ""}
+        setPaymentPlanId={setPaymentPlanId}
+        selectedPaymentEnrolment={selectedPaymentEnrolment}
+        selectedPaymentPlan={selectedPaymentPlan}
+        isPaymentWeekly={isPaymentWeekly}
+        paymentApplysToEnrolment={paymentApplysToEnrolment}
         onSubmitPayment={handlePaymentSubmit}
         submittingPayment={submittingPayment}
         products={products}
@@ -835,6 +913,15 @@ type CounterActionSheetProps = {
   setMethod: (value: string) => void;
   setNote: (value: string) => void;
   setPaidOn: (value: string) => void;
+  paymentApplyTarget: string;
+  setPaymentApplyTarget: (value: string) => void;
+  paymentEnrolmentOptions: Array<{ id: string; label: string }>;
+  paymentPlanId: string;
+  setPaymentPlanId: (value: string) => void;
+  selectedPaymentEnrolment: FamilyBillingSummary["enrolments"][number] | null;
+  selectedPaymentPlan: { id: string; priceCents: number } | null;
+  isPaymentWeekly: boolean;
+  paymentApplysToEnrolment: boolean;
   onSubmitPayment: (e: React.FormEvent<HTMLFormElement>) => void;
   submittingPayment: boolean;
   products: Product[];
@@ -875,6 +962,15 @@ function CounterActionSheet({
   setMethod,
   setNote,
   setPaidOn,
+  paymentApplyTarget,
+  setPaymentApplyTarget,
+  paymentEnrolmentOptions,
+  paymentPlanId,
+  setPaymentPlanId,
+  selectedPaymentEnrolment,
+  selectedPaymentPlan,
+  isPaymentWeekly,
+  paymentApplysToEnrolment,
   onSubmitPayment,
   submittingPayment,
   products,
@@ -919,15 +1015,46 @@ function CounterActionSheet({
             ) : (
               <form onSubmit={onSubmitPayment} className="space-y-4">
                 <div className="space-y-2">
+                  <Label>Apply to</Label>
+                  <Select value={paymentApplyTarget} onValueChange={setPaymentApplyTarget}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select apply target" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALLOCATE_INVOICES">Allocate to invoices</SelectItem>
+                      {paymentEnrolmentOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {paymentApplysToEnrolment && isPaymentWeekly && selectedPaymentEnrolment?.weeklyPlanOptions?.length > 1 ? (
+                  <WeeklyPlanSelect
+                    value={paymentPlanId}
+                    onValueChange={setPaymentPlanId}
+                    options={selectedPaymentEnrolment.weeklyPlanOptions}
+                    label="Pay-ahead plan"
+                  />
+                ) : null}
+
+                <div className="space-y-2">
                   <Label>Amount</Label>
                   <Input
                     type="number"
                     inputMode="decimal"
                     step="0.01"
                     min="0"
-                    value={paymentAmount}
+                    value={
+                      paymentApplysToEnrolment && isPaymentWeekly && selectedPaymentPlan
+                        ? centsToDollarString(selectedPaymentPlan.priceCents)
+                        : paymentAmount
+                    }
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     placeholder="0.00"
+                    disabled={paymentApplysToEnrolment && isPaymentWeekly && Boolean(selectedPaymentPlan)}
                   />
                 </div>
 
@@ -947,99 +1074,103 @@ function CounterActionSheet({
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
                 </div>
 
-                <div className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold">Allocation mode</p>
-                      <p className="text-xs text-muted-foreground">
-                        Auto allocates oldest invoices first; switch to manual to choose amounts.
-                      </p>
+                {!paymentApplysToEnrolment ? (
+                  <>
+                    <div className="rounded-md border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold">Allocation mode</p>
+                          <p className="text-xs text-muted-foreground">
+                            Auto allocates oldest invoices first; switch to manual to choose amounts.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={allocationMode === "AUTO" ? "default" : "outline"}
+                            onClick={() => setAllocationMode("AUTO")}
+                            size="sm"
+                          >
+                            Auto
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={allocationMode === "MANUAL" ? "default" : "outline"}
+                            onClick={() => setAllocationMode("MANUAL")}
+                            size="sm"
+                          >
+                            Manual
+                          </Button>
+                        </div>
+                      </div>
+                      {allocationMode === "AUTO" ? (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          We will allocate from the oldest invoice forward. Any remaining amount stays unallocated.
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant={allocationMode === "AUTO" ? "default" : "outline"}
-                        onClick={() => setAllocationMode("AUTO")}
-                        size="sm"
-                      >
-                        Auto
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={allocationMode === "MANUAL" ? "default" : "outline"}
-                        onClick={() => setAllocationMode("MANUAL")}
-                        size="sm"
-                      >
-                        Manual
-                      </Button>
-                    </div>
-                  </div>
-                  {allocationMode === "AUTO" ? (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      We will allocate from the oldest invoice forward. Any remaining amount stays unallocated.
-                    </p>
-                  ) : null}
-                </div>
 
-                <div className="rounded-md border">
-                  <div className="flex items-center justify-between border-b px-3 py-2">
-                    <div>
-                      <p className="text-sm font-semibold">Open invoices</p>
-                      <p className="text-xs text-muted-foreground">Allocate only if needed</p>
-                    </div>
-                    <Badge variant="secondary">{invoiceAllocationRows.length} open</Badge>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Invoice</TableHead>
-                        <TableHead>Due</TableHead>
-                        <TableHead className="text-right">Balance</TableHead>
-                        {allocationMode === "MANUAL" ? <TableHead className="text-right">Allocate</TableHead> : null}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {invoiceAllocationRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={allocationMode === "MANUAL" ? 4 : 3} className="text-sm text-muted-foreground">
-                            No open invoices for this family.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        invoiceAllocationRows.map((invoice : any) => {
-                          const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
-                          const allocationValue = allocations[invoice.id] ?? centsToDollarString(balance);
-                          return (
-                            <TableRow key={invoice.id}>
-                              <TableCell className="space-y-1">
-                                <div className="font-medium">#{invoice.id}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {invoice.enrolment?.student?.name ?? "No enrolment"} · {invoice.enrolment?.plan?.name ?? "Plan not set"}
-                                </div>
+                    <div className="rounded-md border">
+                      <div className="flex items-center justify-between border-b px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold">Open invoices</p>
+                          <p className="text-xs text-muted-foreground">Allocate only if needed</p>
+                        </div>
+                        <Badge variant="secondary">{invoiceAllocationRows.length} open</Badge>
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Invoice</TableHead>
+                            <TableHead>Due</TableHead>
+                            <TableHead className="text-right">Balance</TableHead>
+                            {allocationMode === "MANUAL" ? <TableHead className="text-right">Allocate</TableHead> : null}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoiceAllocationRows.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={allocationMode === "MANUAL" ? 4 : 3} className="text-sm text-muted-foreground">
+                                No open invoices for this family.
                               </TableCell>
-                              <TableCell className="text-sm">{invoice.dueAt ? formatDate(invoice.dueAt) : "—"}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrencyFromCents(balance)}</TableCell>
-                              {allocationMode === "MANUAL" ? (
-                                <TableCell className="text-right">
-                                  <Input
-                                    type="number"
-                                    inputMode="decimal"
-                                    step="0.01"
-                                    min="0"
-                                    value={allocationValue}
-                                    onChange={(e) => onAllocationChange(invoice.id, e.target.value)}
-                                    className="w-28 text-right"
-                                  />
-                                </TableCell>
-                              ) : null}
                             </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                          ) : (
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            invoiceAllocationRows.map((invoice : any) => {
+                              const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+                              const allocationValue = allocations[invoice.id] ?? centsToDollarString(balance);
+                              return (
+                                <TableRow key={invoice.id}>
+                                  <TableCell className="space-y-1">
+                                    <div className="font-medium">#{invoice.id}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {invoice.enrolment?.student?.name ?? "No enrolment"} · {invoice.enrolment?.plan?.name ?? "Plan not set"}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm">{invoice.dueAt ? formatDate(invoice.dueAt) : "—"}</TableCell>
+                                  <TableCell className="text-right font-semibold">{formatCurrencyFromCents(balance)}</TableCell>
+                                  {allocationMode === "MANUAL" ? (
+                                    <TableCell className="text-right">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="0.01"
+                                        min="0"
+                                        value={allocationValue}
+                                        onChange={(e) => onAllocationChange(invoice.id, e.target.value)}
+                                        className="w-28 text-right"
+                                      />
+                                    </TableCell>
+                                  ) : null}
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                ) : null}
 
                 <div className="flex justify-end gap-2 pt-1">
                   <Button type="submit" disabled={submittingPayment}>
