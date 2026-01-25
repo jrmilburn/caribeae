@@ -21,6 +21,7 @@ import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
+import { WeeklyPlanSelect, type WeeklyPlanOption } from "@/components/admin/WeeklyPlanSelect";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -68,12 +69,13 @@ function projectPaidAhead(
   enrolment: Enrolment,
   quantity: number,
   holidays: HolidayRange[],
-  customBlockLength?: number | null
+  customBlockLength?: number | null,
+  selectedPlan?: WeeklyPlanOption | null
 ) {
   const today = new Date();
   const paidThrough = resolveCurrentPaidThrough(enrolment);
 
-  if (enrolment.billingType === "PER_WEEK" && enrolment.durationWeeks) {
+  if (enrolment.billingType === "PER_WEEK" && (selectedPlan?.durationWeeks || enrolment.durationWeeks)) {
     const startDate = asDate(enrolment.startDate) ?? today;
     const endDate = asDate(enrolment.endDate);
     const assignedTemplates = (enrolment.assignedClasses ?? [])
@@ -84,11 +86,11 @@ function projectPaidAhead(
       return { nextPaidThrough: paidThrough };
     }
 
-    const payAhead = resolveWeeklyPayAheadSequence({
+      const payAhead = resolveWeeklyPayAheadSequence({
       startDate,
       endDate,
       paidThroughDate: paidThrough,
-      durationWeeks: enrolment.durationWeeks,
+      durationWeeks: selectedPlan?.durationWeeks ?? enrolment.durationWeeks,
       sessionsPerWeek: enrolment.sessionsPerWeek ?? null,
       quantity,
       assignedTemplates,
@@ -143,6 +145,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
   const [quantities, setQuantities] = React.useState<Record<string, number>>({});
   const [customBlockLengths, setCustomBlockLengths] = React.useState<Record<string, string>>({});
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState<Record<string, boolean>>({});
+  const [selectedPlans, setSelectedPlans] = React.useState<Record<string, string>>({});
   const [method, setMethod] = React.useState("Cash");
   const [note, setNote] = React.useState("");
   const [paidOn, setPaidOn] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -173,6 +176,15 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     );
     setCustomBlockLengths({});
     setCustomBlockEnabled({});
+    setSelectedPlans(
+      eligibleIds.reduce<Record<string, string>>((acc, id) => {
+        const enrolment = enrolments.find((entry) => entry.id === id);
+        if (enrolment?.billingType === "PER_WEEK" && enrolment.planId) {
+          acc[id] = enrolment.planId;
+        }
+        return acc;
+      }, {})
+    );
   }, [summary, enrolments]);
 
   const handleToggle = (id: string) => {
@@ -206,10 +218,13 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         const qty = quantities[id] ?? 1;
         const parsedCustom = Number(customBlockLengths[id]);
         const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
+        const enrolment = enrolments.find((entry) => entry.id === id);
+        const selectedPlanId = enrolment?.billingType === "PER_WEEK" ? selectedPlans[id] : undefined;
         return {
           enrolmentId: id,
           quantity: qty > 0 ? qty : 1,
           customBlockLength: customBlockEnabled[id] && customLength ? customLength : undefined,
+          planId: selectedPlanId || undefined,
         };
       })
       .filter((item) => item.quantity > 0);
@@ -239,8 +254,13 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
   };
 
   const selectedEnrolments = paymentEligibleEnrolments.filter((e : any) => selected.includes(e.id));
-    const totalCents = selectedEnrolments.reduce((sum : any, enrolment : any) => {
+  const totalCents = selectedEnrolments.reduce((sum : any, enrolment : any) => {
     const qty = quantities[enrolment.id] ?? 1;
+    const selectedPlanId = selectedPlans[enrolment.id];
+    const selectedPlan =
+      enrolment.billingType === "PER_WEEK"
+        ? enrolment.weeklyPlanOptions?.find((plan : any) => plan.id === selectedPlanId) ?? null
+        : null;
     if (enrolment.billingType === "PER_CLASS" && customBlockEnabled[enrolment.id]) {
       const parsed = Number(customBlockLengths[enrolment.id]);
       const customLength = Number.isInteger(parsed) ? parsed : null;
@@ -251,7 +271,8 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
       });
       return sum + pricing.totalCents * qty;
     }
-    return sum + enrolment.planPriceCents * qty;
+    const unitPriceCents = selectedPlan?.priceCents ?? enrolment.planPriceCents;
+    return sum + unitPriceCents * qty;
   }, 0);
 
   return (
@@ -307,11 +328,17 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                 const qty = quantities[enrolment.id] ?? 1;
                 const parsedCustom = Number(customBlockLengths[enrolment.id]);
                 const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
+                const selectedPlanId = selectedPlans[enrolment.id];
+                const selectedPlan =
+                  enrolment.billingType === "PER_WEEK"
+                    ? enrolment.weeklyPlanOptions?.find((plan : any) => plan.id === selectedPlanId) ?? null
+                    : null;
                 const projection = projectPaidAhead(
                   enrolment,
                   qty,
                   summary.holidays ?? [],
-                  customBlockEnabled[enrolment.id] ? customLength : null
+                  customBlockEnabled[enrolment.id] ? customLength : null,
+                  selectedPlan
                 );
                 const isWeekly = enrolment.billingType === "PER_WEEK";
                 const isBlock = enrolment.billingType === "PER_CLASS";
@@ -325,6 +352,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                       })
                     : null;
                 const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
+                const planLabel = selectedPlan?.name ?? enrolment.planName;
                 const currentLabel = isWeekly
                   ? `Paid to ${formatDate(currentPaidThrough)}`
                   : `Paid to ${formatDate(currentPaidThrough)}`;
@@ -360,7 +388,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                             ) : null}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {enrolment.planName} · {currentLabel} {projectedLabel}
+                            {planLabel} · {currentLabel} {projectedLabel}
                           </div>
                         </div>
                       </label>
@@ -382,11 +410,30 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                         />
                         <Badge variant="secondary" className="text-xs">
                           {formatCurrencyFromCents(
-                            pricing ? pricing.totalCents * qty : enrolment.planPriceCents * qty
+                            pricing
+                              ? pricing.totalCents * qty
+                              : (selectedPlan?.priceCents ?? enrolment.planPriceCents) * qty
                           )}
                         </Badge>
                       </div>
                     </div>
+                    {isWeekly && enrolment.weeklyPlanOptions?.length > 1 ? (
+                      <div className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <div className="max-w-xs">
+                          <WeeklyPlanSelect
+                            value={selectedPlanId ?? enrolment.planId ?? ""}
+                            onValueChange={(value) =>
+                              setSelectedPlans((prev) => ({ ...prev, [enrolment.id]: value }))
+                            }
+                            options={enrolment.weeklyPlanOptions}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {selectedPlan?.durationWeeks ?? enrolment.durationWeeks ?? "—"} weeks ·{" "}
+                          {formatCurrencyFromCents(selectedPlan?.priceCents ?? enrolment.planPriceCents)}
+                        </span>
+                      </div>
+                    ) : null}
                     {isBlock ? (
                       <div className="mt-2 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                         <div>
