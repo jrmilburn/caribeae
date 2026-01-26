@@ -160,6 +160,60 @@ const scheduleDateTimeFormatter = new Intl.DateTimeFormat("en-AU", {
   hour12: true,
 });
 
+const scheduleWeekdayFormatter = new Intl.DateTimeFormat("en-AU", {
+  timeZone: SCHEDULE_TIME_ZONE,
+  weekday: "short",
+});
+
 export function formatScheduleWeekdayTime(date: Date): string {
   return scheduleDateTimeFormatter.format(date);
+}
+
+export function scheduleDateFromKey(dateKey: string, timeZone: string = SCHEDULE_TIME_ZONE): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) {
+    throw new Error("Invalid schedule date key");
+  }
+  const utcTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  const offset = getTimeZoneOffset(new Date(utcTimestamp), timeZone);
+  return new Date(utcTimestamp - offset);
+}
+
+export function scheduleDayOfWeekIndex(date: Date, timeZone: string = SCHEDULE_TIME_ZONE): number {
+  const formatter =
+    timeZone === SCHEDULE_TIME_ZONE
+      ? scheduleWeekdayFormatter
+      : new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short" });
+  const day = formatter.format(date);
+  const lookup: Record<string, number> = {
+    Mon: 0,
+    Tue: 1,
+    Wed: 2,
+    Thu: 3,
+    Fri: 4,
+    Sat: 5,
+    Sun: 6,
+  };
+  return lookup[day] ?? 0;
+}
+
+export function scheduleWeekStart(
+  date: Date | string,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Date {
+  const dateKey = typeof date === "string" ? date : scheduleDateKey(date);
+  const anchor = scheduleDateFromKey(dateKey, timeZone);
+  const dayIndex = scheduleDayOfWeekIndex(anchor, timeZone);
+  return scheduleAddDays(anchor, -dayIndex, timeZone);
+}
+
+export function scheduleAddDays(
+  date: Date,
+  days: number,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Date {
+  const parts = getTimeZoneDateParts(date, timeZone);
+  const utcTimestamp = Date.UTC(parts.year, parts.month - 1, parts.day + days, 0, 0, 0, 0);
+  const offset = getTimeZoneOffset(new Date(utcTimestamp), timeZone);
+  return new Date(utcTimestamp - offset);
 }
