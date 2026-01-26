@@ -52,6 +52,10 @@ export default function FamilyList({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const listUrl = useMemo(() => {
+    const qs = searchParams.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }, [pathname, searchParams]);
 
   const currentLevelId = searchParams.get("levelId") ?? "all";
 
@@ -205,7 +209,13 @@ export default function FamilyList({
         </div>
 
         {families.map((family) => (
-          <FamilyListItem key={family.id} family={family} onEdit={openEdit} onDelete={handleDelete} />
+          <FamilyListItem
+            key={family.id}
+            family={family}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            returnTo={listUrl}
+          />
         ))}
 
         {families.length === 0 && (
