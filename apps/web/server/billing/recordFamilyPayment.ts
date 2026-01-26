@@ -22,9 +22,17 @@ const recordPaymentSchema = z
     allocations: z.array(allocationSchema).optional(),
     enrolmentId: z.string().min(1).optional(),
     customBlockLength: z.number().int().positive().optional(),
+    planId: z.string().min(1).optional(),
     idempotencyKey: z.string().trim().min(1).optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.planId && !data.enrolmentId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Plan selection requires an enrolment.",
+        path: ["planId"],
+      });
+    }
     if (data.enrolmentId) return;
     if (!data.allocations || data.allocations.length === 0) return;
     const allocationTotal = data.allocations.reduce((sum, a) => sum + a.amountCents, 0);
@@ -54,6 +62,7 @@ export async function recordFamilyPayment(input: RecordFamilyPaymentInput) {
       note: payload.note,
       enrolmentId: payload.enrolmentId,
       customBlockLength: payload.customBlockLength,
+      planId: payload.planId,
       idempotencyKey: payload.idempotencyKey,
     });
     return result.payment;
