@@ -32,11 +32,7 @@ export default function StudentPageClient({
           <Button size="sm" variant="ghost" asChild>
             <Link href={returnTo ?? "/admin/family"}>Back to Family</Link>
           </Button>
-          <h1 className="text-xl font-semibold">Student</h1>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Update student details and manage enrolments.
-        </p>
       </div>
 
       <Card>
