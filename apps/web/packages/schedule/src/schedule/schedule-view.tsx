@@ -83,6 +83,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     },
     ref
   ) {
+    const skipSelectedDateSyncRef = React.useRef(false);
     const initialAnchor = scheduleWeekStart(selectedDate ?? weekAnchor ?? new Date());
     const [viewMode, setViewMode] = useState<"week" | "day">(controlledViewMode ?? defaultViewMode);
     const [currentWeek, setCurrentWeek] = useState<Date>(() => initialAnchor);
@@ -130,6 +131,10 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
     React.useEffect(() => {
       if (!onSelectedDateChange) return;
+      if (skipSelectedDateSyncRef.current) {
+        skipSelectedDateSyncRef.current = false;
+        return;
+      }
       const nextDate = scheduleAddDays(weekStart, selectedDay);
       onSelectedDateChange(nextDate);
     }, [onSelectedDateChange, selectedDay, weekStart]);
@@ -147,9 +152,17 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       [onViewModeChange]
     );
 
-    const handleWeekChange = React.useCallback((nextDate: Date) => {
-      setCurrentWeek(scheduleWeekStart(nextDate));
-    }, []);
+    const handleWeekChange = React.useCallback(
+      (nextDate: Date) => {
+        const nextWeekStart = scheduleWeekStart(nextDate);
+        setCurrentWeek(nextWeekStart);
+        if (onSelectedDateChange) {
+          skipSelectedDateSyncRef.current = true;
+          onSelectedDateChange(scheduleAddDays(nextWeekStart, selectedDay));
+        }
+      },
+      [onSelectedDateChange, selectedDay]
+    );
 
     // Initial / week-navigation load (shows loading state)
     React.useEffect(() => {
