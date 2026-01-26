@@ -135,9 +135,14 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     }, [onSelectedDateChange, selectedDay, weekStart]);
 
     const handleViewModeChange = React.useCallback(
-      (next: "week" | "day") => {
-        setViewMode(next);
-        onViewModeChange?.(next);
+      (next: React.SetStateAction<"week" | "day">) => {
+        setViewMode((prev) => {
+          const resolved = typeof next === "function" ? next(prev) : next;
+          if (resolved !== prev) {
+            onViewModeChange?.(resolved);
+          }
+          return resolved;
+        });
       },
       [onViewModeChange]
     );
