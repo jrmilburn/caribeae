@@ -239,7 +239,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
               levelId: enrolment.template.levelId ?? null,
             }
           : null,
-        assignedTemplates: assignments.map((template) => ({
+        assignedTemplates: assignments.map((template: { dayOfWeek?: number | null; name?: string | null; levelId?: string | null }) => ({
           dayOfWeek: template?.dayOfWeek ?? null,
           name: template?.name ?? null,
           levelId: template?.levelId ?? null,

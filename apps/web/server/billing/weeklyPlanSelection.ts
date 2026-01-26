@@ -7,7 +7,7 @@ export type WeeklyPlanOption = Pick<
   "id" | "name" | "priceCents" | "durationWeeks" | "sessionsPerWeek" | "isSaturdayOnly" | "billingType" | "levelId"
 >;
 
-type TemplateInfo = Pick<ClassTemplate, "dayOfWeek" | "name" | "levelId">;
+type TemplateInfo = Pick<ClassTemplate, "dayOfWeek" | "levelId"> & { name?: string | null };
 
 export function resolveEnrolmentTemplates(params: {
   template?: TemplateInfo | null;
@@ -32,9 +32,12 @@ export function assertWeeklyPlanSelection(params: {
   if (params.currentLevelId && params.plan.levelId !== params.currentLevelId) {
     throw new Error("Selected plan must match the enrolment level.");
   }
-  const templatesWithDays = params.templates.filter(
-    (template) => template.dayOfWeek !== null && typeof template.dayOfWeek !== "undefined"
-  );
+  const templatesWithDays = params.templates
+    .filter((template) => template.dayOfWeek !== null && typeof template.dayOfWeek !== "undefined")
+    .map((template) => ({
+      dayOfWeek: template.dayOfWeek,
+      name: template.name ?? null,
+    }));
   if (!templatesWithDays.length) return;
   assertPlanMatchesTemplates(params.plan, templatesWithDays);
 }

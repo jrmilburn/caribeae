@@ -44,7 +44,7 @@ import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
-import { WeeklyPlanSelect } from "@/components/admin/WeeklyPlanSelect";
+import { WeeklyPlanSelect, type WeeklyPlanOption } from "@/components/admin/WeeklyPlanSelect";
 import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
@@ -740,7 +740,8 @@ function RecordPaymentSheet({
   const allocatedTotalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
   const explicitAmountCents = dollarsToCents(amount || "0");
   const selectedEnrolment = enrolmentOptions.find((option) => option.id === applyTarget) ?? null;
-  const weeklyPlanOptions = selectedEnrolment?.plan?.billingType === "PER_WEEK" ? selectedEnrolment.weeklyPlanOptions : [];
+  const weeklyPlanOptions: WeeklyPlanOption[] =
+    selectedEnrolment?.plan?.billingType === "PER_WEEK" ? selectedEnrolment.weeklyPlanOptions : [];
   const activePlanId = selectedPlanId ?? selectedEnrolment?.plan?.id ?? null;
   const selectedPlan =
     weeklyPlanOptions?.find((plan) => plan.id === activePlanId) ??

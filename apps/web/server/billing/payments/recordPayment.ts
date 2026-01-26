@@ -98,7 +98,6 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         : null,
       assignedTemplates: enrolment.classAssignments.map((assignment) => ({
         dayOfWeek: assignment.template?.dayOfWeek ?? null,
-        name: assignment.template?.name ?? null,
         levelId: assignment.template?.levelId ?? null,
       })),
     });
