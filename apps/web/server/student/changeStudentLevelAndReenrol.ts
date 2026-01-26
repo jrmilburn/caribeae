@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { addDays, differenceInCalendarDays, isAfter, isBefore, startOfDay } from "date-fns";
 import {
   BillingType,
   EnrolmentStatus,
@@ -29,6 +29,8 @@ import { computeBlockCoverageRange, listScheduledOccurrences } from "@/server/bi
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
+import { dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
+import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 type ChangeStudentLevelInput = {
   studentId: string;
@@ -84,6 +86,15 @@ function filterHolidaysForTemplate(
     if (holiday.levelId && holiday.levelId !== template.levelId) return false;
     return true;
   });
+}
+
+function getPlanUnitPriceCents(plan: { billingType: BillingType; priceCents: number; sessionsPerWeek: number | null; blockClassCount: number | null }) {
+  if (plan.billingType === BillingType.PER_WEEK) {
+    const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+    return plan.priceCents / sessionsPerWeek;
+  }
+  const blockClassCount = plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1;
+  return plan.priceCents / blockClassCount;
 }
 
 async function computeWeeklyCredit(params: {
@@ -412,6 +423,40 @@ export async function changeStudentLevelAndReenrol(
       : null;
     const endDate = resolvePlannedEndDate(plan, earliestStart, null, earliestEnd);
     const accounting = initialAccountingForPlan(plan, earliestStart);
+    const prorationSource = existingEnrolments
+      .filter((enrolment) => enrolment.plan && (enrolment.paidThroughDate || enrolment.paidThroughDateComputed))
+      .sort((a, b) => {
+        const dateA = a.paidThroughDate ?? a.paidThroughDateComputed ?? a.startDate;
+        const dateB = b.paidThroughDate ?? b.paidThroughDateComputed ?? b.startDate;
+        return dateB.getTime() - dateA.getTime();
+      })[0];
+
+    const basePaidThroughDate = prorationSource?.paidThroughDate ?? prorationSource?.paidThroughDateComputed ?? null;
+    const oldPlan = prorationSource?.plan ?? null;
+    const newPlanUnitPriceCentsRaw = getPlanUnitPriceCents(plan);
+    const oldPlanUnitPriceCentsRaw = oldPlan ? getPlanUnitPriceCents(oldPlan) : 0;
+    const basePaidThroughDateStart = basePaidThroughDate ? startOfDay(basePaidThroughDate) : null;
+    const prorationStartDate = startOfDay(earliestStart);
+    const proratedPaidThroughDate =
+      basePaidThroughDateStart && oldPlanUnitPriceCentsRaw > 0 && newPlanUnitPriceCentsRaw > 0
+        ? (() => {
+            const durationDays = Math.max(
+              0,
+              differenceInCalendarDays(basePaidThroughDateStart, prorationStartDate)
+            );
+            const ratio = oldPlanUnitPriceCentsRaw / newPlanUnitPriceCentsRaw;
+            const proratedDate = addDays(prorationStartDate, durationDays * ratio);
+            if (plan.billingType === BillingType.PER_CLASS) {
+              const nextScheduledDay = nextScheduledDayKey({
+                startDayKey: toBrisbaneDayKey(startOfDay(proratedDate)),
+                assignedTemplates: templates.map((template) => ({ dayOfWeek: template.dayOfWeek })),
+              });
+              return dayKeyToDate(nextScheduledDay);
+            }
+            return proratedDate;
+          })()
+        : null;
+    const paidThroughDate = proratedPaidThroughDate ?? accounting.paidThroughDate ?? null;
 
     const enrolment = await tx.enrolment.create({
       data: {
@@ -421,10 +466,10 @@ export async function changeStudentLevelAndReenrol(
         endDate,
         status: EnrolmentStatus.ACTIVE,
         planId: plan.id,
-        paidThroughDate: accounting.paidThroughDate,
+        paidThroughDate,
         creditsRemaining: accounting.creditsRemaining,
         creditsBalanceCached: accounting.creditsRemaining ?? null,
-        paidThroughDateComputed: accounting.paidThroughDate ?? null,
+        paidThroughDateComputed: paidThroughDate,
       },
       include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
@@ -448,12 +493,7 @@ export async function changeStudentLevelAndReenrol(
 
     const enrolments: EnrolmentWithRelations[] = [enrolment];
 
-    const newPlanUnitPriceCents = plan.billingType === BillingType.PER_WEEK
-      ? Math.round(plan.priceCents / (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1))
-      : Math.round(
-          plan.priceCents /
-            (plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1)
-        );
+    const newPlanUnitPriceCents = Math.round(newPlanUnitPriceCentsRaw);
     let remainingCreditCents = totalCreditCents;
     if (totalCreditCents > 0 && newPlanUnitPriceCents > 0) {
       const unitsToApply = Math.floor(totalCreditCents / newPlanUnitPriceCents);
