@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Level, Teacher } from "@prisma/client";
 import { SlidersHorizontal } from "lucide-react";
@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
+import { buildReturnUrl } from "@/lib/returnContext";
 
 function getScheduleDescription(date?: Date | null) {
   if (!date) return undefined;
@@ -144,7 +146,31 @@ export default function ScheduleWithTemplateModal({
   const router = useRouter();
   const scheduleRef = useRef<ScheduleViewHandle>(null);
 
-  const [filters, setFilters] = useState<ScheduleFilters>({ teacherId: null, levelId: null });
+  const defaultDateKey = useMemo(() => scheduleDateKey(new Date()), []);
+  const [viewMode, setViewMode] = useSyncedQueryState<"week" | "day">("view", {
+    defaultValue: "week",
+    parse: (value) => (value === "day" ? "day" : "week"),
+    serialize: (value) => value,
+  });
+  const [selectedDateKey, setSelectedDateKey] = useSyncedQueryState<string>("date", {
+    defaultValue: defaultDateKey,
+    parse: (value) => value ?? defaultDateKey,
+    serialize: (value) => value,
+  });
+  const [levelId, setLevelId] = useSyncedQueryState<string | null>("levelId", {
+    defaultValue: null,
+    parse: (value) => value ?? null,
+    serialize: (value) => value ?? null,
+  });
+  const [teacherId, setTeacherId] = useSyncedQueryState<string | null>("teacherId", {
+    defaultValue: null,
+    parse: (value) => value ?? null,
+    serialize: (value) => value ?? null,
+  });
+  const selectedDate = useMemo(() => {
+    const parsed = new Date(selectedDateKey);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }, [selectedDateKey]);
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -162,10 +188,21 @@ export default function ScheduleWithTemplateModal({
     setModalOpen(true);
   };
 
+  const scheduleStateUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("view", viewMode);
+    params.set("date", selectedDateKey);
+    if (levelId) params.set("levelId", levelId);
+    if (teacherId) params.set("teacherId", teacherId);
+    const qs = params.toString();
+    return qs ? `/admin/schedule?${qs}` : "/admin/schedule";
+  }, [levelId, selectedDateKey, teacherId, viewMode]);
+
   const handleClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     const dateKey = context?.columnDateKey ?? scheduleDateKey(context?.columnDate ?? occurrence.startTime);
     const params = new URLSearchParams({ date: dateKey });
-    router.push(`/admin/class/${occurrence.templateId}?${params.toString()}`);
+    const target = `/admin/class/${occurrence.templateId}?${params.toString()}`;
+    router.push(buildReturnUrl(target, scheduleStateUrl));
   };
 
   const handleSave = async (payload: ClientTemplate) => {
@@ -198,8 +235,29 @@ export default function ScheduleWithTemplateModal({
         dataEndpoint="/api/admin/class-templates"
         onSlotClick={handleSlotClick}
         onClassClick={handleClassClick}
-        filters={filters}
-        headerActions={<FiltersPopover levels={levels} teachers={teachers} value={filters} onApply={setFilters} />}
+        viewMode={viewMode}
+        selectedDate={selectedDate}
+        onViewModeChange={(next) => {
+          if (next === viewMode) return;
+          setViewMode(next);
+        }}
+        onSelectedDateChange={(nextDate) => {
+          const nextKey = scheduleDateKey(nextDate);
+          if (nextKey === selectedDateKey) return;
+          setSelectedDateKey(nextKey);
+        }}
+        filters={{ teacherId, levelId } satisfies ScheduleFilters}
+        headerActions={
+          <FiltersPopover
+            levels={levels}
+            teachers={teachers}
+            value={{ teacherId, levelId } satisfies ScheduleFilters}
+            onApply={(next) => {
+              setTeacherId(next.teacherId ?? null);
+              setLevelId(next.levelId ?? null);
+            }}
+          />
+        }
       />
 
       <TemplateModal
