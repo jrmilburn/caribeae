@@ -4,7 +4,7 @@ import * as React from "react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addDays, format, startOfWeek } from "date-fns";
+import { format } from "date-fns";
 
 import ScheduleGrid from "./schedule-grid";
 import type {
@@ -22,6 +22,9 @@ import {
   enumerateScheduleDatesInclusive,
   normalizeToScheduleMidnight,
   scheduleDateKey,
+  scheduleAddDays,
+  scheduleDayOfWeekIndex,
+  scheduleWeekStart,
 } from "./schedule-date-utils";
 
 export type ScheduleViewHandle = {
@@ -41,9 +44,13 @@ export type ScheduleViewProps = {
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
   defaultViewMode?: "week" | "day";
+  viewMode?: "week" | "day";
   showHeader?: boolean;
   allowTemplateMoves?: boolean;
   mode?: "default" | "enrolmentChange";
+  selectedDate?: Date;
+  onViewModeChange?: (mode: "week" | "day") => void;
+  onSelectedDateChange?: (date: Date) => void;
 
   // ✅ NEW
   filters?: ScheduleFilters;
@@ -62,9 +69,13 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       onSlotClick,
       onClassClick,
       defaultViewMode = "week",
+      viewMode: controlledViewMode,
       showHeader = true,
       allowTemplateMoves = true,
       mode = "default",
+      selectedDate,
+      onViewModeChange,
+      onSelectedDateChange,
       filters,
       headerActions,
       selectedTemplateIds,
@@ -72,11 +83,13 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     },
     ref
   ) {
-    const [viewMode, setViewMode] = useState<"week" | "day">(defaultViewMode);
-    const [currentWeek, setCurrentWeek] = useState<Date>(() =>
-      normalizeWeekAnchor(weekAnchor ?? new Date())
+    const skipSelectedDateSyncRef = React.useRef(false);
+    const initialAnchor = scheduleWeekStart(selectedDate ?? weekAnchor ?? new Date());
+    const [viewMode, setViewMode] = useState<"week" | "day">(controlledViewMode ?? defaultViewMode);
+    const [currentWeek, setCurrentWeek] = useState<Date>(() => initialAnchor);
+    const [selectedDay, setSelectedDay] = useState<number>(() =>
+      scheduleDayOfWeekIndex(selectedDate ?? initialAnchor)
     );
-    const [selectedDay, setSelectedDay] = useState<number>(toMondayIndex(currentWeek));
     const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
     const [holidays, setHolidays] = useState<Holiday[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -88,24 +101,73 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       [dataAdapter, dataEndpoint]
     );
 
-  const weekStart = useMemo(
-    () => startOfWeek(currentWeek, { weekStartsOn: 1 }),
-    [currentWeek]
-  );
-  const displayWeekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const weekStart = useMemo(() => scheduleWeekStart(currentWeek), [currentWeek]);
+  const displayWeekEnd = useMemo(() => scheduleAddDays(weekStart, 6), [weekStart]);
   const levelFilter = filters?.levelId ?? null;
   const teacherFilter = filters?.teacherId ?? null;
 
   const weekDates = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    return Array.from({ length: 7 }, (_, i) => scheduleAddDays(weekStart, i));
   }, [weekStart]);
 
     React.useEffect(() => {
-      if (!weekAnchor) return;
-      const normalized = normalizeWeekAnchor(weekAnchor);
+      if (!selectedDate) return;
+      skipSelectedDateSyncRef.current = true;
+      const normalized = scheduleWeekStart(selectedDate);
       setCurrentWeek(normalized);
-      setSelectedDay(toMondayIndex(normalized));
-    }, [weekAnchor]);
+      setSelectedDay(scheduleDayOfWeekIndex(selectedDate));
+    }, [selectedDate]);
+
+    React.useEffect(() => {
+      if (selectedDate || !weekAnchor) return;
+      skipSelectedDateSyncRef.current = true;
+      const normalized = scheduleWeekStart(weekAnchor);
+      setCurrentWeek(normalized);
+      setSelectedDay(scheduleDayOfWeekIndex(normalized));
+    }, [selectedDate, weekAnchor]);
+
+    React.useEffect(() => {
+      if (!controlledViewMode) return;
+      setViewMode(controlledViewMode);
+    }, [controlledViewMode]);
+
+    React.useEffect(() => {
+      if (!onSelectedDateChange) return;
+      if (skipSelectedDateSyncRef.current) {
+        skipSelectedDateSyncRef.current = false;
+        return;
+      }
+      const nextDate = scheduleAddDays(weekStart, selectedDay);
+      if (selectedDate && scheduleDateKey(nextDate) === scheduleDateKey(selectedDate)) {
+        return;
+      }
+      onSelectedDateChange(nextDate);
+    }, [onSelectedDateChange, selectedDate, selectedDay, weekStart]);
+
+    const handleViewModeChange = React.useCallback(
+      (next: React.SetStateAction<"week" | "day">) => {
+        setViewMode((prev) => {
+          const resolved = typeof next === "function" ? next(prev) : next;
+          if (resolved !== prev) {
+            onViewModeChange?.(resolved);
+          }
+          return resolved;
+        });
+      },
+      [onViewModeChange]
+    );
+
+    const handleWeekChange = React.useCallback(
+      (nextDate: Date) => {
+        const nextWeekStart = scheduleWeekStart(nextDate);
+        setCurrentWeek(nextWeekStart);
+        if (onSelectedDateChange) {
+          skipSelectedDateSyncRef.current = true;
+          onSelectedDateChange(scheduleAddDays(nextWeekStart, selectedDay));
+        }
+      },
+      [onSelectedDateChange, selectedDay]
+    );
 
     // Initial / week-navigation load (shows loading state)
     React.useEffect(() => {
@@ -279,7 +341,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentWeek(addDays(currentWeek, -7))}
+                onClick={() => handleWeekChange(scheduleAddDays(currentWeek, -7))}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -291,7 +353,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setCurrentWeek(addDays(currentWeek, 7))}
+                onClick={() => handleWeekChange(scheduleAddDays(currentWeek, 7))}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -302,12 +364,12 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setCurrentWeek(normalizeWeekAnchor(new Date()))}
+              onClick={() => handleWeekChange(new Date())}
             >
               Jump to current week
             </Button>
             {viewMode === "day" && (
-              <Button variant="outline" size="sm" onClick={() => setViewMode("week")}>
+              <Button variant="outline" size="sm" onClick={() => handleViewModeChange("week")}>
                 Back to week
               </Button>
             )}
@@ -331,7 +393,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             onClassClick={onClassClick}
             onMoveClass={allowTemplateMoves ? onMoveClass : undefined}
             viewMode={viewMode}
-            setViewMode={setViewMode}
+            setViewMode={handleViewModeChange}
             selectedDay={selectedDay}
             setSelectedDay={setSelectedDay}
             levels={levels}
@@ -344,17 +406,6 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     );
   }
 );
-
-function normalizeWeekAnchor(date: Date): Date {
-  const normalized = new Date(date);
-  normalized.setHours(12, 0, 0, 0);
-  return normalized;
-}
-
-function toMondayIndex(date: Date): number {
-  const js = date.getDay(); // 0=Sun
-  return js === 0 ? 6 : js - 1; // Monday=0
-}
 
 function addMinutes(date: Date, minutes: number): Date {
   const copy = new Date(date);

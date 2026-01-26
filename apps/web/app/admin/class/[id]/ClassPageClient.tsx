@@ -5,6 +5,7 @@ import * as React from "react";
 import { ClassTemplateForm } from "./ClassTemplateForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { cancelClassOccurrence } from "@/server/class/cancelClassOccurrence";
 import { uncancelClassOccurrence } from "@/server/class/uncancelClassOccurrence";
 import { brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { parseReturnContext } from "@/lib/returnContext";
+import { scheduleDateKey } from "@/packages/schedule";
 
 const DAY_NAMES = [
   "Monday",
@@ -73,6 +76,15 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const [pendingCancelReason, setPendingCancelReason] = React.useState<string | null>(null);
   const [selectedCreditIds, setSelectedCreditIds] = React.useState<string[]>([]);
   const [actionPending, startAction] = React.useTransition();
+
+  const returnTo = parseReturnContext(searchParams);
+  const fallbackSchedule = React.useMemo(() => {
+    const params = new URLSearchParams({
+      view: "week",
+      date: scheduleDateKey(new Date()),
+    });
+    return `/admin/schedule?${params.toString()}`;
+  }, []);
 
   React.useEffect(() => {
     setEffectiveTeacher(data.effectiveTeacher);
@@ -224,6 +236,9 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="ghost" asChild>
+            <Link href={returnTo ?? fallbackSchedule}>Back to Schedule</Link>
+          </Button>
           <DateSelector
             availableDateKeys={data.availableDateKeys}
             selectedDateKey={selectedDateKey}
