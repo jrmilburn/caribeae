@@ -7,7 +7,7 @@ export type WeeklyPlanOption = Pick<
   "id" | "name" | "priceCents" | "durationWeeks" | "sessionsPerWeek" | "isSaturdayOnly" | "billingType" | "levelId"
 >;
 
-type TemplateInfo = Pick<ClassTemplate, "dayOfWeek" | "name" | "levelId">;
+type TemplateInfo = Pick<ClassTemplate, "dayOfWeek" | "levelId"> & { name?: string | null };
 
 export function resolveEnrolmentTemplates(params: {
   template?: TemplateInfo | null;
