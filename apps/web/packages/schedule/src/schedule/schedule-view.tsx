@@ -112,6 +112,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
     React.useEffect(() => {
       if (!selectedDate) return;
+      skipSelectedDateSyncRef.current = true;
       const normalized = scheduleWeekStart(selectedDate);
       setCurrentWeek(normalized);
       setSelectedDay(scheduleDayOfWeekIndex(selectedDate));
@@ -119,6 +120,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
     React.useEffect(() => {
       if (selectedDate || !weekAnchor) return;
+      skipSelectedDateSyncRef.current = true;
       const normalized = scheduleWeekStart(weekAnchor);
       setCurrentWeek(normalized);
       setSelectedDay(scheduleDayOfWeekIndex(normalized));
@@ -136,8 +138,11 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
         return;
       }
       const nextDate = scheduleAddDays(weekStart, selectedDay);
+      if (selectedDate && scheduleDateKey(nextDate) === scheduleDateKey(selectedDate)) {
+        return;
+      }
       onSelectedDateChange(nextDate);
-    }, [onSelectedDateChange, selectedDay, weekStart]);
+    }, [onSelectedDateChange, selectedDate, selectedDay, weekStart]);
 
     const handleViewModeChange = React.useCallback(
       (next: React.SetStateAction<"week" | "day">) => {
