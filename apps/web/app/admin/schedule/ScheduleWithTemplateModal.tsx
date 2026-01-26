@@ -8,6 +8,7 @@ import { SlidersHorizontal } from "lucide-react";
 
 import {
   ScheduleView,
+  scheduleDateFromKey,
   scheduleDateKey,
   type ScheduleViewHandle,
   type ScheduleFilters,
@@ -168,9 +169,12 @@ export default function ScheduleWithTemplateModal({
     serialize: (value) => value ?? null,
   });
   const selectedDate = useMemo(() => {
-    const parsed = new Date(selectedDateKey);
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  }, [selectedDateKey]);
+    try {
+      return scheduleDateFromKey(selectedDateKey);
+    } catch {
+      return scheduleDateFromKey(defaultDateKey);
+    }
+  }, [defaultDateKey, selectedDateKey]);
 
   const [modalOpen, setModalOpen] = useState(false);
 
