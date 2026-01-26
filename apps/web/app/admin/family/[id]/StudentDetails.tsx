@@ -14,7 +14,8 @@ import { updateStudent } from "@/server/student/updateStudent";
 import { deleteStudent } from "@/server/student/deleteStudent";
 import { cn } from "@/lib/utils";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { buildReturnUrl } from "@/lib/returnContext";
 
 import {
   DropdownMenu,
@@ -63,6 +64,7 @@ export default function StudentDetails({
   enrolmentPlans,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [open, setOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<StudentWithHistory | null>(null);
@@ -146,6 +148,8 @@ export default function StudentDetails({
                 onDelete={handleDelete}
                 enrolContext={enrolContext ?? null}
                 onChangeLevel={setChangingStudent}
+                searchParams={searchParams}
+                familyId={familyId}
               />
             ))}
           </div>
@@ -195,12 +199,16 @@ function StudentCard({
   onDelete,
   enrolContext,
   onChangeLevel,
+  searchParams,
+  familyId,
 }: {
   student: StudentWithHistory;
   onEdit: (student: StudentWithHistory) => void;
   onDelete: (id: string) => void;
   enrolContext?: { templateId: string; startDate?: string } | null;
   onChangeLevel: (student: StudentWithHistory) => void;
+  searchParams: ReturnType<typeof useSearchParams>;
+  familyId: string;
 }) {
   const router = useRouter();
   const levelChanges: LevelChangeRecord[] = Array.isArray(student.levelChanges)
@@ -209,7 +217,10 @@ function StudentCard({
 
   const goToManage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    router.push(`/admin/student/${student.id}`); // note: if your route is /admin/students/[id], update this
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "students");
+    const familyUrl = `/admin/family/${familyId}?${params.toString()}`;
+    router.push(buildReturnUrl(`/admin/student/${student.id}`, familyUrl)); // note: if your route is /admin/students/[id], update this
   };
 
   const goToEnrol = (e: React.MouseEvent) => {

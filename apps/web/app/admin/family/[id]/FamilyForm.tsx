@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,8 @@ import type { getAccountOpeningState } from "@/server/family/getAccountOpeningSt
 import { createStudent } from "@/server/student/createStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
+import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
+import { parseReturnContext } from "@/lib/returnContext";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -108,8 +111,17 @@ export default function FamilyForm({
   openingState,
 }: FamilyFormProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = React.useState("overview");
-  const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(new Set(["overview"]));
+  const searchParams = useSearchParams();
+  const returnTo = parseReturnContext(searchParams);
+  const [activeTab, setActiveTab] = useSyncedQueryState<string>("tab", {
+    defaultValue: "overview",
+    parse: (value) =>
+      value === "billing" || value === "students" || value === "transition" || value === "history"
+        ? value
+        : "overview",
+    serialize: (value) => (value === "overview" ? null : value),
+  });
+  const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
@@ -121,13 +133,16 @@ export default function FamilyForm({
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
+  };
+
+  React.useEffect(() => {
     setVisitedTabs((prev) => {
-      if (prev.has(value)) return prev;
+      if (prev.has(activeTab)) return prev;
       const next = new Set(prev);
-      next.add(value);
+      next.add(activeTab);
       return next;
     });
-  };
+  }, [activeTab]);
 
   const handleAddStudent = () => {
     setEditingStudent(null);
@@ -168,6 +183,9 @@ export default function FamilyForm({
         lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
         actions={
           <div className="flex flex-col gap-2">
+            <Button size="sm" variant="ghost" asChild>
+              <Link href={returnTo ?? "/admin/family"}>Back to Families</Link>
+            </Button>
             <Button
               size="sm"
               onClick={() => {
