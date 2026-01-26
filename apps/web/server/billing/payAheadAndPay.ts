@@ -17,11 +17,13 @@ import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
+import { assertWeeklyPlanSelection, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
   quantity: z.number().int().positive().max(24).default(1),
   customBlockLength: z.number().int().positive().optional(),
+  planId: z.string().min(1).optional(),
 });
 
 const payAheadSchema = z.object({
@@ -58,6 +60,14 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
       },
     });
 
+    const selectedPlanIds = payload.items.map((item) => item.planId).filter(Boolean) as string[];
+    const selectedPlans = selectedPlanIds.length
+      ? await tx.enrolmentPlan.findMany({
+          where: { id: { in: selectedPlanIds } },
+        })
+      : [];
+    const selectedPlanMap = new Map(selectedPlans.map((plan) => [plan.id, plan]));
+
     if (enrolments.length !== payload.items.length) {
       throw new Error("Some enrolments could not be found.");
     }
@@ -85,10 +95,6 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         throw new Error("Secondary enrolments cannot be billed directly.");
       }
       if (!enrolment.template) throw new Error("Class template missing for enrolment.");
-      assertPlanMatchesTemplate(enrolment.plan, enrolment.template);
-      if (item.customBlockLength != null && enrolment.plan.billingType !== BillingType.PER_CLASS) {
-        throw new Error("Custom block length is only available for per-class plans.");
-      }
       if (
         !enrolmentIsPayable({
           status: enrolment.status,
@@ -99,7 +105,39 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
         throw new Error("Only active or unpaid changeover enrolments can be billed ahead.");
       }
 
-      const plan = enrolment.plan;
+      const selectedPlan = item.planId ? selectedPlanMap.get(item.planId) : null;
+      const templates = resolveEnrolmentTemplates({
+        template: enrolment.template
+          ? {
+              dayOfWeek: enrolment.template.dayOfWeek ?? null,
+              name: enrolment.template.name ?? null,
+              levelId: enrolment.template.levelId ?? null,
+            }
+          : null,
+        assignedTemplates: enrolment.classAssignments.map((assignment) => ({
+          dayOfWeek: assignment.template?.dayOfWeek ?? null,
+          name: assignment.template?.name ?? null,
+          levelId: assignment.template?.levelId ?? null,
+        })),
+      });
+      if (item.planId && !selectedPlan) {
+        throw new Error("Selected plan could not be found.");
+      }
+      if (item.planId) {
+        if (enrolment.plan.billingType !== BillingType.PER_WEEK) {
+          throw new Error("Only weekly plans can be changed for pay-ahead payments.");
+        }
+        assertWeeklyPlanSelection({
+          plan: selectedPlan!,
+          currentLevelId: enrolment.plan.levelId,
+          templates,
+        });
+      }
+      const plan = selectedPlan ?? enrolment.plan;
+      assertPlanMatchesTemplate(plan, enrolment.template);
+      if (item.customBlockLength != null && plan.billingType !== BillingType.PER_CLASS) {
+        throw new Error("Custom block length is only available for per-class plans.");
+      }
 
       if (plan.billingType === BillingType.PER_WEEK) {
         if (!plan.durationWeeks || plan.durationWeeks <= 0) {
