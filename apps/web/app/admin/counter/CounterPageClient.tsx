@@ -37,7 +37,7 @@ import { createPayment } from "@/server/billing/createPayment";
 import { createCounterInvoice } from "@/server/billing/createCounterInvoice";
 import { undoPayment } from "@/server/billing/undoPayment";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
-import { WeeklyPlanSelect } from "@/components/admin/WeeklyPlanSelect";
+import { WeeklyPlanSelect, type WeeklyPlanOption } from "@/components/admin/WeeklyPlanSelect";
 
 type FamilyOption = Awaited<ReturnType<typeof searchFamilies>>[number];
 type AllocationMap = Record<string, string>;
@@ -212,7 +212,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
     paymentApplyTarget !== "ALLOCATE_INVOICES"
       ? paymentEnrolmentOptions.find((option) => option.id === paymentApplyTarget)?.enrolment ?? null
       : null;
-  const weeklyPlanOptions =
+  const weeklyPlanOptions: WeeklyPlanOption[] =
     selectedPaymentEnrolment?.billingType === "PER_WEEK" ? selectedPaymentEnrolment.weeklyPlanOptions ?? [] : [];
   const activePaymentPlanId = paymentPlanId ?? selectedPaymentEnrolment?.planId ?? null;
   const selectedPaymentPlan =
