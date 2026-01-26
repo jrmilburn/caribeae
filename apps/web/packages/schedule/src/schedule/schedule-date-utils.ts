@@ -41,7 +41,7 @@ function getTimeZoneDateParts(date: Date, timeZone: string = SCHEDULE_TIME_ZONE)
     year: parts.year ?? 0,
     month: parts.month ?? 0,
     day: parts.day ?? 0,
-    hour: parts.hour ?? 0,
+    hour: parts.hour === 24 ? 0 : (parts.hour ?? 0),
     minute: parts.minute ?? 0,
     second: parts.second ?? 0,
   };
