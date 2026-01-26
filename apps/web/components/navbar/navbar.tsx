@@ -64,7 +64,7 @@ type AppNavbarProps = {
   brandName?: string;
 };
 
-export function AppNavbar({ children, brandName = "Caribeae Admin" }: AppNavbarProps) {
+export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) {
   const pathname = usePathname();
 
   return (
