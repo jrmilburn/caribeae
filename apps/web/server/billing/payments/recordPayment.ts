@@ -4,32 +4,17 @@ import { prisma } from "@/lib/prisma";
 import type { PrismaClient } from "@prisma/client";
 import { normalizeDate } from "@/server/invoicing/dateUtils";
 import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
-import { computeCoverageEndDay, dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
-import { brisbaneAddDays, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { getWeeklyPaidThrough } from "@/server/billing/enrolmentBilling";
+import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { normalizeCoverageEndForStorage } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
+import { assertWeeklyPlanSelection, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
-
-function limitWeeklyTemplates<T extends { dayOfWeek: number | null | undefined }>(
-  templates: T[],
-  sessionsPerWeek: number
-) {
-  if (!sessionsPerWeek || sessionsPerWeek <= 0) return templates;
-  const seen = new Set<number>();
-  const unique = templates.filter((template) => {
-    if (template.dayOfWeek == null) return false;
-    if (seen.has(template.dayOfWeek)) return false;
-    seen.add(template.dayOfWeek);
-    return true;
-  });
-  if (unique.length <= sessionsPerWeek) return unique;
-  return [...unique].sort((a, b) => (a.dayOfWeek ?? 7) - (b.dayOfWeek ?? 7)).slice(0, sessionsPerWeek);
-}
 
 export type RecordPaymentInput = {
   familyId: string;
@@ -39,6 +24,7 @@ export type RecordPaymentInput = {
   note?: string;
   enrolmentId?: string;
   customBlockLength?: number | null;
+  planId?: string;
   idempotencyKey?: string;
   client?: PrismaClientOrTx;
 };
@@ -101,7 +87,37 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       throw new Error("Enrolment does not belong to family.");
     }
 
-    const plan = enrolment.plan;
+    let plan = enrolment.plan;
+    const templates = resolveEnrolmentTemplates({
+      template: enrolment.template
+        ? {
+            dayOfWeek: enrolment.template.dayOfWeek ?? null,
+            name: enrolment.template.name ?? null,
+            levelId: enrolment.template.levelId ?? null,
+          }
+        : null,
+      assignedTemplates: enrolment.classAssignments.map((assignment) => ({
+        dayOfWeek: assignment.template?.dayOfWeek ?? null,
+        levelId: assignment.template?.levelId ?? null,
+      })),
+    });
+    if (input.planId) {
+      if (plan.billingType !== BillingType.PER_WEEK) {
+        throw new Error("Only weekly plans can be changed for payment.");
+      }
+      const selectedPlan = await tx.enrolmentPlan.findUnique({
+        where: { id: input.planId },
+      });
+      if (!selectedPlan) {
+        throw new Error("Selected plan could not be found.");
+      }
+      assertWeeklyPlanSelection({
+        plan: selectedPlan,
+        currentLevelId: plan.levelId,
+        templates,
+      });
+      plan = selectedPlan;
+    }
     const planBlockLength = resolveBlockLength(plan.blockClassCount);
     const customBlockLength = input.customBlockLength ?? null;
     if (customBlockLength != null) {
@@ -121,7 +137,11 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       customBlockLength: customBlockLength ?? undefined,
     });
     const paymentAmountCents =
-      plan.billingType === BillingType.PER_CLASS && customBlockLength ? pricing.totalCents : input.amountCents;
+      plan.billingType === BillingType.PER_WEEK && input.planId
+        ? plan.priceCents
+        : plan.billingType === BillingType.PER_CLASS && customBlockLength
+          ? pricing.totalCents
+          : input.amountCents;
 
     const payment = await tx.payment.create({
       data: {
@@ -149,57 +169,27 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         throw new Error("Weekly plans require durationWeeks to be greater than zero.");
       }
 
-      const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
-      const entitlementSessions = durationWeeks * sessionsPerWeek;
-
       const assignedTemplates = enrolment.classAssignments.length
         ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
         : enrolment.template
           ? [enrolment.template]
           : [];
-      const effectiveTemplates = limitWeeklyTemplates(assignedTemplates, sessionsPerWeek);
-
-      const templateIds = effectiveTemplates.map((template) => template.id);
-      const levelIds = effectiveTemplates.map((template) => template.levelId ?? null);
-      const holidays = await tx.holiday.findMany({
-        where: buildHolidayScopeWhere({ templateIds, levelIds }),
-        select: { startDate: true, endDate: true, levelId: true, templateId: true },
-      });
-      const enrolmentEndDayKey = enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null;
-      const baseStartDayKey = enrolment.paidThroughDate
-        ? brisbaneAddDays(toBrisbaneDayKey(enrolment.paidThroughDate), 1)
-        : toBrisbaneDayKey(enrolment.startDate);
-
-      const coverageStartDayKey = nextScheduledDayKey({
-        startDayKey: baseStartDayKey,
-        assignedTemplates: effectiveTemplates,
-        holidays,
-        endDayKey: enrolmentEndDayKey,
-      });
-
-      if (!coverageStartDayKey) {
-        throw new Error("Unable to resolve next coverage start.");
-      }
-
-      const coverageEndDayKey = computeCoverageEndDay({
-        startDayKey: coverageStartDayKey,
-        assignedTemplates: effectiveTemplates,
-        holidays,
-        entitlementSessions,
-        endDayKey: enrolmentEndDayKey,
-      });
-
-      const coverageEndBaseDayKey = computeCoverageEndDay({
-        startDayKey: coverageStartDayKey,
-        assignedTemplates: effectiveTemplates,
+      const paidThrough = getWeeklyPaidThrough(enrolment);
+      const payAhead = resolveWeeklyPayAheadSequence({
+        startDate: enrolment.startDate,
+        endDate: enrolment.endDate,
+        paidThroughDate: paidThrough,
+        durationWeeks,
+        sessionsPerWeek: plan.sessionsPerWeek ?? null,
+        quantity: 1,
+        assignedTemplates,
         holidays: [],
-        entitlementSessions,
-        endDayKey: enrolmentEndDayKey,
+        today: paidAt,
       });
 
-      coverageStart = dayKeyToDate(coverageStartDayKey);
-      coverageEnd = dayKeyToDate(coverageEndDayKey);
-      coverageEndBase = dayKeyToDate(coverageEndBaseDayKey);
+      coverageStart = payAhead.coverageStart;
+      coverageEnd = payAhead.coverageEnd;
+      coverageEndBase = payAhead.coverageEnd;
 
       if (!coverageEnd) {
         throw new Error("Unable to resolve coverage end.");
@@ -232,12 +222,12 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
           : [];
       const anchorTemplate = assignedTemplates.find((template) => template.dayOfWeek != null) ?? enrolment.template;
       if (anchorTemplate?.dayOfWeek != null) {
-        const templateIds = assignedTemplates.map((template) => template.id);
-        const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
-        const holidays = await tx.holiday.findMany({
-          where: buildHolidayScopeWhere({ templateIds, levelIds }),
-          select: { startDate: true, endDate: true, levelId: true, templateId: true },
-        });
+      const templateIds = assignedTemplates.map((template) => template.id);
+      const levelIds = assignedTemplates.map((template) => template.levelId ?? null);
+      const holidays = await tx.holiday.findMany({
+        where: buildHolidayScopeWhere({ templateIds, levelIds }),
+        select: { startDate: true, endDate: true, levelId: true, templateId: true },
+      });
         const coverageRange = computeBlockPayAheadCoverage({
           currentPaidThroughDate: enrolment.paidThroughDate ?? null,
           enrolmentStartDate: enrolment.startDate,

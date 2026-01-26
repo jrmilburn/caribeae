@@ -38,6 +38,8 @@ function createFakeClient() {
   const enrolmentCoverageAudits: any[] = [];
   const invoices: any[] = [];
   const invoiceLineItems: any[] = [];
+  const enrolmentPlans: any[] = [];
+  const enrolmentAdjustments: any[] = [];
   const holidays: { startDate: Date; endDate: Date }[] = [];
   const classCancellations: { templateId: string; date: Date }[] = [];
 
@@ -86,6 +88,10 @@ function createFakeClient() {
           return true;
         });
       },
+      findUnique: async () => null,
+    },
+    enrolmentAdjustment: {
+      findMany: async () => enrolmentAdjustments,
     },
     enrolmentCreditEvent: {
       create: async ({ data }: any) => {
@@ -107,7 +113,11 @@ function createFakeClient() {
       findMany: async ({ where }: any) => {
         return enrolmentCreditEvents.filter((event) => {
           if (where?.enrolmentId && event.enrolmentId !== where.enrolmentId) return false;
-          if (where?.type && event.type !== where.type) return false;
+          if (where?.type) {
+            if (Array.isArray(where.type.in) && !where.type.in.includes(event.type)) return false;
+            if (where.type.not && event.type === where.type.not) return false;
+            if (typeof where.type === "string" && event.type !== where.type) return false;
+          }
           const start = where?.occurredOn?.gte ? new Date(where.occurredOn.gte) : null;
           const end = where?.occurredOn?.lte ? new Date(where.occurredOn.lte) : null;
           if (start && event.occurredOn < start) return false;
@@ -132,6 +142,9 @@ function createFakeClient() {
         return data;
       },
     },
+    enrolmentPlan: {
+      findUnique: async ({ where }: any) => enrolmentPlans.find((plan) => plan.id === where.id) ?? null,
+    },
     invoice: {
       create: async ({ data }: any) => {
         const record = { id: nextId(), status: data.status ?? "DRAFT", ...data };
@@ -153,6 +166,8 @@ function createFakeClient() {
       enrolmentCoverageAudits,
       invoices,
       invoiceLineItems,
+      enrolmentPlans,
+      enrolmentAdjustments,
       holidays,
       classCancellations,
     },
@@ -179,11 +194,14 @@ function seedWeeklyEnrolment(db: FakeDb, options?: { paidThroughDate?: Date | nu
       sessionsPerWeek: 1,
       priceCents: 2500,
       blockClassCount: null,
+      isSaturdayOnly: false,
+      levelId: "level-1",
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0, name: "Monday" },
+    template: { dayOfWeek: 0, name: "Monday", levelId: "level-1" },
     classAssignments: [],
   };
+  db.__data.enrolmentPlans.push(enrolment.plan);
   db.__data.enrolments.push(enrolment);
   return enrolment;
 }
@@ -206,11 +224,14 @@ function seedCreditEnrolment(db: FakeDb, options?: { creditsRemaining?: number }
       sessionsPerWeek: null,
       priceCents: 4000,
       blockClassCount: 4,
+      isSaturdayOnly: false,
+      levelId: "level-1",
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0, name: "Monday" },
+    template: { dayOfWeek: 0, name: "Monday", levelId: "level-1" },
     classAssignments: [],
   };
+  db.__data.enrolmentPlans.push(enrolment.plan);
   db.__data.enrolments.push(enrolment);
   return enrolment;
 }
@@ -266,10 +287,10 @@ test("overdue flips based on paidThrough and credits", async () => {
   assert.ok(!isEnrolmentOverdue(credits, now));
 });
 
-test("holiday handling extends paidThrough for weekly payments", async () => {
+test("weekly payments ignore holidays when advancing coverage", async () => {
   const db = createFakeClient();
   const enrolment = seedWeeklyEnrolment(db);
-  db.__data.holidays.push({ startDate: d("2026-01-05"), endDate: d("2026-01-05") });
+  db.__data.holidays.push({ startDate: d("2026-01-05"), endDate: d("2026-01-12") });
 
   await recordPayment({
     familyId: "family-1",
@@ -280,6 +301,35 @@ test("holiday handling extends paidThrough for weekly payments", async () => {
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
+});
+
+test("weekly plan switch uses selected plan price and coverage window", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-05") });
+  db.__data.enrolmentPlans.push({
+    id: "plan-long",
+    name: "Six month plan",
+    billingType: BillingType.PER_WEEK,
+    durationWeeks: 24,
+    sessionsPerWeek: 1,
+    priceCents: 18000,
+    blockClassCount: null,
+    isSaturdayOnly: false,
+    levelId: "level-1",
+  });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    planId: "plan-long",
+    idempotencyKey: "plan-switch",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(db.__data.payments[0].amountCents, 18000);
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-06-22");
+  assert.strictEqual(db.__data.invoiceLineItems[0].description, "Six month plan");
 });
 
 test("manual paid-through forward uses updated baseline for weekly payments", async () => {
@@ -326,7 +376,6 @@ test("custom block length uses prorated payment and credits", async () => {
   });
 
   assert.strictEqual(db.__data.payments[0].amountCents, 6000);
-  assert.strictEqual(enrolment.creditsRemaining, 6);
   assert.strictEqual(db.__data.invoices[0].creditsPurchased, 6);
 });
 

@@ -14,6 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   dayOfWeekToName,
   formatScheduleWeekdayTime,
@@ -41,6 +43,7 @@ export function ChangeEnrolmentDialog({
   initialTemplateIds,
   onChanged,
   studentLevelId,
+  enrolmentPlans,
 }: {
   enrolment: EnrolmentWithPlan;
   levels: Level[];
@@ -49,10 +52,12 @@ export function ChangeEnrolmentDialog({
   initialTemplateIds: string[];
   onChanged?: () => void;
   studentLevelId?: string | null;
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>({});
   const [startDate, setStartDate] = React.useState<string>("");
+  const [selectedPlanId, setSelectedPlanId] = React.useState<string>(enrolment.planId);
   const [saving, setSaving] = React.useState(false);
   const [confirming, setConfirming] = React.useState<{
     oldDateKey: string | null;
@@ -66,18 +71,28 @@ export function ChangeEnrolmentDialog({
     confirmShorten?: boolean;
   } | null>(null);
 
-  const selectionRequirement = React.useMemo(
-    () => getSelectionRequirement(enrolment.plan),
-    [enrolment.plan]
+  const effectiveLevelId = studentLevelId ?? enrolment.plan.levelId ?? null;
+  const availablePlans = React.useMemo(
+    () => enrolmentPlans.filter((plan) => plan.levelId === effectiveLevelId),
+    [enrolmentPlans, effectiveLevelId]
   );
-  const planIsWeekly = enrolment.plan.billingType === "PER_WEEK";
-  const planDay = enrolment.plan.isSaturdayOnly ? "saturday" : "weekday";
+  const selectedPlan = React.useMemo(
+    () => availablePlans.find((plan) => plan.id === selectedPlanId) ?? enrolment.plan,
+    [availablePlans, selectedPlanId, enrolment.plan]
+  );
+  const selectionRequirement = React.useMemo(
+    () => getSelectionRequirement(selectedPlan),
+    [selectedPlan]
+  );
+  const planIsWeekly = selectedPlan.billingType === "PER_WEEK";
+  const planDay = selectedPlan.isSaturdayOnly ? "saturday" : "weekday";
 
   React.useEffect(() => {
     if (open) {
       const start = enrolment.startDate instanceof Date ? enrolment.startDate : new Date(enrolment.startDate);
       setStartDate(scheduleDateKey(start));
       setSaving(false);
+      setSelectedPlanId(enrolment.planId);
     }
   }, [enrolment.startDate, open]);
 
@@ -124,7 +139,6 @@ export function ChangeEnrolmentDialog({
       : selectedTemplateIds.length === selectionRequirement.requiredCount;
 
   const canSubmit = selectionSatisfied && Boolean(startDate) && !saving;
-  const effectiveLevelId = studentLevelId ?? enrolment.plan.levelId ?? null;
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
 
@@ -133,7 +147,7 @@ export function ChangeEnrolmentDialog({
       toast.error("Set the student's level first.");
       return;
     }
-    if (occurrence.levelId && occurrence.levelId !== enrolment.plan.levelId) {
+    if (occurrence.levelId && occurrence.levelId !== selectedPlan.levelId) {
       toast.error("Select classes that match the enrolment plan level.");
       return;
     }
@@ -198,6 +212,7 @@ export function ChangeEnrolmentDialog({
         templateIds: selectedTemplateIds,
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
+        planId: selectedPlan.id,
         confirmShorten,
         allowOverload,
       });
@@ -253,6 +268,7 @@ export function ChangeEnrolmentDialog({
         templateIds: selectedTemplateIds,
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
+        planId: selectedPlan.id,
       });
 
       if (preview.ok) {
@@ -290,11 +306,26 @@ export function ChangeEnrolmentDialog({
 
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Plan
-              </div>
-              <div className="text-sm font-medium">{enrolment.plan.name}</div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Enrolment plan
+              </Label>
+              <Select
+                value={selectedPlanId}
+                onValueChange={setSelectedPlanId}
+                disabled={!availablePlans.length}
+              >
+                <SelectTrigger className="w-full sm:w-72">
+                  <SelectValue placeholder="Select a plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availablePlans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="text-xs text-muted-foreground">
                 {selectionRequirement.helper}
               </div>
