@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { FamilyModal } from "./FamilyModal"
+import { FamilyModal } from "./FamilyModal";
 
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
@@ -24,21 +24,29 @@ import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import type { ClientFamilyWithStudents } from "@/server/family/types";
 import type { FamilyListEntry } from "@/server/family/listFamilies";
+import type { StudentListEntry } from "@/server/student/listStudents";
 
 import { AdminListHeader } from "@/components/admin/AdminListHeader";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { format } from "date-fns";
+import { buildReturnUrl } from "@/lib/returnContext";
 
 export default function FamilyList({
+  view,
   families,
+  students,
   levels,
   totalCount,
   nextCursor,
   pageSize,
 }: {
+  view: "families" | "students";
   families: FamilyListEntry[];
+  students: StudentListEntry[];
   levels: Level[];
   totalCount: number;
   nextCursor: string | null;
@@ -58,6 +66,7 @@ export default function FamilyList({
   }, [pathname, searchParams]);
 
   const currentLevelId = searchParams.get("levelId") ?? "all";
+  const isStudentView = view === "students";
 
   const hasActiveFilters = useMemo(() => currentLevelId !== "all", [currentLevelId]);
 
@@ -130,25 +139,44 @@ export default function FamilyList({
     setFiltersOpen(false);
   };
 
+  const toggleView = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (isStudentView) {
+      params.delete("view");
+    } else {
+      params.set("view", "students");
+    }
+    params.delete("cursor");
+    params.delete("cursors");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  };
+
   return (
     <div className="w-full">
       <AdminListHeader
-        title="Families"
+        title={isStudentView ? "Students" : "Families"}
         totalCount={totalCount}
-        searchPlaceholder="Search families…"
+        searchPlaceholder={isStudentView ? "Search students…" : "Search families…"}
         onNew={() => {
           setSelected(null);
           setNewFamilyModal(true);
         }}
+        showNew={!isStudentView}
         showFilters
         onFiltersClick={() => setFiltersOpen(true)}
         sticky
+        extraActions={
+          <Button variant="outline" size="sm" type="button" onClick={toggleView}>
+            {isStudentView ? "View families" : "View students"}
+          </Button>
+        }
       />
 
       <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Filter families</DialogTitle>
+            <DialogTitle>{isStudentView ? "Filter students" : "Filter families"}</DialogTitle>
             <DialogDescription>Refine the list by student level.</DialogDescription>
           </DialogHeader>
 
@@ -187,41 +215,83 @@ export default function FamilyList({
         </DialogContent>
       </Dialog>
 
-      <FamilyModal
-        open={newFamilyModal}
-        onOpenChange={setNewFamilyModal}
-        family={selected}
-        onSave={handleSave}
-        levels={levels}
-      />
+      {!isStudentView ? (
+        <FamilyModal
+          open={newFamilyModal}
+          onOpenChange={setNewFamilyModal}
+          family={selected}
+          onSave={handleSave}
+          levels={levels}
+        />
+      ) : null}
 
       <div className="">
-        <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
-          <div className="truncate flex-1">Family Name</div>
-          <div className="truncate flex-1">Primary Contact</div>
-          <div className="truncate flex-1">Email</div>
-          <div className="truncate flex-1">Phone</div>
-          <div className="w-10 text-right">
-            <Button variant="ghost" size="icon" aria-label="Family actions" disabled>
-              <MoreVerticalIcon className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </div>
-        </div>
+        {isStudentView ? (
+          <>
+            <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
+              <div className="truncate flex-1">Student</div>
+              <div className="truncate flex-1">Family</div>
+              <div className="truncate flex-1">Level</div>
+              <div className="truncate flex-1">Created</div>
+            </div>
 
-        {families.map((family) => (
-          <FamilyListItem
-            key={family.id}
-            family={family}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-            returnTo={listUrl}
-          />
-        ))}
+            {students.map((student) => {
+              const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
+              return (
+                <div
+                  key={student.id}
+                  className="group flex h-14 w-full items-center justify-between border-b border-border bg-card px-4 text-sm transition-colors hover:bg-accent/40"
+                >
+                  <div className="truncate font-medium flex-1">
+                    <Link href={studentUrl} className="hover:underline">
+                      {student.name}
+                    </Link>
+                  </div>
+                  <div className="truncate flex-1">{student.family.name ?? "—"}</div>
+                  <div className="truncate flex-1">{student.level?.name ?? "—"}</div>
+                  <div className="truncate flex-1 text-muted-foreground">
+                    {format(student.createdAt, "dd MMM yyyy")}
+                  </div>
+                </div>
+              );
+            })}
 
-        {families.length === 0 && (
-          <div className="p-4 text-sm text-muted-foreground">
-            No families found.
-          </div>
+            {students.length === 0 && (
+              <div className="p-4 text-sm text-muted-foreground">
+                No students found.
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
+              <div className="truncate flex-1">Family Name</div>
+              <div className="truncate flex-1">Primary Contact</div>
+              <div className="truncate flex-1">Email</div>
+              <div className="truncate flex-1">Phone</div>
+              <div className="w-10 text-right">
+                <Button variant="ghost" size="icon" aria-label="Family actions" disabled>
+                  <MoreVerticalIcon className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </div>
+            </div>
+
+            {families.map((family) => (
+              <FamilyListItem
+                key={family.id}
+                family={family}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                returnTo={listUrl}
+              />
+            ))}
+
+            {families.length === 0 && (
+              <div className="p-4 text-sm text-muted-foreground">
+                No families found.
+              </div>
+            )}
+          </>
         )}
       </div>
 
