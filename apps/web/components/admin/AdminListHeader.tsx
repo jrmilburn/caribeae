@@ -17,21 +17,12 @@ type AdminListHeaderProps = {
   searchPlaceholder: string;
   newLabel?: string;
   onNew: () => void;
+  showNew?: boolean;
+  extraActions?: React.ReactNode;
   showFilters?: boolean;
   onFiltersClick?: () => void;
   sticky?: boolean;
 };
-
-function useDebouncedValue<T>(value: T, delay = 300) {
-  const [debounced, setDebounced] = React.useState(value);
-
-  React.useEffect(() => {
-    const handle = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(handle);
-  }, [value, delay]);
-
-  return debounced;
-}
 
 export function AdminListHeader({
   title,
@@ -39,6 +30,8 @@ export function AdminListHeader({
   searchPlaceholder,
   newLabel = "New",
   onNew,
+  showNew = true,
+  extraActions,
   showFilters,
   onFiltersClick,
   sticky,
@@ -51,29 +44,31 @@ export function AdminListHeader({
   const currentPageSize = Number(searchParams.get("pageSize")) || DEFAULT_PAGE_SIZE;
 
   const [searchTerm, setSearchTerm] = React.useState(currentQuery);
-  const debouncedSearch = useDebouncedValue(searchTerm);
 
   React.useEffect(() => {
     setSearchTerm(currentQuery);
   }, [currentQuery]);
 
-  React.useEffect(() => {
-    const normalized = debouncedSearch.trim();
-    const current = currentQuery.trim();
-    if (normalized === current) return;
+  const applySearch = React.useCallback(
+    (value: string) => {
+      const normalized = value.trim();
+      const current = currentQuery.trim();
+      if (normalized === current) return;
 
-    const params = new URLSearchParams(searchParams.toString());
-    if (normalized) {
-      params.set("q", normalized);
-    } else {
-      params.delete("q");
-    }
-    params.delete("cursor");
-    params.delete("cursors");
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized) {
+        params.set("q", normalized);
+      } else {
+        params.delete("q");
+      }
+      params.delete("cursor");
+      params.delete("cursors");
 
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }, [debouncedSearch, currentQuery, pathname, router, searchParams]);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [currentQuery, pathname, router, searchParams]
+  );
 
   const hasQuery = searchTerm.trim().length > 0;
   const pageSize = PAGE_SIZE_OPTIONS.includes(currentPageSize as (typeof PAGE_SIZE_OPTIONS)[number])
@@ -101,7 +96,12 @@ export function AdminListHeader({
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Escape") setSearchTerm("");
+              if (event.key === "Enter") {
+                applySearch(searchTerm);
+              }
+              if (event.key === "Escape") {
+                setSearchTerm("");
+              }
             }}
             placeholder={searchPlaceholder}
             className="pl-9 pr-10"
@@ -111,7 +111,10 @@ export function AdminListHeader({
               type="button"
               variant="ghost"
               size="icon"
-              onClick={() => setSearchTerm("")}
+              onClick={() => {
+                setSearchTerm("");
+                applySearch("");
+              }}
               className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
               aria-label="Clear search"
             >
@@ -153,9 +156,13 @@ export function AdminListHeader({
           </Button>
         ) : null}
 
-        <Button size="sm" onClick={onNew}>
-          {newLabel}
-        </Button>
+        {extraActions}
+
+        {showNew ? (
+          <Button size="sm" onClick={onNew}>
+            {newLabel}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
