@@ -46,6 +46,7 @@ export function CreateEnrolmentDialog({
   templateDayOfWeek,
   classLevelId,
   classLevelName,
+  defaultStartDate,
   students,
   enrolmentPlans,
 }: {
@@ -55,6 +56,7 @@ export function CreateEnrolmentDialog({
   templateDayOfWeek: number | null;
   classLevelId: string | null;
   classLevelName: string | null;
+  defaultStartDate?: string | null;
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
 }) {
@@ -86,6 +88,13 @@ export function CreateEnrolmentDialog({
       setSaving(false);
     }
   }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (defaultStartDate && !startDate) {
+      setStartDate(defaultStartDate);
+    }
+  }, [defaultStartDate, open, startDate]);
 
   const availablePlans = React.useMemo(() => {
     if (!classLevelId) return [];

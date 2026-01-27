@@ -58,6 +58,7 @@ export function EnrolmentsSection({
           templateDayOfWeek={classTemplate.dayOfWeek ?? null}
           classLevelId={classTemplate.levelId ?? null}
           classLevelName={classTemplate.level?.name ?? null}
+          defaultStartDate={dateKey}
           students={students}
           enrolmentPlans={enrolmentPlans}
         />
