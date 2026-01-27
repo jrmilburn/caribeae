@@ -25,7 +25,7 @@ import { createInitialInvoiceForEnrolment } from "@/server/invoicing";
 import { getEnrolmentBillingStatus, recomputeEnrolmentComputedFields } from "@/server/billing/enrolmentBilling";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
-import { computeBlockCoverageRange, listScheduledOccurrences } from "@/server/billing/paidThroughDate";
+import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
@@ -84,6 +84,15 @@ function filterHolidaysForTemplate(
     if (holiday.levelId && holiday.levelId !== template.levelId) return false;
     return true;
   });
+}
+
+function getPlanUnitPriceCents(plan: { billingType: BillingType; priceCents: number; sessionsPerWeek: number | null; blockClassCount: number | null }) {
+  if (plan.billingType === BillingType.PER_WEEK) {
+    const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+    return plan.priceCents / sessionsPerWeek;
+  }
+  const blockClassCount = plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1;
+  return plan.priceCents / blockClassCount;
 }
 
 async function computeWeeklyCredit(params: {
@@ -412,6 +421,17 @@ export async function changeStudentLevelAndReenrol(
       : null;
     const endDate = resolvePlannedEndDate(plan, earliestStart, null, earliestEnd);
     const accounting = initialAccountingForPlan(plan, earliestStart);
+    const prorationSource = existingEnrolments
+      .filter((enrolment) => enrolment.paidThroughDate || enrolment.paidThroughDateComputed)
+      .sort((a, b) => {
+        const dateA = a.paidThroughDate ?? a.paidThroughDateComputed ?? a.startDate;
+        const dateB = b.paidThroughDate ?? b.paidThroughDateComputed ?? b.startDate;
+        return dateB.getTime() - dateA.getTime();
+      })[0];
+
+    const basePaidThroughDate = prorationSource?.paidThroughDate ?? prorationSource?.paidThroughDateComputed ?? null;
+    const paidThroughDate = basePaidThroughDate ?? accounting.paidThroughDate ?? null;
+    const newPlanUnitPriceCentsRaw = getPlanUnitPriceCents(plan);
 
     const enrolment = await tx.enrolment.create({
       data: {
@@ -421,10 +441,10 @@ export async function changeStudentLevelAndReenrol(
         endDate,
         status: EnrolmentStatus.ACTIVE,
         planId: plan.id,
-        paidThroughDate: accounting.paidThroughDate,
+        paidThroughDate,
         creditsRemaining: accounting.creditsRemaining,
         creditsBalanceCached: accounting.creditsRemaining ?? null,
-        paidThroughDateComputed: accounting.paidThroughDate ?? null,
+        paidThroughDateComputed: paidThroughDate,
       },
       include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
@@ -447,136 +467,107 @@ export async function changeStudentLevelAndReenrol(
     }
 
     const enrolments: EnrolmentWithRelations[] = [enrolment];
+    const newPlanUnitPriceCents = Math.round(newPlanUnitPriceCentsRaw);
+    let classCount = 0;
+    const paidThroughBoundary = paidThroughDate ? startOfDay(paidThroughDate) : null;
+    if (paidThroughBoundary && !isBefore(paidThroughBoundary, startOfDay(earliestStart))) {
+      const templateIdsForPlan = templates.map((template) => template.id);
+      const levelIdsForPlan = templates.map((template) => template.levelId ?? null);
+      const [holidays, cancellations] = await Promise.all([
+        tx.holiday.findMany({
+          where: {
+            startDate: { lte: paidThroughBoundary },
+            endDate: { gte: startOfDay(earliestStart) },
+            ...buildHolidayScopeWhere({ templateIds: templateIdsForPlan, levelIds: levelIdsForPlan }),
+          },
+          select: { startDate: true, endDate: true, levelId: true, templateId: true },
+          orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
+        }),
+        tx.classCancellation.findMany({
+          where: {
+            templateId: { in: templateIdsForPlan },
+            date: { gte: startOfDay(earliestStart), lte: paidThroughBoundary },
+          },
+          select: { templateId: true, date: true },
+        }),
+      ]);
 
-    const newPlanUnitPriceCents = plan.billingType === BillingType.PER_WEEK
-      ? Math.round(plan.priceCents / (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1))
-      : Math.round(
-          plan.priceCents /
-            (plan.blockClassCount && plan.blockClassCount > 0 ? plan.blockClassCount : 1)
-        );
-    let remainingCreditCents = totalCreditCents;
-    if (totalCreditCents > 0 && newPlanUnitPriceCents > 0) {
-      const unitsToApply = Math.floor(totalCreditCents / newPlanUnitPriceCents);
-      if (unitsToApply > 0) {
-        if (plan.billingType === BillingType.PER_CLASS) {
-          await tx.enrolmentCreditEvent.create({
-            data: {
-              enrolmentId: enrolment.id,
-              type: "MANUAL_ADJUST",
-              creditsDelta: unitsToApply,
-              occurredOn: startOfDay(effectiveDate),
-              note: "Level change credit",
-            },
-          });
-          await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
-        } else {
-          const templateIdsForPlan = templates.map((template) => template.id);
-          const levelIdsForPlan = templates.map((template) => template.levelId ?? null);
-          const horizonWeeks = Math.max(
-            1,
-            Math.ceil(unitsToApply / (plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1)) + 4
-          );
-          const horizonEnd = enrolment.endDate
-            ? startOfDay(enrolment.endDate)
-            : addDays(startOfDay(enrolment.startDate), horizonWeeks * 7);
-          const holidays = await tx.holiday.findMany({
-            where: {
-              startDate: { lte: horizonEnd },
-              endDate: { gte: startOfDay(enrolment.startDate) },
-              ...buildHolidayScopeWhere({ templateIds: templateIdsForPlan, levelIds: levelIdsForPlan }),
-            },
-            select: { startDate: true, endDate: true },
-          });
-          const coverage = computeBlockCoverageRange({
-            currentPaidThroughDate: enrolment.paidThroughDate,
-            enrolmentStartDate: enrolment.startDate,
-            enrolmentEndDate: enrolment.endDate ?? null,
-            classTemplate: {
-              dayOfWeek: anchorTemplate?.dayOfWeek ?? templates[0]?.dayOfWeek ?? null,
-            },
-            assignedTemplates: templates.map((template) => ({ dayOfWeek: template.dayOfWeek ?? null })),
-            blockClassCount: 1,
-            creditsPurchased: unitsToApply,
-            holidays,
-          });
-          if (coverage.coverageEnd) {
-            await tx.enrolment.update({
-              where: { id: enrolment.id },
-              data: {
-                paidThroughDate: coverage.coverageEnd,
-                paidThroughDateComputed: coverage.coverageEnd,
-              },
-            });
-            await recomputeEnrolmentComputedFields(enrolment.id, { client: tx });
-          }
-        }
-        remainingCreditCents -= unitsToApply * newPlanUnitPriceCents;
+      for (const template of templates) {
+        const templateHolidays = filterHolidaysForTemplate(holidays, {
+          id: template.id,
+          dayOfWeek: template.dayOfWeek ?? null,
+          levelId: template.levelId ?? null,
+        });
+        const templateCancellations = cancellations
+          .filter((cancellation) => cancellation.templateId === template.id)
+          .map((cancellation) => cancellation.date);
+        const occurrences = listScheduledOccurrences({
+          startDate: startOfDay(earliestStart),
+          endDate: paidThroughBoundary,
+          classTemplate: { dayOfWeek: template.dayOfWeek },
+          holidays: templateHolidays,
+          cancellations: templateCancellations,
+        });
+        classCount += occurrences.length;
       }
     }
 
-    const newInvoices = enrolments.length
-      ? await tx.invoice.findMany({
-          where: { enrolmentId: { in: enrolments.map((e) => e.id) } },
-          select: {
-            id: true,
-            amountCents: true,
-            amountPaidCents: true,
-            status: true,
+    const newPlanCostCents = Math.round(newPlanUnitPriceCentsRaw * classCount);
+    const balanceCents = newPlanCostCents - totalCreditCents;
+    const issuedAt = new Date();
+    const dueAt = new Date();
+    if (balanceCents > 0) {
+      await createInvoiceWithLineItems({
+        familyId: student.familyId,
+        enrolmentId: enrolment.id,
+        lineItems: [
+          {
+            kind: InvoiceLineItemKind.ADJUSTMENT,
+            description: "Level change charge",
+            quantity: classCount || 1,
+            unitPriceCents: newPlanUnitPriceCents,
+            amountCents: balanceCents,
           },
-        })
-      : [];
+        ],
+        status: InvoiceStatus.SENT,
+        issuedAt,
+        dueAt,
+        client: tx,
+        skipAuth: true,
+      });
+    }
 
-    const creditToBalanceCents = Math.max(
-      remainingCreditCents,
-      0
-    );
-
+    const creditAmountCents = Math.max(-balanceCents, 0);
     const creditInvoice =
-      creditToBalanceCents > 0
+      creditAmountCents > 0
         ? await createInvoiceWithLineItems({
             familyId: student.familyId,
+            enrolmentId: enrolment.id,
             lineItems: [
               {
                 kind: InvoiceLineItemKind.ADJUSTMENT,
                 description: "Level change credit",
-                quantity: 1,
-                amountCents: -creditToBalanceCents,
+                quantity: classCount || 1,
+                unitPriceCents: newPlanUnitPriceCents,
+                amountCents: -creditAmountCents,
               },
             ],
             status: InvoiceStatus.PAID,
-            issuedAt: new Date(),
-            dueAt: new Date(),
+            issuedAt,
+            dueAt,
             client: tx,
             skipAuth: true,
           })
         : null;
 
-    const outstandingTargets = newInvoices
-      .map((inv) => ({
-        invoiceId: inv.id,
-        remaining: Math.max(inv.amountCents - inv.amountPaidCents, 0),
-      }))
-      .filter((inv) => inv.remaining > 0);
-
-    const creditAllocations: { invoiceId: string; amountCents: number }[] = [];
-    if (creditToBalanceCents > 0 && outstandingTargets.length) {
-      let remainingCredit = creditToBalanceCents;
-      for (const target of outstandingTargets) {
-        if (remainingCredit <= 0) break;
-        const applied = Math.min(target.remaining, remainingCredit);
-        creditAllocations.push({ invoiceId: target.invoiceId, amountCents: applied });
-        remainingCredit -= applied;
-      }
-    }
-
     const payment =
-      creditToBalanceCents > 0
+      creditAmountCents > 0
         ? await createPaymentAndAllocate({
             familyId: student.familyId,
-            amountCents: creditToBalanceCents,
+            amountCents: creditAmountCents,
             method: "credit",
             note: "Level change credit",
-            allocations: creditAllocations.length ? creditAllocations : undefined,
+            allocations: creditInvoice ? [{ invoiceId: creditInvoice.id, amountCents: creditAmountCents }] : undefined,
             client: tx,
             skipAuth: true,
           })
