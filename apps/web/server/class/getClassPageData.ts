@@ -57,7 +57,6 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
       prisma.teacher.findMany({ orderBy: { name: "asc" } }),
       prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
       prisma.student.findMany({
-        where: { levelId: template.levelId },
         orderBy: { name: "asc" },
       }),
       prisma.enrolmentPlan.findMany({ where: { levelId: template.levelId } }),
