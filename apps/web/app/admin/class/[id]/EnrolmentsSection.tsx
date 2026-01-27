@@ -56,6 +56,8 @@ export function EnrolmentsSection({
           onOpenChange={setOpen}
           templateId={classTemplate.id}
           templateDayOfWeek={classTemplate.dayOfWeek ?? null}
+          classLevelId={classTemplate.levelId ?? null}
+          classLevelName={classTemplate.level?.name ?? null}
           students={students}
           enrolmentPlans={enrolmentPlans}
         />

@@ -4,6 +4,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { Student, EnrolmentStatus, EnrolmentPlan } from "@prisma/client";
+import { ChevronDown } from "lucide-react";
 
 import {
   Dialog,
@@ -23,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
@@ -41,6 +44,8 @@ export function CreateEnrolmentDialog({
   onOpenChange,
   templateId,
   templateDayOfWeek,
+  classLevelId,
+  classLevelName,
   students,
   enrolmentPlans,
 }: {
@@ -48,6 +53,8 @@ export function CreateEnrolmentDialog({
   onOpenChange: (open: boolean) => void;
   templateId: string;
   templateDayOfWeek: number | null;
+  classLevelId: string | null;
+  classLevelName: string | null;
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
 }) {
@@ -55,6 +62,8 @@ export function CreateEnrolmentDialog({
   const [saving, setSaving] = React.useState(false);
 
   const [studentId, setStudentId] = React.useState<string>("");
+  const [studentOpen, setStudentOpen] = React.useState(false);
+  const [studentSearch, setStudentSearch] = React.useState("");
   const [startDate, setStartDate] = React.useState<string>("");
   const [endDate, setEndDate] = React.useState<string>("");
   const [planId, setPlanId] = React.useState<string>("");
@@ -66,6 +75,8 @@ export function CreateEnrolmentDialog({
   React.useEffect(() => {
     if (!open) {
       setStudentId("");
+      setStudentOpen(false);
+      setStudentSearch("");
       setStartDate("");
       setEndDate("");
       setPlanId("");
@@ -77,14 +88,21 @@ export function CreateEnrolmentDialog({
   }, [open]);
 
   const availablePlans = React.useMemo(() => {
+    if (!classLevelId) return [];
     if (templateDayOfWeek === 5) {
-      return enrolmentPlans.filter((plan) => plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
+      return enrolmentPlans.filter(
+        (plan) =>
+          plan.levelId === classLevelId && (plan.isSaturdayOnly || plan.billingType === "PER_WEEK")
+      );
     }
     if (typeof templateDayOfWeek === "number") {
-      return enrolmentPlans.filter((plan) => !plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
+      return enrolmentPlans.filter(
+        (plan) =>
+          plan.levelId === classLevelId && (!plan.isSaturdayOnly || plan.billingType === "PER_WEEK")
+      );
     }
-    return enrolmentPlans;
-  }, [enrolmentPlans, templateDayOfWeek]);
+    return enrolmentPlans.filter((plan) => plan.levelId === classLevelId);
+  }, [classLevelId, enrolmentPlans, templateDayOfWeek]);
   const selectedPlan = React.useMemo(
     () => availablePlans.find((p) => p.id === planId) ?? null,
     [availablePlans, planId]
@@ -113,8 +131,19 @@ export function CreateEnrolmentDialog({
       setPlanId(availablePlans[0]?.id ?? "");
     }
   }, [availablePlans, planId]);
+  React.useEffect(() => {
+    if (!studentOpen) setStudentSearch("");
+  }, [studentOpen]);
+  const filteredStudents = React.useMemo(() => {
+    const query = studentSearch.trim().toLowerCase();
+    if (!query) return students;
+    return students.filter((student) =>
+      (student.name ?? "Unnamed student").toLowerCase().includes(query)
+    );
+  }, [studentSearch, students]);
   const requiresMultipleTemplates = selectionRequirement.maxCount > 1;
-  const canSubmit = studentId && startDate && planId && !saving && !requiresMultipleTemplates;
+  const canSubmit =
+    studentId && startDate && planId && !saving && !requiresMultipleTemplates && Boolean(classLevelId);
 
   React.useEffect(() => {
     if (!selectedPlan || !planIsBlock) {
@@ -153,6 +182,7 @@ export function CreateEnrolmentDialog({
         startDate: start.toISOString(),
         endDate: end?.toISOString() ?? undefined,
         status,
+        effectiveLevelId: classLevelId ?? undefined,
         customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
         allowOverload,
       });
@@ -192,144 +222,180 @@ export function CreateEnrolmentDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add enrolment</DialogTitle>
-        </DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Add enrolment</DialogTitle>
+          </DialogHeader>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label>Plan</Label>
-            <Select value={planId} onValueChange={setPlanId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select plan" />
-              </SelectTrigger>
-              <SelectContent>
-                {availablePlans.map((plan) => (
-                  <SelectItem key={plan.id} value={plan.id}>
-                    <span className="flex items-center gap-2">
-                      <span>
-                        {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Plan</Label>
+              <Select value={planId} onValueChange={setPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select plan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availablePlans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      <span className="flex items-center gap-2">
+                        <span>
+                          {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                        </span>
+                        {plan.isSaturdayOnly ? (
+                          <Badge variant="secondary" className="uppercase">
+                            Saturday
+                          </Badge>
+                        ) : null}
                       </span>
-                      {plan.isSaturdayOnly ? (
-                        <Badge variant="secondary" className="uppercase">
-                          Saturday
-                        </Badge>
-                      ) : null}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {availablePlans.length === 0 ? (
+                <p className="text-xs text-destructive">
+                  {!classLevelId
+                    ? "This class needs a level before enrolments can be added."
+                    : templateDayOfWeek === 5
+                      ? "No Saturday plans exist for this level. Create one in Plans."
+                      : typeof templateDayOfWeek === "number"
+                        ? "No weekday plans exist for this level. Create one in Plans."
+                        : "No enrolment plans are available for this class."}
+                </p>
+              ) : null}
+              {requiresMultipleTemplates ? (
+                <p className="text-xs text-destructive">
+                  {selectionRequirement.helper} Use the student schedule to select multiple classes.
+                </p>
+              ) : null}
+              {planIsBlock && selectedPlan ? (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {planBlockLength} classes · {formatCurrencyFromCents(selectedPlan.priceCents)}
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {availablePlans.length === 0 ? (
-              <p className="text-xs text-destructive">
-                {templateDayOfWeek === 5
-                  ? "No Saturday plans exist for this level. Create one in Plans."
-                  : typeof templateDayOfWeek === "number"
-                    ? "No weekday plans exist for this level. Create one in Plans."
-                    : "No enrolment plans are available for this class."}
-              </p>
-            ) : null}
-            {requiresMultipleTemplates ? (
-              <p className="text-xs text-destructive">
-                {selectionRequirement.helper} Use the student schedule to select multiple classes.
-              </p>
-            ) : null}
-            {planIsBlock && selectedPlan ? (
-              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-                <div className="flex items-center justify-between">
-                  <span>
-                    {planBlockLength} classes · {formatCurrencyFromCents(selectedPlan.priceCents)}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
-                    onClick={() => {
-                      if (!customBlockEnabled) {
-                        setCustomBlockLength(String(planBlockLength));
-                      }
-                      setCustomBlockEnabled((prev) => !prev);
-                    }}
-                  >
-                    {customBlockEnabled ? "Use default" : "Customize"}
-                  </button>
-                </div>
-                {customBlockEnabled ? (
-                  <div className="mt-3 space-y-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="custom-block-length-class">Number of classes</Label>
-                      <Input
-                        id="custom-block-length-class"
-                        type="number"
-                        min={planBlockLength}
-                        value={customBlockLength}
-                        onChange={(e) => setCustomBlockLength(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
-                    </div>
-                    {blockPricing ? (
-                      <div className="text-xs text-muted-foreground">
-                        <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
-                        <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
-                      </div>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      onClick={() => {
+                        if (!customBlockEnabled) {
+                          setCustomBlockLength(String(planBlockLength));
+                        }
+                        setCustomBlockEnabled((prev) => !prev);
+                      }}
+                    >
+                      {customBlockEnabled ? "Use default" : "Customize"}
+                    </button>
                   </div>
-                ) : null}
+                  {customBlockEnabled ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="custom-block-length-class">Number of classes</Label>
+                        <Input
+                          id="custom-block-length-class"
+                          type="number"
+                          min={planBlockLength}
+                          value={customBlockLength}
+                          onChange={(e) => setCustomBlockLength(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum {planBlockLength} classes.
+                        </p>
+                      </div>
+                      {blockPricing ? (
+                        <div className="text-xs text-muted-foreground">
+                          <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
+                          <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Student</Label>
+              <Popover open={studentOpen} onOpenChange={setStudentOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" type="button" className="w-full justify-between">
+                    <span className="truncate">
+                      {students.find((s) => s.id === studentId)?.name ?? "Select a student"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="Search students…"
+                      value={studentSearch}
+                      onChange={(event) => setStudentSearch(event.target.value)}
+                      autoFocus
+                    />
+                    <CommandList>
+                      {filteredStudents.length === 0 ? (
+                        <CommandEmpty>No students found.</CommandEmpty>
+                      ) : (
+                        <CommandGroup>
+                          {filteredStudents.map((student) => (
+                            <CommandItem
+                              key={student.id}
+                              onSelect={() => {
+                                setStudentId(student.id);
+                                setStudentOpen(false);
+                              }}
+                            >
+                              {student.name ?? "Unnamed student"}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {classLevelName ? (
+                <p className="text-xs text-muted-foreground">
+                  Student level will be updated to {classLevelName}.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Start date</Label>
+                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
-            ) : null}
-          </div>
 
-          <div className="space-y-2">
-            <Label>Student</Label>
-            <Select value={studentId} onValueChange={setStudentId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a student" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name ?? "Unnamed student"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Start date</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <div className="space-y-2">
+                <Label>End date (optional)</Label>
+                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label>End date (optional)</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Label>Status</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as EnrolmentStatus)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                  <SelectItem value="PAUSED">PAUSED</SelectItem>
+                  <SelectItem value="CHANGEOVER">CHANGEOVER</SelectItem>
+                  <SelectItem value="CANCELLED">CANCELLED</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as EnrolmentStatus)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                <SelectItem value="PAUSED">PAUSED</SelectItem>
-                <SelectItem value="CHANGEOVER">CHANGEOVER</SelectItem>
-                <SelectItem value="CANCELLED">CANCELLED</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              {saving ? "Creating..." : "Create enrolment"}
-            </Button>
-          </div>
-        </form>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canSubmit}>
+                {saving ? "Creating..." : "Create enrolment"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
