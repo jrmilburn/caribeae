@@ -28,6 +28,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -52,6 +54,7 @@ export function EnrolmentsTable({
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
+  const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
 
   if (!enrolments.length) {
@@ -84,6 +87,7 @@ export function EnrolmentsTable({
               <TableHead>Status</TableHead>
               <TableHead>Start</TableHead>
               <TableHead>End</TableHead>
+              <TableHead>Paid through</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -99,6 +103,7 @@ export function EnrolmentsTable({
                   <TableCell>{e.status}</TableCell>
                   <TableCell>{fmtDate(e.startDate)}</TableCell>
                   <TableCell>{fmtDate(e.endDate ?? null)}</TableCell>
+                  <TableCell>{formatBrisbaneDate(e.paidThroughDate ?? null)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -119,6 +124,9 @@ export function EnrolmentsTable({
                           }}
                         >
                           Change
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditingPaidThrough(e)}>
+                          Edit paid through
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -151,6 +159,18 @@ export function EnrolmentsTable({
           }
           onChanged={() => {
             setEditing(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {editingPaidThrough ? (
+        <EditPaidThroughDialog
+          enrolmentId={editingPaidThrough.id}
+          currentPaidThrough={editingPaidThrough.paidThroughDate ?? null}
+          open={Boolean(editingPaidThrough)}
+          onOpenChange={(open) => !open && setEditingPaidThrough(null)}
+          onUpdated={() => {
+            setEditingPaidThrough(null);
             router.refresh();
           }}
         />
