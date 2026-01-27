@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { addDays, differenceInCalendarDays, isAfter, isBefore, startOfDay } from "date-fns";
 import {
   BillingType,
   EnrolmentStatus,
@@ -29,6 +29,8 @@ import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
+import { dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
+import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
 type ChangeStudentLevelInput = {
   studentId: string;
