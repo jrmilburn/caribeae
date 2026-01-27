@@ -34,9 +34,9 @@ import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPr
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
 
-function fromDateInputValue(v: string) {
+function toDateTimeInputValue(v: string) {
   if (!v) return null;
-  return new Date(`${v}T00:00:00`);
+  return `${v}T00:00:00`;
 }
 
 export function CreateEnrolmentDialog({
@@ -179,8 +179,8 @@ export function CreateEnrolmentDialog({
 
     setSaving(true);
     try {
-      const start = fromDateInputValue(startDate);
-      const end = fromDateInputValue(endDate);
+      const start = toDateTimeInputValue(startDate);
+      const end = toDateTimeInputValue(endDate);
 
       if (!start) return;
 
@@ -188,8 +188,8 @@ export function CreateEnrolmentDialog({
         studentId,
         planId,
         templateIds: [templateId],
-        startDate: start.toISOString(),
-        endDate: end?.toISOString() ?? undefined,
+        startDate: start,
+        endDate: end ?? undefined,
         status,
         effectiveLevelId: classLevelId ?? undefined,
         customBlockLength: customBlockEnabled && planIsBlock && customBlockValue ? customBlockValue : undefined,
