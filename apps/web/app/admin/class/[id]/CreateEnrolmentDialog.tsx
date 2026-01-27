@@ -348,7 +348,7 @@ export function CreateEnrolmentDialog({
                           {filteredStudents.map((student) => (
                             <CommandItem
                               key={student.id}
-                              onSelect={() => {
+                              onClick={() => {
                                 setStudentId(student.id);
                                 setStudentOpen(false);
                               }}
