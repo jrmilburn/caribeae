@@ -30,7 +30,7 @@ import type { ClientStudentWithRelations } from "./types";
 import { dayLabel } from "../../class/[id]/utils/time";
 import { ChangeEnrolmentDialog } from "./ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
-import type { Level } from "@prisma/client";
+import type { EnrolmentPlan, Level } from "@prisma/client";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
 type EnrolmentRow = ClientStudentWithRelations["enrolments"][number];
@@ -61,10 +61,12 @@ export function StudentEnrolmentsTable({
   enrolments,
   levels,
   studentLevelId,
+  enrolmentPlans,
 }: {
   enrolments: EnrolmentRow[];
   levels: Level[];
   studentLevelId?: string | null;
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
@@ -204,6 +206,7 @@ export function StudentEnrolmentsTable({
           enrolment={editing as EnrolmentRow & { plan: NonNullable<EnrolmentRow["plan"]> }}
           levels={levels}
           studentLevelId={studentLevelId}
+          enrolmentPlans={enrolmentPlans}
           initialTemplateIds={
             editing.classAssignments?.length
               ? editing.classAssignments.map((assignment) => assignment.templateId)

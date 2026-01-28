@@ -36,6 +36,7 @@ export function StudentEnrolmentsSection({
           enrolments={student.enrolments}
           levels={levels}
           studentLevelId={student.levelId}
+          enrolmentPlans={levelPlans}
         />
         <AddEnrolmentDialog
           open={open}
