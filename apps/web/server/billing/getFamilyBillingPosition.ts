@@ -5,6 +5,7 @@
 import { differenceInCalendarDays } from "date-fns";
 import {
   BillingType,
+  EnrolmentType,
   PaymentStatus,
   PrismaClient,
   type Prisma,
@@ -272,7 +273,13 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
                     assertPlanMatchesTemplates(option, templateChecks);
                     return true;
                   }
-                  const requirement = getSelectionRequirement(option);
+                  const requirement = getSelectionRequirement({
+                    ...option,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    enrolmentType: EnrolmentType.BLOCK,
+                    blockLength: 1,
+                  });
                   const templateCount = templates.length;
                   if (requirement.requiredCount > 0 && templateCount !== requirement.requiredCount) {
                     return false;
