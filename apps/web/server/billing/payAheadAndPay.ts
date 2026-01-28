@@ -121,6 +121,10 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           levelId: assignment.template?.levelId ?? null,
         })),
       });
+      const templateChecks = templates.map((template) => ({
+        dayOfWeek: template.dayOfWeek ?? null,
+        name: template.name ?? null,
+      }));
       if (item.planId && !selectedPlan) {
         throw new Error("Selected plan could not be found.");
       }
@@ -146,7 +150,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           if (requirement.requiredCount === 0 && templateCount > requirement.maxCount) {
             throw new Error(`Selected plan allows up to ${requirement.maxCount} classes.`);
           }
-          assertPlanMatchesTemplates(selectedPlan!, templates);
+          assertPlanMatchesTemplates(selectedPlan!, templateChecks);
         }
       }
       const plan = selectedPlan ?? enrolment.plan;
@@ -157,7 +161,7 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           templates,
         });
       } else {
-        assertPlanMatchesTemplates(plan, templates);
+        assertPlanMatchesTemplates(plan, templateChecks);
       }
       if (item.customBlockLength != null && plan.billingType !== BillingType.PER_CLASS) {
         throw new Error("Custom block length is only available for per-class plans.");
