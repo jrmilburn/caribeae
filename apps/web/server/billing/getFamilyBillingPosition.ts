@@ -5,6 +5,7 @@
 import { differenceInCalendarDays } from "date-fns";
 import {
   BillingType,
+  EnrolmentType,
   PaymentStatus,
   PrismaClient,
   type Prisma,
@@ -20,6 +21,8 @@ import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSumma
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { filterWeeklyPlanOptions, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
+import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
+import { getSelectionRequirement } from "@/server/enrolment/planRules";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -111,7 +114,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     )
   );
 
-  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays, weeklyPlans] = await Promise.all([
+  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays, plans] = await Promise.all([
     client.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       include: {
@@ -165,7 +168,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       ? client.enrolmentPlan.findMany({
           where: {
             levelId: { in: levelIds },
-            billingType: BillingType.PER_WEEK,
           },
           select: {
             id: true,
@@ -176,12 +178,13 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
             isSaturdayOnly: true,
             billingType: true,
             levelId: true,
+            blockClassCount: true,
           },
         })
       : Promise.resolve([]),
   ]);
 
-  const weeklyPlansByLevel = weeklyPlans.reduce<Map<string, typeof weeklyPlans>>((map, plan) => {
+  const plansByLevel = plans.reduce<Map<string, typeof plans>>((map, plan) => {
     const entry = map.get(plan.levelId) ?? [];
     entry.push(plan);
     map.set(plan.levelId, entry);
@@ -249,10 +252,47 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
       const weeklyPlanOptions =
         plan?.billingType === BillingType.PER_WEEK
           ? filterWeeklyPlanOptions({
-              plans: weeklyPlansByLevel.get(currentLevelId ?? "") ?? [],
+              plans: (plansByLevel.get(currentLevelId ?? "") ?? []).filter(
+                (option) => option.billingType === BillingType.PER_WEEK
+              ),
               currentLevelId,
               templates,
             })
+          : [];
+      const planOptions =
+        plan?.billingType && currentLevelId
+          ? (plansByLevel.get(currentLevelId) ?? [])
+              .filter((option) => option.billingType === plan.billingType)
+              .filter((option) => {
+                try {
+                  const templateChecks = templates.map((template) => ({
+                    dayOfWeek: template.dayOfWeek,
+                    name: template.name ?? null,
+                  }));
+                  if (option.billingType === BillingType.PER_WEEK) {
+                    assertPlanMatchesTemplates(option, templateChecks);
+                    return true;
+                  }
+                  const requirement = getSelectionRequirement({
+                    ...option,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    enrolmentType: EnrolmentType.BLOCK,
+                    blockLength: 1,
+                  });
+                  const templateCount = templates.length;
+                  if (requirement.requiredCount > 0 && templateCount !== requirement.requiredCount) {
+                    return false;
+                  }
+                  if (requirement.requiredCount === 0 && templateCount > requirement.maxCount) {
+                    return false;
+                  }
+                  assertPlanMatchesTemplates(option, templateChecks);
+                  return true;
+                } catch {
+                  return false;
+                }
+              })
           : [];
 
       return {
@@ -267,6 +307,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
         sessionsPerWeek: plan?.sessionsPerWeek ?? null,
         blockClassCount: plan?.blockClassCount ?? null,
         weeklyPlanOptions,
+        planOptions,
         creditsRemaining,
         paidThroughDate,
         projectedCoverageEnd,

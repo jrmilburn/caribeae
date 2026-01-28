@@ -48,9 +48,11 @@ type EnrolmentWithStudent = Enrolment & {
 export function EnrolmentsTable({
   enrolments,
   levels,
+  enrolmentPlans,
 }: {
   enrolments: EnrolmentWithStudent[];
   levels: Level[];
+  enrolmentPlans: EnrolmentPlan[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
@@ -151,6 +153,7 @@ export function EnrolmentsTable({
           open={Boolean(editing)}
           onOpenChange={(open) => !open && setEditing(null)}
           enrolment={editing as Enrolment & { plan: EnrolmentPlan }}
+          enrolmentPlans={enrolmentPlans}
           levels={levels}
           initialTemplateIds={
             editing.classAssignments?.length

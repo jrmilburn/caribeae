@@ -35,6 +35,7 @@ type ChangeEnrolmentInput = {
   templateIds: string[];
   startDate?: string;
   effectiveLevelId?: string | null;
+  planId?: string | null;
   confirmShorten?: boolean;
   allowOverload?: boolean;
 };
@@ -44,6 +45,7 @@ type PreviewChangeEnrolmentInput = {
   templateIds: string[];
   startDate?: string;
   effectiveLevelId?: string | null;
+  planId?: string | null;
 };
 
 type ChangeEnrolmentResult =
@@ -111,11 +113,19 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
     if (!enrolment) throw new Error("Enrolment not found.");
     if (!enrolment.plan) throw new Error("Enrolment plan missing.");
 
+    const selectedPlan = input.planId
+      ? await tx.enrolmentPlan.findUnique({ where: { id: input.planId } })
+      : enrolment.plan;
+    if (!selectedPlan) throw new Error("Selected enrolment plan not found.");
+    if (selectedPlan.billingType !== enrolment.plan.billingType) {
+      throw new Error("Enrolment plan type must match the current enrolment billing type.");
+    }
+
     const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
     if (!effectiveLevelId) {
       throw new Error("Set the student's level before changing this enrolment.");
     }
-    if (enrolment.plan.levelId !== effectiveLevelId) {
+    if (selectedPlan.levelId !== effectiveLevelId) {
       throw new Error("Enrolment plan level must match the selected level.");
     }
 
@@ -132,10 +142,10 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       capacity: number | null;
     }> = [];
 
-    if (enrolment.plan.billingType === "PER_WEEK") {
+    if (selectedPlan.billingType === "PER_WEEK") {
       templates = await tx.classTemplate.findMany({
         where: {
-          levelId: enrolment.plan.levelId,
+          levelId: selectedPlan.levelId,
           active: true,
           startDate: { lte: payload.startDate ?? startOfDay(enrolment.startDate) },
           OR: [{ endDate: null }, { endDate: { gte: payload.startDate ?? startOfDay(enrolment.startDate) } }],
@@ -191,11 +201,11 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       throw new Error("Selected classes must match the student's level.");
     }
 
-    assertPlanMatchesTemplates(enrolment.plan, templates);
+    assertPlanMatchesTemplates(selectedPlan, templates);
 
-    if (enrolment.plan.billingType !== "PER_WEEK") {
+    if (selectedPlan.billingType !== "PER_WEEK") {
       const selectionValidation = validateSelection({
-        plan: enrolment.plan,
+        plan: selectedPlan,
         templateIds,
         templates,
       });
@@ -204,7 +214,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
       }
 
-      const selectionRequirement = getSelectionRequirement(enrolment.plan);
+      const selectionRequirement = getSelectionRequirement(selectedPlan);
       if (selectionRequirement.requiredCount > 0 && templateIds.length !== selectionRequirement.requiredCount) {
         throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
       }
@@ -274,7 +284,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       if (!template) continue;
       const issue = await getCapacityIssueForTemplateRange({
         template,
-        plan: enrolment.plan,
+        plan: selectedPlan,
         windowStart: window.startDate,
         windowEnd: window.endDate ?? null,
         existingEnrolmentId: enrolment.id,
@@ -313,7 +323,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
         : null;
 
-    const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
+    const plannedEndDate = resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
 
     const endBoundary = addDays(baseStart, -1);
     const enrolmentStart = startOfDay(enrolment.startDate);
@@ -321,7 +331,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 
     const currentPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
     const carriedPaidThrough =
-      enrolment.plan.billingType === "PER_WEEK" && currentPaidThrough
+      selectedPlan.billingType === "PER_WEEK" && currentPaidThrough
         ? await computeWeeklyChangeoverPaidThrough({
             client: tx,
             changeoverDate: baseStart,
@@ -329,12 +339,12 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
             oldTemplates,
             newTemplates: templates,
             plannedEndDate,
-            sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+            sessionsPerWeek: resolveSessionsPerWeek(selectedPlan),
           })
         : null;
 
     const oldSnapshot =
-      enrolment.plan.billingType === "PER_CLASS"
+      selectedPlan.billingType === "PER_CLASS"
         ? await getEnrolmentBillingStatus(enrolment.id, { client: tx, asOfDate: baseStart })
         : null;
     const carriedCredits = oldSnapshot?.remainingCredits ?? enrolment.creditsRemaining ?? enrolment.creditsBalanceCached ?? 0;
@@ -346,12 +356,12 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         startDate: baseStart,
         endDate: plannedEndDate,
         status: EnrolmentStatus.ACTIVE,
-        planId: enrolment.planId,
+        planId: selectedPlan.id,
         billingGroupId: enrolment.billingGroupId ?? null,
         paidThroughDate: carriedPaidThrough,
         paidThroughDateComputed: carriedPaidThrough,
-        creditsRemaining: enrolment.plan.billingType === "PER_CLASS" ? 0 : null,
-        creditsBalanceCached: enrolment.plan.billingType === "PER_CLASS" ? 0 : null,
+        creditsRemaining: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
+        creditsBalanceCached: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
       },
       include: { student: true, template: true, plan: true, classAssignments: true },
     });
@@ -364,7 +374,7 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       skipDuplicates: true,
     });
 
-    if (enrolment.plan.billingType === "PER_CLASS" && carriedCredits !== 0) {
+    if (selectedPlan.billingType === "PER_CLASS" && carriedCredits !== 0) {
       await tx.enrolmentCreditEvent.create({
         data: {
           enrolmentId: nextEnrolment.id,
@@ -500,11 +510,19 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
   if (!enrolment) throw new Error("Enrolment not found.");
   if (!enrolment.plan) throw new Error("Enrolment plan missing.");
 
+  const selectedPlan = input.planId
+    ? await prisma.enrolmentPlan.findUnique({ where: { id: input.planId } })
+    : enrolment.plan;
+  if (!selectedPlan) throw new Error("Selected enrolment plan not found.");
+  if (selectedPlan.billingType !== enrolment.plan.billingType) {
+    throw new Error("Enrolment plan type must match the current enrolment billing type.");
+  }
+
   const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
   if (!effectiveLevelId) {
     throw new Error("Set the student's level before changing this enrolment.");
   }
-  if (enrolment.plan.levelId !== effectiveLevelId) {
+  if (selectedPlan.levelId !== effectiveLevelId) {
     throw new Error("Enrolment plan level must match the selected level.");
   }
 
@@ -520,10 +538,10 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     dayOfWeek: number | null;
   }> = [];
 
-  if (enrolment.plan.billingType === "PER_WEEK") {
+  if (selectedPlan.billingType === "PER_WEEK") {
     templates = await prisma.classTemplate.findMany({
       where: {
-        levelId: enrolment.plan.levelId,
+        levelId: selectedPlan.levelId,
         active: true,
         startDate: { lte: baseStart },
         OR: [{ endDate: null }, { endDate: { gte: baseStart } }],
@@ -563,11 +581,11 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     });
   }
 
-  assertPlanMatchesTemplates(enrolment.plan, templates);
+  assertPlanMatchesTemplates(selectedPlan, templates);
 
-  if (enrolment.plan.billingType !== "PER_WEEK") {
+  if (selectedPlan.billingType !== "PER_WEEK") {
     const selectionValidation = validateSelection({
-      plan: enrolment.plan,
+      plan: selectedPlan,
       templateIds,
       templates,
     });
@@ -576,7 +594,7 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       throw new Error(selectionValidation.message ?? "Invalid selection for enrolment plan.");
     }
 
-    const selectionRequirement = getSelectionRequirement(enrolment.plan);
+    const selectionRequirement = getSelectionRequirement(selectedPlan);
     if (selectionRequirement.requiredCount > 0 && templateIds.length !== selectionRequirement.requiredCount) {
       throw new Error(`Select ${selectionRequirement.requiredCount} classes for this plan.`);
     }
@@ -595,12 +613,12 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     templateEndDates.length > 0
       ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
       : null;
-  const plannedEndDate = resolvePlannedEndDate(enrolment.plan, baseStart, enrolment.endDate ?? null, earliestEnd);
+  const plannedEndDate = resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
 
   const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
   let newPaidThroughDate = oldPaidThrough ?? null;
 
-  if (enrolment.plan.billingType === "PER_WEEK" && oldPaidThrough) {
+  if (selectedPlan.billingType === "PER_WEEK" && oldPaidThrough) {
     newPaidThroughDate = await computeWeeklyChangeoverPaidThrough({
       client: prisma,
       changeoverDate: baseStart,
@@ -608,9 +626,9 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       oldTemplates,
       newTemplates: templates,
       plannedEndDate,
-      sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+      sessionsPerWeek: resolveSessionsPerWeek(selectedPlan),
     });
-  } else if (enrolment.plan.billingType !== "PER_WEEK") {
+  } else if (selectedPlan.billingType !== "PER_WEEK") {
     const oldSnapshot = await getEnrolmentBillingStatus(enrolment.id, { asOfDate: baseStart });
     const carriedCredits = oldSnapshot?.remainingCredits ?? enrolment.creditsRemaining ?? enrolment.creditsBalanceCached ?? 0;
     newPaidThroughDate = await computePaidThroughPreview({
@@ -618,7 +636,7 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
       endDate: plannedEndDate,
       templates,
       credits: carriedCredits,
-      sessionsPerWeek: resolveSessionsPerWeek(enrolment.plan),
+      sessionsPerWeek: resolveSessionsPerWeek(selectedPlan),
     });
   }
 
