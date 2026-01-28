@@ -114,7 +114,7 @@ export default function FamilyInvoices({ family, billing, billingPosition, payme
     balanceCents: getInvoiceBalanceCents(invoice),
   }));
 
-  const totalOwingCents = billingPosition.outstandingCents;
+  const totalOwingCents = billingPosition.overallBalanceCents;
 
   const nextDue = [...openInvoices]
     .filter((i) => i.balanceCents > 0)
@@ -241,7 +241,7 @@ export default function FamilyInvoices({ family, billing, billingPosition, payme
               {formatCurrencyFromCents(totalOwingCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on unpaid blocks since paid-through dates
+              Includes enrolment owing, open invoices, and unallocated payments
             </div>
           </div>
 
