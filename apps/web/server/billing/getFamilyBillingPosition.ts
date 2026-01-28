@@ -264,8 +264,12 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
               .filter((option) => option.billingType === plan.billingType)
               .filter((option) => {
                 try {
+                  const templateChecks = templates.map((template) => ({
+                    dayOfWeek: template.dayOfWeek,
+                    name: template.name ?? null,
+                  }));
                   if (option.billingType === BillingType.PER_WEEK) {
-                    assertPlanMatchesTemplates(option, templates);
+                    assertPlanMatchesTemplates(option, templateChecks);
                     return true;
                   }
                   const requirement = getSelectionRequirement(option);
@@ -276,7 +280,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
                   if (requirement.requiredCount === 0 && templateCount > requirement.maxCount) {
                     return false;
                   }
-                  assertPlanMatchesTemplates(option, templates);
+                  assertPlanMatchesTemplates(option, templateChecks);
                   return true;
                 } catch {
                   return false;
