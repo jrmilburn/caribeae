@@ -67,6 +67,7 @@ type WeekViewProps = {
     teacherId?: string | null
   ) => { bg: string; border: string; text: string; style?: React.CSSProperties };
   selectedTemplateIds?: string[];
+  scrollKey?: string;
 };
 
 export default function WeekView(props: WeekViewProps) {
@@ -91,9 +92,11 @@ export default function WeekView(props: WeekViewProps) {
     setDraggingId,
     getTeacherColor,
     selectedTemplateIds,
+    scrollKey,
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
   const draggingClass = React.useMemo(
     () =>
@@ -142,6 +145,27 @@ export default function WeekView(props: WeekViewProps) {
     if (!draggingId) setDropTarget(null);
   }, [draggingId]);
 
+  React.useEffect(() => {
+    if (!scrollKey) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const saved = sessionStorage.getItem(scrollKey);
+    if (saved) {
+      node.scrollTop = Number(saved);
+    }
+  }, [scrollKey]);
+
+  React.useEffect(() => {
+    if (!scrollKey) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const handleScroll = () => {
+      sessionStorage.setItem(scrollKey, String(node.scrollTop));
+    };
+    node.addEventListener("scroll", handleScroll, { passive: true });
+    return () => node.removeEventListener("scroll", handleScroll);
+  }, [scrollKey]);
+
   // Safety net: cross-day moves can unmount the dragged card, so onDragEnd may not fire.
   React.useEffect(() => {
     const handle = () => finishDrag();
@@ -159,7 +183,7 @@ export default function WeekView(props: WeekViewProps) {
   );
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-auto" ref={scrollRef}>
       <div className="min-w-[800px]">
         {/* Header row */}
         <div

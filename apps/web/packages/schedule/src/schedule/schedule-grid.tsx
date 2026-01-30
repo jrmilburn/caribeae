@@ -34,6 +34,7 @@ export type ScheduleGridProps = {
   selectedTemplateIds?: string[];
   showHeaderDates?: boolean;
   showDayDate?: boolean;
+  scrollKey?: string;
 };
 
 const DAYS_OF_WEEK: DayOfWeek[] = [
@@ -65,6 +66,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
     selectedTemplateIds,
     showHeaderDates = true,
     showDayDate = true,
+    scrollKey,
   } = props;
 
   const levelLookup = useMemo(() => new Map(levels.map((l) => [l.id, l])), [levels]);
@@ -97,6 +99,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           classes={normalized}
           holidays={holidays}
           showHeaderDates={showHeaderDates}
+          scrollKey={scrollKey ? `${scrollKey}:week` : undefined}
           onDayHeaderClick={(day) => {
             const idx = dayToIndex(day);
             setSelectedDay(idx);
@@ -119,6 +122,7 @@ export default function ScheduleGrid(props: ScheduleGridProps) {
           classes={normalized.filter((c) => dayOfWeekToColumnIndex(c.dayOfWeek) === selectedDay)}
           holidays={holidays}
           showHeaderDates={showDayDate}
+          scrollKey={scrollKey ? `${scrollKey}:day:${selectedDay}` : undefined}
           onSlotClick={onSlotClick}
           onClassClick={onClassClick}
           onMoveClass={onMoveClass}
