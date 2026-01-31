@@ -102,7 +102,8 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       () => initialCache?.classes ?? []
     );
     const [holidays, setHolidays] = useState<Holiday[]>(() => initialCache?.holidays ?? []);
-    const [loading, setLoading] = useState<boolean>(() => !initialCache);
+    const suppressLoading = Boolean(persistKey);
+    const [loading, setLoading] = useState<boolean>(() => !initialCache && !suppressLoading);
     const cacheAppliedRef = React.useRef(Boolean(initialCache));
 
     const [error, setError] = useState<string | null>(null);
@@ -199,7 +200,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     React.useEffect(() => {
       let cancelled = false;
       async function loadClasses() {
-        if (!cacheAppliedRef.current) {
+        if (!cacheAppliedRef.current && !suppressLoading) {
           setLoading(true);
         }
         setError(null);
