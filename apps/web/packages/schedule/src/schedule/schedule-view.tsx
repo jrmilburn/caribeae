@@ -51,6 +51,8 @@ export type ScheduleViewProps = {
   selectedDate?: Date;
   onViewModeChange?: (mode: "week" | "day") => void;
   onSelectedDateChange?: (date: Date) => void;
+  persistKey?: string;
+  scrollKey?: string;
 
   // ✅ NEW
   filters?: ScheduleFilters;
@@ -58,7 +60,6 @@ export type ScheduleViewProps = {
   selectedTemplateIds?: string[];
   weekAnchor?: Date;
 };
-
 
 export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewProps>(
   function ScheduleView(
@@ -76,23 +77,33 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       selectedDate,
       onViewModeChange,
       onSelectedDateChange,
+      persistKey,
+      scrollKey,
       filters,
       headerActions,
       selectedTemplateIds,
-      weekAnchor
+      weekAnchor,
     },
     ref
   ) {
     const skipSelectedDateSyncRef = React.useRef(false);
     const initialAnchor = scheduleWeekStart(selectedDate ?? weekAnchor ?? new Date());
+    const initialLevelFilter = filters?.levelId ?? null;
+    const initialCacheKey = persistKey
+      ? `${persistKey}|week:${scheduleDateKey(initialAnchor)}|level:${initialLevelFilter ?? "all"}`
+      : null;
+    const initialCache = readCachedScheduleData(initialCacheKey);
     const [viewMode, setViewMode] = useState<"week" | "day">(controlledViewMode ?? defaultViewMode);
     const [currentWeek, setCurrentWeek] = useState<Date>(() => initialAnchor);
     const [selectedDay, setSelectedDay] = useState<number>(() =>
       scheduleDayOfWeekIndex(selectedDate ?? initialAnchor)
     );
-    const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
-    const [holidays, setHolidays] = useState<Holiday[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
+    const [classes, setClasses] = useState<NormalizedScheduleClass[]>(
+      () => initialCache?.classes ?? []
+    );
+    const [holidays, setHolidays] = useState<Holiday[]>(() => initialCache?.holidays ?? []);
+    const [loading, setLoading] = useState<boolean>(() => !initialCache);
+    const cacheAppliedRef = React.useRef(Boolean(initialCache));
 
     const [error, setError] = useState<string | null>(null);
 
@@ -101,14 +112,18 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       [dataAdapter, dataEndpoint]
     );
 
-  const weekStart = useMemo(() => scheduleWeekStart(currentWeek), [currentWeek]);
-  const displayWeekEnd = useMemo(() => scheduleAddDays(weekStart, 6), [weekStart]);
-  const levelFilter = filters?.levelId ?? null;
-  const teacherFilter = filters?.teacherId ?? null;
+    const weekStart = useMemo(() => scheduleWeekStart(currentWeek), [currentWeek]);
+    const displayWeekEnd = useMemo(() => scheduleAddDays(weekStart, 6), [weekStart]);
+    const levelFilter = filters?.levelId ?? null;
+    const teacherFilter = filters?.teacherId ?? null;
+    const cacheKey = useMemo(() => {
+      if (!persistKey) return null;
+      return `${persistKey}|week:${scheduleDateKey(weekStart)}|level:${levelFilter ?? "all"}`;
+    }, [levelFilter, persistKey, weekStart]);
 
-  const weekDates = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => scheduleAddDays(weekStart, i));
-  }, [weekStart]);
+    const weekDates = useMemo(() => {
+      return Array.from({ length: 7 }, (_, i) => scheduleAddDays(weekStart, i));
+    }, [weekStart]);
 
     React.useEffect(() => {
       if (!selectedDate) return;
@@ -171,9 +186,22 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
 
     // Initial / week-navigation load (shows loading state)
     React.useEffect(() => {
+      cacheAppliedRef.current = false;
+      if (!cacheKey) return;
+      const cached = readCachedScheduleData(cacheKey);
+      if (!cached) return;
+      setClasses(cached.classes);
+      setHolidays(cached.holidays);
+      setLoading(false);
+      cacheAppliedRef.current = true;
+    }, [cacheKey]);
+
+    React.useEffect(() => {
       let cancelled = false;
       async function loadClasses() {
-        setLoading(true);
+        if (!cacheAppliedRef.current) {
+          setLoading(true);
+        }
         setError(null);
         try {
           const data = await adapter.fetchClasses({
@@ -234,6 +262,19 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
         cancelled = true;
       };
     }, [weekStart, displayWeekEnd]);
+
+    React.useEffect(() => {
+      if (!cacheKey) return;
+      const payload: CachedScheduleData = {
+        classes: classes.map(serializeScheduleClass),
+        holidays: holidays.map(serializeHoliday),
+      };
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(payload));
+      } catch {
+        // ignore storage write failures
+      }
+    }, [cacheKey, classes, holidays]);
 
     // Background refresh (does NOT flip `loading`, so the grid stays mounted)
     const softRefresh = React.useCallback(() => {
@@ -400,6 +441,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             selectedTemplateIds={selectedTemplateIds}
             showHeaderDates={!isEnrolmentChange}
             showDayDate={!isEnrolmentChange}
+            scrollKey={scrollKey}
           />
         </div>
       </div>
@@ -411,4 +453,70 @@ function addMinutes(date: Date, minutes: number): Date {
   const copy = new Date(date);
   copy.setMinutes(copy.getMinutes() + minutes);
   return copy;
+}
+
+type CachedScheduleClass = Omit<NormalizedScheduleClass, "startTime" | "endTime"> & {
+  startTime: string;
+  endTime: string;
+};
+
+type CachedHoliday = Omit<Holiday, "startDate" | "endDate"> & {
+  startDate: string;
+  endDate: string;
+};
+
+type CachedScheduleData = {
+  classes: CachedScheduleClass[];
+  holidays: CachedHoliday[];
+};
+
+function readCachedScheduleData(cacheKey: string | null) {
+  if (!cacheKey) return null;
+  if (typeof window === "undefined") return null;
+  try {
+    const cachedRaw = sessionStorage.getItem(cacheKey);
+    if (!cachedRaw) return null;
+    const cached = JSON.parse(cachedRaw) as CachedScheduleData;
+    const cachedClasses = Array.isArray(cached.classes)
+      ? cached.classes.map(deserializeScheduleClass)
+      : [];
+    const cachedHolidays = Array.isArray(cached.holidays)
+      ? cached.holidays.map(deserializeHoliday)
+      : [];
+    return { classes: cachedClasses, holidays: cachedHolidays };
+  } catch {
+    return null;
+  }
+}
+
+function serializeScheduleClass(item: NormalizedScheduleClass): CachedScheduleClass {
+  return {
+    ...item,
+    startTime: item.startTime.toISOString(),
+    endTime: item.endTime.toISOString(),
+  };
+}
+
+function deserializeScheduleClass(item: CachedScheduleClass): NormalizedScheduleClass {
+  return normalizeScheduleClass({
+    ...item,
+    startTime: new Date(item.startTime),
+    endTime: new Date(item.endTime),
+  });
+}
+
+function serializeHoliday(item: Holiday): CachedHoliday {
+  return {
+    ...item,
+    startDate: item.startDate.toISOString(),
+    endDate: item.endDate.toISOString(),
+  };
+}
+
+function deserializeHoliday(item: CachedHoliday): Holiday {
+  return {
+    ...item,
+    startDate: new Date(item.startDate),
+    endDate: new Date(item.endDate),
+  };
 }
