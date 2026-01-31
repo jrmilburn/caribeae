@@ -200,6 +200,10 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     balanceCents: Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
   }));
 
+  const openInvoiceBalanceCents = openInvoicesWithBalance.reduce(
+    (sum: number, invoice: any) => sum + invoice.balanceCents,
+    0
+  );
   const paidCents = paymentsAggregate._sum.amountCents ?? 0;
   const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
   const unallocatedCents = Math.max(paidCents - allocatedCents, 0);
@@ -334,6 +338,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     enrolments: enrolmentsFlat,
     today: new Date(),
   });
+  const overallBalanceCents = summary.totalOwingCents + openInvoiceBalanceCents - unallocatedCents;
   const latestPaidThroughDates = enrolmentsFlat
     .map((e : any) => e.projectedCoverageEnd ?? e.paidThroughDate ?? e.latestCoverageEnd)
     .filter(Boolean) as Date[];
@@ -363,7 +368,9 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
+    openInvoiceBalanceCents,
     outstandingCents: summary.totalOwingCents,
+    overallBalanceCents,
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {

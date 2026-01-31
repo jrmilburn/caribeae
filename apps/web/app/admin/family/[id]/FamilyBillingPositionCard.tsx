@@ -72,13 +72,13 @@ export function FamilyBillingPositionCard({ billing }: Props) {
             <div
               className={cn(
                 "mt-1 text-2xl font-semibold",
-                billing.outstandingCents > 0 ? "text-destructive" : "text-emerald-700"
+                billing.overallBalanceCents > 0 ? "text-destructive" : "text-emerald-700"
               )}
             >
-              {formatCurrencyFromCents(billing.outstandingCents)}
+              {formatCurrencyFromCents(billing.overallBalanceCents)}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Based on unpaid blocks since paid-through dates
+              Includes enrolment owing, open invoices, and unallocated payments
             </div>
           </div>
 
