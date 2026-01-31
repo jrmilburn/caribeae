@@ -48,7 +48,7 @@ export function getSelectionRequirement(plan: EnrolmentPlan): SelectionRequireme
 }
 
 export function resolvePlannedEndDate(
-  plan: EnrolmentPlan,
+  plan: Pick<EnrolmentPlan, "billingType" | "durationWeeks">,
   startDate: Date,
   explicitEndDate?: Date | null,
   templateEndDate?: Date | null

@@ -314,6 +314,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           <TabsContent value="enrolments">
             <EnrolmentsSection
               classTemplate={{ ...data.template, enrolments: data.enrolmentsForDate }}
+              classTemplates={data.classTemplates}
               students={data.students}
               enrolmentPlans={data.enrolmentPlans}
               dateKey={selectedDateKey}

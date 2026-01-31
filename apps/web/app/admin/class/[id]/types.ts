@@ -41,6 +41,7 @@ export type ClassOccurrenceRoster = {
 
 export type ClassPageData = {
   template: ClientTemplateWithInclusions;
+  classTemplates: Prisma.ClassTemplateGetPayload<{ include: { level: true } }>[];
   enrolmentsForDate: ClientTemplateWithInclusions["enrolments"];
   selectedDateKey: string | null;
   requestedDateKey: string | null;

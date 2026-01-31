@@ -7,13 +7,14 @@ import type { EnrolmentPlan, Level, Student } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import type { ClientTemplateWithInclusions } from "./types";
+import type { ClassPageData, ClientTemplateWithInclusions } from "./types";
 import { EnrolmentsTable } from "./EnrolmentsTable";
 import { CreateEnrolmentDialog } from "./CreateEnrolmentDialog";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 export function EnrolmentsSection({
   classTemplate,
+  classTemplates,
   students,
   enrolmentPlans,
   dateKey,
@@ -21,6 +22,7 @@ export function EnrolmentsSection({
   isCancelled,
 }: {
   classTemplate: ClientTemplateWithInclusions;
+  classTemplates: ClassPageData["classTemplates"];
   students: Student[];
   enrolmentPlans: EnrolmentPlan[];
   dateKey: string | null;
@@ -54,6 +56,8 @@ export function EnrolmentsSection({
           enrolments={classTemplate.enrolments}
           levels={levels}
           enrolmentPlans={enrolmentPlans}
+          classTemplates={classTemplates}
+          fromClassTemplate={classTemplate}
         />
         <CreateEnrolmentDialog
           open={open}
