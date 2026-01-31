@@ -247,7 +247,7 @@ export function MoveClassDialog({
                           <CommandItem
                             key={template.id}
                             value={template.id}
-                            onSelect={() => {
+                            onClick={() => {
                               setDestinationId(template.id);
                               setDestinationOpen(false);
                             }}
