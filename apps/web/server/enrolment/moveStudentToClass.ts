@@ -191,7 +191,6 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
         template: {
           id: toTemplate.id,
           levelId: toTemplate.levelId ?? "",
-          active: toTemplate.active ?? true,
           startDate: toTemplate.startDate,
           endDate: toTemplate.endDate,
           name: toTemplate.name,
