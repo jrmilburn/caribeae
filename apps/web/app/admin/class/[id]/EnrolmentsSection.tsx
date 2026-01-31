@@ -14,6 +14,7 @@ import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 export function EnrolmentsSection({
   classTemplate,
+  classTemplates,
   students,
   enrolmentPlans,
   dateKey,
