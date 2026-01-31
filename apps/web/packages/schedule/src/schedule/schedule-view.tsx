@@ -88,15 +88,22 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
   ) {
     const skipSelectedDateSyncRef = React.useRef(false);
     const initialAnchor = scheduleWeekStart(selectedDate ?? weekAnchor ?? new Date());
+    const initialLevelFilter = filters?.levelId ?? null;
+    const initialCacheKey = persistKey
+      ? `${persistKey}|week:${scheduleDateKey(initialAnchor)}|level:${initialLevelFilter ?? "all"}`
+      : null;
+    const initialCache = readCachedScheduleData(initialCacheKey);
     const [viewMode, setViewMode] = useState<"week" | "day">(controlledViewMode ?? defaultViewMode);
     const [currentWeek, setCurrentWeek] = useState<Date>(() => initialAnchor);
     const [selectedDay, setSelectedDay] = useState<number>(() =>
       scheduleDayOfWeekIndex(selectedDate ?? initialAnchor)
     );
-    const [classes, setClasses] = useState<NormalizedScheduleClass[]>([]);
-    const [holidays, setHolidays] = useState<Holiday[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const cacheAppliedRef = React.useRef(false);
+    const [classes, setClasses] = useState<NormalizedScheduleClass[]>(
+      () => initialCache?.classes ?? []
+    );
+    const [holidays, setHolidays] = useState<Holiday[]>(() => initialCache?.holidays ?? []);
+    const [loading, setLoading] = useState<boolean>(() => !initialCache);
+    const cacheAppliedRef = React.useRef(Boolean(initialCache));
 
     const [error, setError] = useState<string | null>(null);
 
@@ -181,23 +188,12 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     React.useEffect(() => {
       cacheAppliedRef.current = false;
       if (!cacheKey) return;
-      const cachedRaw = sessionStorage.getItem(cacheKey);
-      if (!cachedRaw) return;
-      try {
-        const cached = JSON.parse(cachedRaw) as CachedScheduleData;
-        const cachedClasses = Array.isArray(cached.classes)
-          ? cached.classes.map(deserializeScheduleClass)
-          : [];
-        const cachedHolidays = Array.isArray(cached.holidays)
-          ? cached.holidays.map(deserializeHoliday)
-          : [];
-        setClasses(cachedClasses);
-        setHolidays(cachedHolidays);
-        setLoading(false);
-        cacheAppliedRef.current = true;
-      } catch {
-        // ignore cache parsing issues
-      }
+      const cached = readCachedScheduleData(cacheKey);
+      if (!cached) return;
+      setClasses(cached.classes);
+      setHolidays(cached.holidays);
+      setLoading(false);
+      cacheAppliedRef.current = true;
     }, [cacheKey]);
 
     React.useEffect(() => {
@@ -473,6 +469,25 @@ type CachedScheduleData = {
   classes: CachedScheduleClass[];
   holidays: CachedHoliday[];
 };
+
+function readCachedScheduleData(cacheKey: string | null) {
+  if (!cacheKey) return null;
+  if (typeof window === "undefined") return null;
+  try {
+    const cachedRaw = sessionStorage.getItem(cacheKey);
+    if (!cachedRaw) return null;
+    const cached = JSON.parse(cachedRaw) as CachedScheduleData;
+    const cachedClasses = Array.isArray(cached.classes)
+      ? cached.classes.map(deserializeScheduleClass)
+      : [];
+    const cachedHolidays = Array.isArray(cached.holidays)
+      ? cached.holidays.map(deserializeHoliday)
+      : [];
+    return { classes: cachedClasses, holidays: cachedHolidays };
+  } catch {
+    return null;
+  }
+}
 
 function serializeScheduleClass(item: NormalizedScheduleClass): CachedScheduleClass {
   return {
