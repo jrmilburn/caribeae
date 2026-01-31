@@ -19,6 +19,7 @@ import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
+import { computeFamilyOutstandingBalance } from "@/server/billing/familyBalance";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { filterWeeklyPlanOptions, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
@@ -202,7 +203,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
 
   const paidCents = paymentsAggregate._sum.amountCents ?? 0;
   const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
-  const unallocatedCents = Math.max(paidCents - allocatedCents, 0);
 
   const students = family.students.map((student : any) => {
     const enrolments = (student.enrolments ?? [])
@@ -354,7 +354,12 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     .find((inv) => inv.balanceCents > 0);
 
   const invoiceBalanceTotal = openInvoicesWithBalance.reduce((sum, invoice) => sum + (invoice.balanceCents ?? 0), 0);
-  const combinedOwingCents = Math.max(summary.totalOwingCents + invoiceBalanceTotal - unallocatedCents, 0);
+  const { outstandingCents: combinedOwingCents, unallocatedCents } = computeFamilyOutstandingBalance({
+    baselineOwingCents: summary.totalOwingCents,
+    openInvoiceBalanceCents: invoiceBalanceTotal,
+    paymentsTotalCents: paidCents,
+    allocatedCents,
+  });
 
   return {
     family: {
