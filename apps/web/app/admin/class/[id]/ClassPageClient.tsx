@@ -5,7 +5,6 @@ import * as React from "react";
 import { ClassTemplateForm } from "./ClassTemplateForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
-import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,6 +84,17 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
     });
     return `/admin/schedule?${params.toString()}`;
   }, []);
+  const handleBackToSchedule = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+        return;
+      }
+      router.push(returnTo ?? fallbackSchedule);
+    },
+    [fallbackSchedule, returnTo, router]
+  );
 
   React.useEffect(() => {
     setEffectiveTeacher(data.effectiveTeacher);
@@ -236,8 +246,8 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" asChild>
-            <Link href={returnTo ?? fallbackSchedule}>Back to Schedule</Link>
+          <Button size="sm" variant="ghost" type="button" onClick={handleBackToSchedule}>
+            Back to Schedule
           </Button>
           <DateSelector
             availableDateKeys={data.availableDateKeys}
