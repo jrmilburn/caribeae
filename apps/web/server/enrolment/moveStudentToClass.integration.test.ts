@@ -1,6 +1,6 @@
 import assert from "node:assert";
 
-import { resolveMoveClassDates } from "@/server/enrolment/moveStudentToClass";
+import { resolveMoveClassDates } from "@/server/enrolment/moveStudentToClassDates";
 import { BillingType } from "@prisma/client";
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 

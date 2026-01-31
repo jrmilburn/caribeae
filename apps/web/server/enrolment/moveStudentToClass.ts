@@ -8,7 +8,8 @@ import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { normalizeStartDate, getSelectionRequirement, resolvePlannedEndDate } from "@/server/enrolment/planRules";
+import { normalizeStartDate, getSelectionRequirement } from "@/server/enrolment/planRules";
+import { resolveMoveClassDates } from "@/server/enrolment/moveStudentToClassDates";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
@@ -57,31 +58,6 @@ type MoveStudentResult =
             message: string;
           };
     };
-
-export function resolveMoveClassDates(params: {
-  effectiveDate: Date;
-  enrolmentStart: Date;
-  enrolmentEnd: Date | null;
-  templateStart: Date;
-  templateEnd: Date | null;
-  plan: { billingType: BillingType; durationWeeks: number | null };
-}) {
-  const alignedStart = isBefore(params.effectiveDate, params.templateStart)
-    ? params.templateStart
-    : params.effectiveDate;
-  if (params.templateEnd && isAfter(alignedStart, params.templateEnd)) {
-    throw new Error("Effective date is after the destination class ends.");
-  }
-
-  const plannedEnd = resolvePlannedEndDate(params.plan, alignedStart, params.enrolmentEnd, params.templateEnd);
-  const endBoundary = addDays(alignedStart, -1);
-  let effectiveEnd = isBefore(endBoundary, params.enrolmentStart) ? params.enrolmentStart : endBoundary;
-  if (params.enrolmentEnd && isBefore(params.enrolmentEnd, effectiveEnd)) {
-    effectiveEnd = params.enrolmentEnd;
-  }
-
-  return { alignedStart, plannedEnd, effectiveEnd };
-}
 
 async function countOccurrencesBetween(params: {
   client: Prisma.TransactionClient;
