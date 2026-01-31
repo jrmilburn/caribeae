@@ -48,6 +48,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     levels,
     students,
     enrolmentPlans,
+    classTemplates,
     substitution,
     cancellation,
     cancellationCredits,
@@ -59,7 +60,11 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
       prisma.student.findMany({
         orderBy: { name: "asc" },
       }),
-      prisma.enrolmentPlan.findMany({ where: { levelId: template.levelId } }),
+      prisma.enrolmentPlan.findMany({ orderBy: [{ levelId: "asc" }, { name: "asc" }] }),
+      prisma.classTemplate.findMany({
+        include: { level: true },
+        orderBy: [{ level: { levelOrder: "asc" } }, { dayOfWeek: "asc" }, { startTime: "asc" }],
+      }),
       selectedDate
         ? prisma.teacherSubstitution.findUnique({
             where: { templateId_date: { templateId, date: selectedDate } },
@@ -135,6 +140,7 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     levels,
     students,
     enrolmentPlans,
+    classTemplates,
     roster,
   };
 }

@@ -30,6 +30,7 @@ import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog"
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { MoveClassDialog } from "./MoveClassDialog";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -49,15 +50,20 @@ export function EnrolmentsTable({
   enrolments,
   levels,
   enrolmentPlans,
+  classTemplates,
+  fromClassTemplate,
 }: {
   enrolments: EnrolmentWithStudent[];
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
+  classTemplates: Array<ClassTemplate & { level: Level | null }>;
+  fromClassTemplate: Pick<ClassTemplate, "id" | "name" | "dayOfWeek" | "startTime" | "levelId">;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
+  const [moving, setMoving] = React.useState<EnrolmentWithStudent | null>(null);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
@@ -130,6 +136,9 @@ export function EnrolmentsTable({
                         <DropdownMenuItem onClick={() => setEditingPaidThrough(e)}>
                           Edit paid through
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setMoving(e)}>
+                          Move class
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
@@ -174,6 +183,20 @@ export function EnrolmentsTable({
           onOpenChange={(open) => !open && setEditingPaidThrough(null)}
           onUpdated={() => {
             setEditingPaidThrough(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {moving ? (
+        <MoveClassDialog
+          open={Boolean(moving)}
+          onOpenChange={(open) => !open && setMoving(null)}
+          enrolment={moving}
+          enrolmentPlans={enrolmentPlans}
+          classTemplates={classTemplates}
+          fromClassTemplate={fromClassTemplate}
+          onMoved={() => {
+            setMoving(null);
             router.refresh();
           }}
         />
