@@ -19,9 +19,9 @@ import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
 import {
   adjustCreditsForManualPaidThroughDate,
-  recalculateEnrolmentCoverage,
   recomputeEnrolmentComputedFields,
 } from "@/server/billing/enrolmentBilling";
+import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 
 const payloadSchema = z.object({
