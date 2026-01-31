@@ -353,6 +353,9 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     })
     .find((inv) => inv.balanceCents > 0);
 
+  const invoiceBalanceTotal = openInvoicesWithBalance.reduce((sum, invoice) => sum + (invoice.balanceCents ?? 0), 0);
+  const combinedOwingCents = Math.max(summary.totalOwingCents + invoiceBalanceTotal - unallocatedCents, 0);
+
   return {
     family: {
       id: family.id,
@@ -363,7 +366,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents: summary.totalOwingCents,
+    outstandingCents: combinedOwingCents,
     unallocatedCents,
     nextDueInvoice: nextDueInvoice
       ? {
