@@ -201,6 +201,7 @@ export default function ScheduleWithTemplateModal({
     const qs = params.toString();
     return qs ? `/admin/schedule?${qs}` : "/admin/schedule";
   }, [levelId, selectedDateKey, teacherId, viewMode]);
+  const scheduleStateKey = useMemo(() => `admin-schedule:${scheduleStateUrl}`, [scheduleStateUrl]);
 
   const handleClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     const dateKey = context?.columnDateKey ?? scheduleDateKey(context?.columnDate ?? occurrence.startTime);
@@ -241,6 +242,8 @@ export default function ScheduleWithTemplateModal({
         onClassClick={handleClassClick}
         viewMode={viewMode}
         selectedDate={selectedDate}
+        persistKey={scheduleStateKey}
+        scrollKey={scheduleStateKey}
         onViewModeChange={(next) => {
           if (next === viewMode) return;
           setViewMode(next);

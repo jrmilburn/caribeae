@@ -41,6 +41,7 @@ type DayViewProps = {
     teacherId?: string | null
   ) => { bg: string; border: string; text: string; style?: React.CSSProperties };
   selectedTemplateIds?: string[];
+  scrollKey?: string;
 };
 
 export default function DayView(props: DayViewProps) {
@@ -64,9 +65,11 @@ export default function DayView(props: DayViewProps) {
     setDraggingId,
     getTeacherColor,
     selectedTemplateIds,
+    scrollKey,
   } = props;
 
   const dragImageRef = React.useRef<HTMLElement | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
 
   const draggingClass = React.useMemo(
     () =>
@@ -109,6 +112,27 @@ export default function DayView(props: DayViewProps) {
     if (!draggingId) setDropTarget(null);
   }, [draggingId]);
 
+  React.useEffect(() => {
+    if (!scrollKey) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const saved = sessionStorage.getItem(scrollKey);
+    if (saved) {
+      node.scrollTop = Number(saved);
+    }
+  }, [scrollKey]);
+
+  React.useEffect(() => {
+    if (!scrollKey) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    const handleScroll = () => {
+      sessionStorage.setItem(scrollKey, String(node.scrollTop));
+    };
+    node.addEventListener("scroll", handleScroll, { passive: true });
+    return () => node.removeEventListener("scroll", handleScroll);
+  }, [scrollKey]);
+
   const isDraggable = Boolean(onMoveClass);
 
   const nextStartForSlot = React.useCallback(
@@ -117,7 +141,7 @@ export default function DayView(props: DayViewProps) {
   );
 
   return (
-    <div className="flex h-full flex-col overflow-auto">
+    <div className="flex h-full flex-col overflow-auto" ref={scrollRef}>
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <div className="text-sm font-medium text-muted-foreground">
           {showHeaderDates ? `${dayName} • ${format(dayDate, "MMM d, yyyy")}` : dayName}
