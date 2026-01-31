@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
-import { BillingType, EnrolmentStatus, InvoiceLineItemKind, InvoiceStatus, type Prisma } from "@prisma/client";
+import { isAfter, isBefore, startOfDay } from "date-fns";
+import { BillingType, EnrolmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -11,18 +11,17 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { normalizeStartDate, getSelectionRequirement } from "@/server/enrolment/planRules";
 import { resolveMoveClassDates } from "@/server/enrolment/moveStudentToClassDates";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
-import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
-import { listScheduledOccurrences } from "@/server/billing/paidThroughDate";
-import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
-import { computeProratedPaidThrough, getPlanUnitPriceCents } from "@/server/enrolment/moveStudentToClassProration";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
+import { adjustCreditsForManualPaidThroughDate } from "@/server/billing/enrolmentBilling";
 import {
-  adjustCreditsForManualPaidThroughDate,
-  recomputeEnrolmentComputedFields,
-} from "@/server/billing/enrolmentBilling";
-import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
-import { createInvoiceWithLineItems, createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
+  applyClassChangeSettlement,
+  buildClassChangeSettlementKey,
+  computeClassChangeSettlementForRange,
+  resolveChangeOverPaidThroughDate,
+  type ClassChangeSettlementSummary,
+} from "@/server/billing/classChangeSettlement";
 
 const payloadSchema = z.object({
   studentId: z.string().min(1),
@@ -44,6 +43,7 @@ type MoveStudentResult =
         adjustmentInvoiceId: string | null;
         creditInvoiceId: string | null;
         paymentId: string | null;
+        settlement: ClassChangeSettlementSummary | null;
       };
     }
   | {
@@ -58,48 +58,6 @@ type MoveStudentResult =
             message: string;
           };
     };
-
-async function countOccurrencesBetween(params: {
-  client: Prisma.TransactionClient;
-  template: { id: string; dayOfWeek: number | null; levelId: string | null };
-  startDate: Date;
-  endDate: Date;
-}) {
-  const start = brisbaneStartOfDay(params.startDate);
-  const end = brisbaneStartOfDay(params.endDate);
-  if (isAfter(start, end)) return 0;
-
-  const templateIds = [params.template.id];
-  const levelIds = [params.template.levelId ?? null];
-  const [holidays, cancellations] = await Promise.all([
-    params.client.holiday.findMany({
-      where: {
-        startDate: { lte: end },
-        endDate: { gte: start },
-        ...buildHolidayScopeWhere({ templateIds, levelIds }),
-      },
-      select: { startDate: true, endDate: true, levelId: true, templateId: true },
-      orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
-    }),
-    params.client.classCancellation.findMany({
-      where: {
-        templateId: { in: templateIds },
-        date: { gte: start, lte: end },
-      },
-      select: { templateId: true, date: true },
-    }),
-  ]);
-
-  const occurrences = listScheduledOccurrences({
-    startDate: start,
-    endDate: end,
-    classTemplate: { dayOfWeek: params.template.dayOfWeek },
-    holidays,
-    cancellations: cancellations.map((cancellation) => cancellation.date),
-  });
-
-  return occurrences.length;
-}
 
 export async function moveStudentToClass(input: z.input<typeof payloadSchema>): Promise<MoveStudentResult> {
   try {
@@ -218,8 +176,10 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
         });
       }
 
-      const oldPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
-      const newPaidThrough = oldPaidThrough ? brisbaneStartOfDay(oldPaidThrough) : null;
+      const oldPaidThrough = resolveChangeOverPaidThroughDate(
+        enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null
+      );
+      const newPaidThrough = oldPaidThrough;
       const today = brisbaneStartOfDay(new Date());
       if (
         isBefore(alignedStart, today) &&
@@ -293,108 +253,51 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
 
       if (plan.billingType === BillingType.PER_CLASS) {
         await adjustCreditsForManualPaidThroughDate(tx, nextEnrolmentWithTemplates, newPaidThrough);
-        await recomputeEnrolmentComputedFields(nextEnrolment.id, { client: tx, asOfDate: alignedStart });
-      } else {
-        await recalculateEnrolmentCoverage(nextEnrolment.id, "CLASS_CHANGED", {
-          tx,
-          actorId: user.id,
-        });
       }
 
       let adjustmentInvoiceId: string | null = null;
       let creditInvoiceId: string | null = null;
       let paymentId: string | null = null;
+      let settlementSummary: ClassChangeSettlementSummary | null = null;
       const familyId = student.familyId ?? enrolment.student.familyId ?? null;
-
       if (oldPaidThrough && newPaidThrough) {
-        const proratedPaidThrough = computeProratedPaidThrough({
-          effectiveDate: alignedStart,
-          oldPaidThroughDate: newPaidThrough,
+        const settlement = await computeClassChangeSettlementForRange({
+          client: tx,
           oldPlan: enrolment.plan,
           newPlan: plan,
-          destinationTemplates: [{ dayOfWeek: toTemplate.dayOfWeek }],
+          changeOverDate: alignedStart,
+          paidThroughDate: newPaidThrough,
+          templates: [
+            {
+              id: toTemplate.id,
+              dayOfWeek: toTemplate.dayOfWeek ?? null,
+              levelId: toTemplate.levelId ?? null,
+            },
+          ],
         });
 
-        if (proratedPaidThrough) {
-          const startKey = toBrisbaneDayKey(newPaidThrough);
-          const endKey = toBrisbaneDayKey(proratedPaidThrough);
-          if (startKey !== endKey) {
-            const deltaStart =
-              isAfter(proratedPaidThrough, newPaidThrough) ? addDays(newPaidThrough, 1) : addDays(proratedPaidThrough, 1);
-            const deltaEnd = isAfter(proratedPaidThrough, newPaidThrough) ? proratedPaidThrough : newPaidThrough;
-            const totalOccurrences = await countOccurrencesBetween({
-              client: tx,
-              template: {
-                id: toTemplate.id,
-                dayOfWeek: toTemplate.dayOfWeek,
-                levelId: toTemplate.levelId ?? null,
-              },
-              startDate: deltaStart,
-              endDate: deltaEnd,
-            });
-
-            const unitPrice = getPlanUnitPriceCents(plan);
-            const adjustmentCents = Math.round(totalOccurrences * unitPrice);
-
-            if (adjustmentCents > 0) {
-              if (isAfter(proratedPaidThrough, newPaidThrough)) {
-                if (!familyId) {
-                  throw new Error("Family not found for billing adjustment.");
-                }
-                const creditInvoice = await createInvoiceWithLineItems({
-                  familyId,
-                  enrolmentId: nextEnrolment.id,
-                  lineItems: [
-                    {
-                      kind: InvoiceLineItemKind.ADJUSTMENT,
-                      description: "Class move credit",
-                      quantity: 1,
-                      amountCents: -adjustmentCents,
-                    },
-                  ],
-                  status: InvoiceStatus.PAID,
-                  issuedAt: new Date(),
-                  dueAt: new Date(),
-                  client: tx,
-                  skipAuth: true,
-                });
-                creditInvoiceId = creditInvoice.id;
-
-                const payment = await createPaymentAndAllocate({
-                  familyId,
-                  amountCents: adjustmentCents,
-                  method: "credit",
-                  note: "Class move credit",
-                  strategy: "oldest-open-first",
-                  client: tx,
-                  skipAuth: true,
-                });
-                paymentId = payment.payment.id;
-              } else {
-                if (!familyId) {
-                  throw new Error("Family not found for billing adjustment.");
-                }
-                const invoice = await createInvoiceWithLineItems({
-                  familyId,
-                  enrolmentId: nextEnrolment.id,
-                  lineItems: [
-                    {
-                      kind: InvoiceLineItemKind.ADJUSTMENT,
-                      description: "Class move adjustment",
-                      quantity: 1,
-                      amountCents: adjustmentCents,
-                    },
-                  ],
-                  status: InvoiceStatus.SENT,
-                  issuedAt: new Date(),
-                  dueAt: new Date(),
-                  client: tx,
-                  skipAuth: true,
-                });
-                adjustmentInvoiceId = invoice.id;
-              }
-            }
+        settlementSummary = settlement;
+        if (settlement.differenceCents !== 0) {
+          if (!familyId) {
+            throw new Error("Family not found for billing adjustment.");
           }
+          const settlementKey = buildClassChangeSettlementKey({
+            enrolmentId: enrolment.id,
+            newPlanId: plan.id,
+            changeOverDate: alignedStart,
+            paidThroughDate: newPaidThrough,
+            templateIds: [toTemplate.id],
+          });
+          const settlementResult = await applyClassChangeSettlement({
+            client: tx,
+            familyId,
+            enrolmentId: nextEnrolment.id,
+            settlement,
+            settlementKey,
+            planId: plan.id,
+          });
+          adjustmentInvoiceId = settlementResult.invoiceId;
+          paymentId = settlementResult.paymentId;
         }
       }
 
@@ -407,6 +310,7 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
           adjustmentInvoiceId,
           creditInvoiceId,
           paymentId,
+          settlement: settlementSummary,
         },
       };
     });
