@@ -238,7 +238,7 @@ export function MoveClassDialog({
                     <CommandInput
                       placeholder="Search classes"
                       value={destinationSearch}
-                      onValueChange={setDestinationSearch}
+                      onChange={(event) => setDestinationSearch(event.target.value)}
                     />
                     <CommandList>
                       <CommandEmpty>No classes found.</CommandEmpty>
