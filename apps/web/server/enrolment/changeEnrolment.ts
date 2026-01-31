@@ -348,7 +348,16 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         creditsRemaining: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
         creditsBalanceCached: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
       },
-      include: { student: true, template: true, plan: true, classAssignments: true },
+      include: {
+        student: true,
+        template: true,
+        plan: true,
+        classAssignments: {
+          include: {
+            template: true,
+          },
+        },
+      },
     });
 
     await tx.enrolmentClassAssignment.createMany({
