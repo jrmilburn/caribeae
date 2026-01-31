@@ -1,5 +1,5 @@
 import { addDays, isAfter, isBefore } from "date-fns";
-import { BillingType } from "@prisma/client";
+import type { EnrolmentPlan } from "@prisma/client";
 
 import { resolvePlannedEndDate } from "@/server/enrolment/planRules";
 
@@ -9,7 +9,7 @@ export function resolveMoveClassDates(params: {
   enrolmentEnd: Date | null;
   templateStart: Date;
   templateEnd: Date | null;
-  plan: { billingType: BillingType; durationWeeks: number | null };
+  plan: Pick<EnrolmentPlan, "billingType" | "durationWeeks">;
 }) {
   const alignedStart = isBefore(params.effectiveDate, params.templateStart)
     ? params.templateStart
