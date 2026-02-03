@@ -47,6 +47,7 @@ export function AddEnrolmentDialog({
   levels,
   enrolmentPlans,
   studentLevelId,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,6 +55,7 @@ export function AddEnrolmentDialog({
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
   studentLevelId?: string | null;
+  onCreated?: () => void;
 }) {
   const router = useRouter();
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>(
@@ -300,6 +302,7 @@ export function AddEnrolmentDialog({
       }
 
       onOpenChange(false);
+      onCreated?.();
       router.refresh();
     } catch (err) {
       console.error(err);
