@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
@@ -21,7 +22,7 @@ import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
-import { WeeklyPlanSelect, type WeeklyPlanOption } from "@/components/admin/WeeklyPlanSelect";
+import { WeeklyPlanSelect } from "@/components/admin/WeeklyPlanSelect";
 
 type Props = {
   summary: FamilyBillingSummary | null;
@@ -29,6 +30,7 @@ type Props = {
 };
 
 type Enrolment = FamilyBillingSummary["enrolments"][number];
+type PlanOption = Enrolment["planOptions"][number];
 
 type HolidayRange = {
   startDate: Date | string;
@@ -47,8 +49,8 @@ function formatDate(value?: Date | string | null) {
   return format(d, "d MMM yyyy");
 }
 
-function blockSize(enrolment: Enrolment) {
-  const size = resolveBlockLength(enrolment.blockClassCount);
+function blockSize(plan: { blockClassCount?: number | null } | null) {
+  const size = resolveBlockLength(plan?.blockClassCount);
   return size > 0 ? size : 0;
 }
 
@@ -70,7 +72,7 @@ function projectPaidAhead(
   quantity: number,
   holidays: HolidayRange[],
   customBlockLength?: number | null,
-  selectedPlan?: WeeklyPlanOption | null
+  selectedPlan?: PlanOption | null
 ) {
   const today = new Date();
   const paidThrough = resolveCurrentPaidThrough(enrolment);
@@ -104,7 +106,7 @@ function projectPaidAhead(
   if (enrolment.billingType === "PER_CLASS") {
     const anchorTemplate = enrolment.assignedClasses?.[0] ?? null;
     if (anchorTemplate?.dayOfWeek == null) {
-      return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + blockSize(enrolment) * quantity };
+      return { creditsRemaining: (enrolment.creditsRemaining ?? 0) + blockSize(selectedPlan) * quantity };
     }
 
     const assignedTemplates = (enrolment.assignedClasses ?? [])
@@ -114,7 +116,7 @@ function projectPaidAhead(
       }))
       .filter((template : any): template is { dayOfWeek: number; startTime?: number | null } => template.dayOfWeek != null);
 
-    const effectiveBlockLength = customBlockLength ?? blockSize(enrolment);
+    const effectiveBlockLength = customBlockLength ?? blockSize(selectedPlan);
     const range = computeBlockPayAheadCoverage({
       currentPaidThroughDate: paidThrough,
       enrolmentStartDate: asDate(enrolment.startDate) ?? today,
@@ -125,7 +127,7 @@ function projectPaidAhead(
       },
       assignedTemplates: assignedTemplates.length ? assignedTemplates : undefined,
       blocksPurchased: quantity,
-      blockClassCount: blockSize(enrolment),
+      blockClassCount: blockSize(selectedPlan),
       creditsPurchased: effectiveBlockLength * quantity,
       holidays: normalizeHolidays(holidays),
     });
@@ -179,7 +181,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     setSelectedPlans(
       eligibleIds.reduce<Record<string, string>>((acc, id) => {
         const enrolment = enrolments.find((entry) => entry.id === id);
-        if (enrolment?.billingType === "PER_WEEK" && enrolment.planId) {
+        if (enrolment?.planId) {
           acc[id] = enrolment.planId;
         }
         return acc;
@@ -200,15 +202,29 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     const invalidCustom = selected.find((id) => {
       const enrolment = enrolments.find((entry : any) => entry.id === id);
       if (!enrolment || enrolment.billingType !== "PER_CLASS") return false;
+      const planOptions = enrolment.planOptions ?? [];
+      const selectedPlanId = selectedPlans[id] ?? enrolment.planId ?? "";
+      const selectedPlan =
+        planOptions.find((plan : any) => plan.id === selectedPlanId) ??
+        ({
+          blockClassCount: enrolment.blockClassCount,
+        } as PlanOption);
       if (!customBlockEnabled[id]) return false;
-      const blockSizeValue = blockSize(enrolment);
+      const blockSizeValue = blockSize(selectedPlan);
       const parsedCustom = Number(customBlockLengths[id]);
       const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
       return !customLength || customLength < blockSizeValue;
     });
     if (invalidCustom) {
       const enrolment = enrolments.find((entry : any) => entry.id === invalidCustom);
-      const minValue = enrolment ? blockSize(enrolment) : 1;
+      const planOptions = enrolment?.planOptions ?? [];
+      const selectedPlanId = selectedPlans[invalidCustom] ?? enrolment?.planId ?? "";
+      const selectedPlan =
+        planOptions.find((plan : any) => plan.id === selectedPlanId) ??
+        ({
+          blockClassCount: enrolment?.blockClassCount,
+        } as PlanOption);
+      const minValue = enrolment ? blockSize(selectedPlan) : 1;
       toast.error(`Custom block length must be at least ${minValue} classes.`);
       return;
     }
@@ -219,7 +235,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         const parsedCustom = Number(customBlockLengths[id]);
         const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
         const enrolment = enrolments.find((entry) => entry.id === id);
-        const selectedPlanId = enrolment?.billingType === "PER_WEEK" ? selectedPlans[id] : undefined;
+        const selectedPlanId = selectedPlans[id];
         return {
           enrolmentId: id,
           quantity: qty > 0 ? qty : 1,
@@ -256,17 +272,20 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
   const selectedEnrolments = paymentEligibleEnrolments.filter((e : any) => selected.includes(e.id));
   const totalCents = selectedEnrolments.reduce((sum : any, enrolment : any) => {
     const qty = quantities[enrolment.id] ?? 1;
-    const selectedPlanId = selectedPlans[enrolment.id];
+    const planOptions = enrolment.planOptions ?? [];
+    const selectedPlanId = selectedPlans[enrolment.id] ?? enrolment.planId ?? "";
     const selectedPlan =
-      enrolment.billingType === "PER_WEEK"
-        ? enrolment.weeklyPlanOptions?.find((plan : any) => plan.id === selectedPlanId) ?? null
-        : null;
+      planOptions.find((plan : any) => plan.id === selectedPlanId) ??
+      ({
+        blockClassCount: enrolment.blockClassCount,
+        priceCents: enrolment.planPriceCents,
+      } as PlanOption);
     if (enrolment.billingType === "PER_CLASS" && customBlockEnabled[enrolment.id]) {
       const parsed = Number(customBlockLengths[enrolment.id]);
       const customLength = Number.isInteger(parsed) ? parsed : null;
       const pricing = calculateBlockPricing({
-        priceCents: enrolment.planPriceCents,
-        blockLength: blockSize(enrolment),
+        priceCents: selectedPlan.priceCents ?? enrolment.planPriceCents,
+        blockLength: blockSize(selectedPlan),
         customBlockLength: customLength ?? undefined,
       });
       return sum + pricing.totalCents * qty;
@@ -328,31 +347,37 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                 const qty = quantities[enrolment.id] ?? 1;
                 const parsedCustom = Number(customBlockLengths[enrolment.id]);
                 const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
-                const selectedPlanId = selectedPlans[enrolment.id];
-                const selectedPlan =
-                  enrolment.billingType === "PER_WEEK"
-                    ? enrolment.weeklyPlanOptions?.find((plan : any) => plan.id === selectedPlanId) ?? null
-                    : null;
+                const planOptions = enrolment.planOptions ?? [];
+                const selectedPlanId = selectedPlans[enrolment.id] ?? enrolment.planId ?? "";
+                const selectedPlan = planOptions.find((plan : any) => plan.id === selectedPlanId) ?? null;
+                const activePlan =
+                  selectedPlan ??
+                  ({
+                    blockClassCount: enrolment.blockClassCount,
+                    durationWeeks: enrolment.durationWeeks,
+                    priceCents: enrolment.planPriceCents,
+                    name: enrolment.planName,
+                  } as PlanOption);
                 const projection = projectPaidAhead(
                   enrolment,
                   qty,
                   summary.holidays ?? [],
                   customBlockEnabled[enrolment.id] ? customLength : null,
-                  selectedPlan
+                  activePlan
                 );
                 const isWeekly = enrolment.billingType === "PER_WEEK";
                 const isBlock = enrolment.billingType === "PER_CLASS";
-                const planBlockLength = blockSize(enrolment);
+                const planBlockLength = blockSize(activePlan);
                 const pricing =
                   isBlock && customBlockEnabled[enrolment.id]
                     ? calculateBlockPricing({
-                        priceCents: enrolment.planPriceCents,
+                        priceCents: activePlan.priceCents ?? enrolment.planPriceCents,
                         blockLength: planBlockLength,
                         customBlockLength: customLength ?? undefined,
                       })
                     : null;
                 const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
-                const planLabel = selectedPlan?.name ?? enrolment.planName;
+                const planLabel = activePlan.name ?? enrolment.planName;
                 const currentLabel = isWeekly
                   ? `Paid to ${formatDate(currentPaidThrough)}`
                   : `Paid to ${formatDate(currentPaidThrough)}`;
@@ -417,7 +442,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                         </Badge>
                       </div>
                     </div>
-                    {isWeekly && enrolment.weeklyPlanOptions?.length > 1 ? (
+                    {isWeekly && planOptions.length > 1 ? (
                       <div className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                         <div className="max-w-xs">
                           <WeeklyPlanSelect
@@ -425,19 +450,48 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                             onValueChange={(value) =>
                               setSelectedPlans((prev) => ({ ...prev, [enrolment.id]: value }))
                             }
-                            options={enrolment.weeklyPlanOptions}
+                            options={planOptions}
                           />
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          {selectedPlan?.durationWeeks ?? enrolment.durationWeeks ?? "—"} weeks ·{" "}
-                          {formatCurrencyFromCents(selectedPlan?.priceCents ?? enrolment.planPriceCents)}
+                          {activePlan.durationWeeks ?? enrolment.durationWeeks ?? "—"} weeks ·{" "}
+                          {formatCurrencyFromCents(activePlan.priceCents ?? enrolment.planPriceCents)}
+                        </span>
+                      </div>
+                    ) : null}
+                    {isBlock && planOptions.length > 1 ? (
+                      <div className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                        <div className="max-w-xs space-y-1">
+                          <p className="text-xs text-muted-foreground">Plan</p>
+                          <Select
+                            value={selectedPlanId ?? enrolment.planId ?? ""}
+                            onValueChange={(value) =>
+                              setSelectedPlans((prev) => ({ ...prev, [enrolment.id]: value }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-full text-xs">
+                              <SelectValue placeholder="Select plan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {planOptions.map((option : any) => (
+                                <SelectItem key={option.id} value={option.id}>
+                                  {option.name} · {resolveBlockLength(option.blockClassCount)} classes ·{" "}
+                                  {formatCurrencyFromCents(option.priceCents)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {planBlockLength} classes · {formatCurrencyFromCents(activePlan.priceCents ?? enrolment.planPriceCents)}
                         </span>
                       </div>
                     ) : null}
                     {isBlock ? (
                       <div className="mt-2 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          {planBlockLength} classes · {formatCurrencyFromCents(enrolment.planPriceCents)}
+                          {planBlockLength} classes ·{" "}
+                          {formatCurrencyFromCents(activePlan.priceCents ?? enrolment.planPriceCents)}
                         </div>
                         <button
                           type="button"

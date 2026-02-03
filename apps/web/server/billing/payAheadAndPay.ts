@@ -11,13 +11,14 @@ import { createInvoiceWithLineItems, createPaymentAndAllocate } from "./invoiceM
 import { getBillingStatusForEnrolments, getWeeklyPaidThrough } from "./enrolmentBilling";
 import { resolveWeeklyPayAheadSequence } from "@/server/invoicing/coverage";
 import { normalizeDate, normalizeOptionalDate } from "@/server/invoicing/dateUtils";
-import { assertPlanMatchesTemplate } from "@/server/enrolment/planCompatibility";
+import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { assertWeeklyPlanSelection, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
+import { getSelectionRequirement } from "@/server/enrolment/planRules";
 
 const payAheadItemSchema = z.object({
   enrolmentId: z.string().min(1),
@@ -120,23 +121,56 @@ export async function payAheadAndPay(input: PayAheadAndPayInput) {
           levelId: assignment.template?.levelId ?? null,
         })),
       });
+      const templateChecks = templates.map((template) => ({
+        dayOfWeek: template.dayOfWeek ?? null,
+        name: template.name ?? null,
+      }));
       if (item.planId && !selectedPlan) {
         throw new Error("Selected plan could not be found.");
       }
       if (item.planId) {
-        if (enrolment.plan.billingType !== BillingType.PER_WEEK) {
-          throw new Error("Only weekly plans can be changed for pay-ahead payments.");
+        if (selectedPlan!.billingType !== enrolment.plan.billingType) {
+          throw new Error("Selected plan must match the enrolment billing type.");
         }
+        if (selectedPlan!.levelId !== enrolment.plan.levelId) {
+          throw new Error("Selected plan must match the enrolment level.");
+        }
+        if (selectedPlan!.billingType === BillingType.PER_WEEK) {
+          assertWeeklyPlanSelection({
+            plan: selectedPlan!,
+            currentLevelId: enrolment.plan.levelId,
+            templates,
+          });
+        } else {
+          const requirement = getSelectionRequirement(selectedPlan!);
+          const templateCount = templates.length;
+          if (requirement.requiredCount > 0 && templateCount !== requirement.requiredCount) {
+            throw new Error(`Selected plan requires ${requirement.requiredCount} classes.`);
+          }
+          if (requirement.requiredCount === 0 && templateCount > requirement.maxCount) {
+            throw new Error(`Selected plan allows up to ${requirement.maxCount} classes.`);
+          }
+          assertPlanMatchesTemplates(selectedPlan!, templateChecks);
+        }
+      }
+      const plan = selectedPlan ?? enrolment.plan;
+      if (plan.billingType === BillingType.PER_WEEK) {
         assertWeeklyPlanSelection({
-          plan: selectedPlan!,
+          plan,
           currentLevelId: enrolment.plan.levelId,
           templates,
         });
+      } else {
+        assertPlanMatchesTemplates(plan, templateChecks);
       }
-      const plan = selectedPlan ?? enrolment.plan;
-      assertPlanMatchesTemplate(plan, enrolment.template);
       if (item.customBlockLength != null && plan.billingType !== BillingType.PER_CLASS) {
         throw new Error("Custom block length is only available for per-class plans.");
+      }
+      if (item.planId && plan.id !== enrolment.planId) {
+        await tx.enrolment.update({
+          where: { id: enrolment.id },
+          data: { planId: plan.id },
+        });
       }
 
       if (plan.billingType === BillingType.PER_WEEK) {

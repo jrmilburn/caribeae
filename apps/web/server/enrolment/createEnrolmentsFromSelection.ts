@@ -309,6 +309,13 @@ export async function createEnrolmentsFromSelection(
       const enrolmentEnd = resolvePlannedEndDate(plan, earliestStart, explicitEndDate, earliestEnd);
       const accounting = initialAccountingForPlan(normalizedPlan, earliestStart);
 
+      if (payload.effectiveLevelId && student.levelId !== payload.effectiveLevelId) {
+        await tx.student.update({
+          where: { id: student.id },
+          data: { levelId: payload.effectiveLevelId },
+        });
+      }
+
       const enrolment = await tx.enrolment.create({
         data: {
           templateId: anchorTemplate.id,

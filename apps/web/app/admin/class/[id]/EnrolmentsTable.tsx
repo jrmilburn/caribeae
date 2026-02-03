@@ -28,6 +28,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { MoveClassDialog } from "./MoveClassDialog";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -46,13 +49,21 @@ type EnrolmentWithStudent = Enrolment & {
 export function EnrolmentsTable({
   enrolments,
   levels,
+  enrolmentPlans,
+  classTemplates,
+  fromClassTemplate,
 }: {
   enrolments: EnrolmentWithStudent[];
   levels: Level[];
+  enrolmentPlans: EnrolmentPlan[];
+  classTemplates: Array<ClassTemplate & { level: Level | null }>;
+  fromClassTemplate: Pick<ClassTemplate, "id" | "name" | "dayOfWeek" | "startTime" | "levelId">;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
+  const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
+  const [moving, setMoving] = React.useState<EnrolmentWithStudent | null>(null);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
@@ -84,6 +95,7 @@ export function EnrolmentsTable({
               <TableHead>Status</TableHead>
               <TableHead>Start</TableHead>
               <TableHead>End</TableHead>
+              <TableHead>Paid through</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -99,6 +111,7 @@ export function EnrolmentsTable({
                   <TableCell>{e.status}</TableCell>
                   <TableCell>{fmtDate(e.startDate)}</TableCell>
                   <TableCell>{fmtDate(e.endDate ?? null)}</TableCell>
+                  <TableCell>{formatBrisbaneDate(e.paidThroughDate ?? null)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -119,6 +132,12 @@ export function EnrolmentsTable({
                           }}
                         >
                           Change
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditingPaidThrough(e)}>
+                          Edit paid through
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setMoving(e)}>
+                          Move class
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -143,6 +162,7 @@ export function EnrolmentsTable({
           open={Boolean(editing)}
           onOpenChange={(open) => !open && setEditing(null)}
           enrolment={editing as Enrolment & { plan: EnrolmentPlan }}
+          enrolmentPlans={enrolmentPlans}
           levels={levels}
           initialTemplateIds={
             editing.classAssignments?.length
@@ -151,6 +171,32 @@ export function EnrolmentsTable({
           }
           onChanged={() => {
             setEditing(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {editingPaidThrough ? (
+        <EditPaidThroughDialog
+          enrolmentId={editingPaidThrough.id}
+          currentPaidThrough={editingPaidThrough.paidThroughDate ?? null}
+          open={Boolean(editingPaidThrough)}
+          onOpenChange={(open) => !open && setEditingPaidThrough(null)}
+          onUpdated={() => {
+            setEditingPaidThrough(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {moving ? (
+        <MoveClassDialog
+          open={Boolean(moving)}
+          onOpenChange={(open) => !open && setMoving(null)}
+          enrolment={moving}
+          enrolmentPlans={enrolmentPlans}
+          classTemplates={classTemplates}
+          fromClassTemplate={fromClassTemplate}
+          onMoved={() => {
+            setMoving(null);
             router.refresh();
           }}
         />
