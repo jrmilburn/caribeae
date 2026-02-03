@@ -631,6 +631,7 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
           open={Boolean(editingEnrolment)}
           onOpenChange={(open) => !open && setEditingEnrolment(null)}
           enrolment={editingEnrolment as ClientStudentWithRelations["enrolments"][number] & { plan: NonNullable<ClientStudentWithRelations["enrolments"][number]["plan"]> }}
+          enrolmentPlans={enrolmentPlans}
           levels={levels}
           studentLevelId={studentDetails?.levelId}
           initialTemplateIds={
