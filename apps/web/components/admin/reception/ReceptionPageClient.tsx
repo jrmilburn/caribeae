@@ -678,10 +678,10 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
                       <div>
                         <div className="font-medium">{family.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {family.primaryContactName || \"Family\"}
+                          {family.primaryContactName || "Family"}
                         </div>
                       </div>
-                      <span className=\"text-xs font-medium text-muted-foreground\">Select</span>
+                      <span className="text-xs font-medium text-muted-foreground">Select</span>
                     </button>
                   ))}
                 </div>
