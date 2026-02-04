@@ -50,6 +50,7 @@ import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
+import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
