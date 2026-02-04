@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Loader2, Mail, MoreVertical, Phone } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { cn } from "@/lib/utils";
@@ -30,8 +33,6 @@ import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
 
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
 import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
-import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
-import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
 
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
@@ -117,6 +118,40 @@ type FamilyFormProps = {
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
 };
 
+type StudentStatus = {
+  label: string;
+  variant: "default" | "secondary" | "outline" | "destructive";
+};
+
+function resolveStudentStatus(enrolments: Array<{ entitlementStatus?: string }> | undefined): StudentStatus {
+  if (!enrolments || enrolments.length === 0) {
+    return { label: "Not enrolled", variant: "outline" };
+  }
+
+  const statuses = enrolments.map((enrolment) => enrolment.entitlementStatus ?? "UNKNOWN");
+  if (statuses.includes("OVERDUE")) return { label: "Overdue", variant: "destructive" };
+  if (statuses.includes("DUE_SOON")) return { label: "Due soon", variant: "secondary" };
+  if (statuses.includes("AHEAD")) return { label: "Ahead", variant: "outline" };
+  return { label: "Unknown", variant: "outline" };
+}
+
+function resolveStudentPaidThrough(
+  enrolments: Array<{
+    projectedCoverageEnd?: Date | null;
+    paidThroughDate?: Date | null;
+    latestCoverageEnd?: Date | null;
+  }>
+) {
+  if (!enrolments.length) return "Not enrolled";
+  const dates = enrolments
+    .map((enrolment) => enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)
+    .filter(Boolean) as Date[];
+  const latest = dates.length
+    ? dates.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
+    : null;
+  return `Paid through ${formatBrisbaneDate(latest ?? null)}`;
+}
+
 export default function FamilyForm({
   family,
   enrolContext,
@@ -132,25 +167,43 @@ export default function FamilyForm({
   const returnTo = parseReturnContext(searchParams);
   const [activeTab, setActiveTab] = useSyncedQueryState<string>("tab", {
     defaultValue: "overview",
-    parse: (value) =>
-      value === "billing" || value === "students" || value === "transition" || value === "history"
-        ? value
-        : "overview",
+    parse: (value) => {
+      if (value === "billing") return "billing";
+      if (value === "enrolments") return "enrolments";
+      if (value === "contacts") return "contacts";
+      if (value === "history") return "history";
+      if (value === "students") return "enrolments";
+      if (value === "transition") return "history";
+      return "overview";
+    },
     serialize: (value) => (value === "overview" ? null : value),
+  });
+  const [selectedStudentId, setSelectedStudentId] = useSyncedQueryState<string>("student", {
+    defaultValue: "",
+    parse: (value) => value ?? "",
+    serialize: (value) => (value ? value : null),
   });
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
+  const [changingStudent, setChangingStudent] = React.useState<
+    FamilyWithStudentsAndInvoices["students"][number] | null
+  >(null);
   const [paymentSheetOpen, setPaymentSheetOpen] = React.useState(false);
+  const [payAheadOpen, setPayAheadOpen] = React.useState(false);
+
+  const [studentDetails, setStudentDetails] = React.useState<ClientStudentWithRelations | null>(null);
+  const [isLoadingStudent, startLoadingStudent] = React.useTransition();
+  const studentCache = React.useRef(new Map<string, ClientStudentWithRelations>());
 
   if (!family) return null;
 
   const lastPayment = billing.payments?.[0] ?? null;
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-  };
+  const backHref = returnTo ?? "/admin/family";
+  const backLabel = returnTo?.startsWith("/admin/reception") ? "Back to Reception" : "Back";
+  const showReceptionLink = !backHref.startsWith("/admin/reception");
+  const showFamiliesLink = !backHref.startsWith("/admin/family");
 
   React.useEffect(() => {
     setVisitedTabs((prev) => {
@@ -160,6 +213,91 @@ export default function FamilyForm({
       return next;
     });
   }, [activeTab]);
+
+  React.useEffect(() => {
+    if (!selectedStudentId) return;
+    const exists = family.students.some((student) => student.id === selectedStudentId);
+    if (!exists) setSelectedStudentId("");
+  }, [family.students, selectedStudentId, setSelectedStudentId]);
+
+  const refreshStudentDetails = React.useCallback(
+    (id?: string | null) => {
+      const studentId = id ?? selectedStudentId;
+      if (!studentId) return;
+      startLoadingStudent(async () => {
+        try {
+          const student = await getStudent(studentId);
+          if (!student) throw new Error("Student not found.");
+          const typed = student as ClientStudentWithRelations;
+          studentCache.current.set(studentId, typed);
+          setStudentDetails(typed);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unable to load student.";
+          console.error(error);
+          toast.error(message);
+        }
+      });
+    },
+    [selectedStudentId, startLoadingStudent]
+  );
+
+  React.useEffect(() => {
+    if (!selectedStudentId) {
+      setStudentDetails(null);
+      return;
+    }
+
+    const cached = studentCache.current.get(selectedStudentId);
+    if (cached) {
+      setStudentDetails(cached);
+      return;
+    }
+
+    let active = true;
+    startLoadingStudent(async () => {
+      try {
+        const student = await getStudent(selectedStudentId);
+        if (!active) return;
+        if (!student) throw new Error("Student not found.");
+        const typed = student as ClientStudentWithRelations;
+        studentCache.current.set(selectedStudentId, typed);
+        setStudentDetails(typed);
+      } catch (error) {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : "Unable to load student.";
+        console.error(error);
+        toast.error(message);
+        setStudentDetails(null);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedStudentId, startLoadingStudent]);
+
+  const studentRows = React.useMemo(() => {
+    const billingByStudentId = new Map(billingPosition.students.map((student) => [student.id, student]));
+    return family.students.map((student) => {
+      const billingStudent = billingByStudentId.get(student.id);
+      const enrolments = billingStudent?.enrolments ?? [];
+      return {
+        id: student.id,
+        name: student.name,
+        levelName: student.level?.name ?? null,
+        status: resolveStudentStatus(enrolments),
+        paidThroughLabel: resolveStudentPaidThrough(enrolments),
+        enrolments,
+        student,
+      };
+    });
+  }, [billingPosition.students, family.students]);
+
+  const selectedStudentRow = studentRows.find((row) => row.id === selectedStudentId) ?? null;
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+  };
 
   const handleAddStudent = () => {
     setEditingStudent(null);
@@ -188,72 +326,388 @@ export default function FamilyForm({
     }
   };
 
+  const handleDeleteStudent = async (studentId: string) => {
+    const ok = window.confirm("Delete this student? This cannot be undone.");
+    if (!ok) return;
+    try {
+      await deleteStudent(studentId);
+      router.refresh();
+      if (selectedStudentId === studentId) {
+        setSelectedStudentId("");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete student.";
+      console.error(error);
+      toast.error(message);
+    }
+  };
+
+  const handleSelectStudent = (studentId: string) => {
+    setSelectedStudentId(studentId);
+  };
+
+  const handleManageEnrolments = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setActiveTab("enrolments");
+  };
+
+  const handleEditPaidThrough = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setActiveTab("enrolments");
+  };
+
+  const handleOpenStudent = (studentId: string) => {
+    const returnUrl = `/admin/family/${family.id}?tab=enrolments&student=${studentId}`;
+    router.push(buildReturnUrl(`/admin/student/${studentId}`, returnUrl));
+  };
+
+  const handleEnrolInClass = (studentId: string) => {
+    if (!enrolContext?.templateId) return;
+    const qs = new URLSearchParams();
+    qs.set("studentId", studentId);
+    qs.set("templateId", enrolContext.templateId);
+    if (enrolContext.startDate) qs.set("startDate", enrolContext.startDate);
+    router.push(`/admin/enrolments/new?${qs.toString()}`);
+  };
+
+  const handleBillingUpdated = React.useCallback(() => {
+    if (selectedStudentId) refreshStudentDetails(selectedStudentId);
+  }, [refreshStudentDetails, selectedStudentId]);
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <FamilyHeaderSummary
-        familyName={family.name}
-        contact={{
-          name: family.primaryContactName,
-          phone: family.primaryPhone,
-          email: family.primaryEmail,
-        }}
-        lastPayment={lastPayment ? { amountCents: lastPayment.amountCents, paidAt: lastPayment.paidAt } : null}
-        actions={
-          <div className="flex flex-col gap-2">
-            <Button size="sm" variant="ghost" asChild>
-              <Link href={returnTo ?? "/admin/family"}>Back to Families</Link>
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                handleTabChange("billing");
-                setPaymentSheetOpen(true);
-              }}
-            >
-              Record payment
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                handleTabChange("students");
-                handleAddStudent();
-              }}
-            >
-              Add student
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                handleTabChange("overview");
-                setFamilySheetOpen(true);
-              }}
-            >
-              Edit family
-            </Button>
-          </div>
-        }
-      />
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto space-y-4">
-          <FamilyTabs
-            activeTab={activeTab}
-            visitedTabs={visitedTabs}
-            onTabChange={handleTabChange}
-            family={family}
-            billing={billing}
-            billingPosition={billingPosition}
-            enrolContext={enrolContext}
-            levels={levels}
-            onAddStudent={handleAddStudent}
-            onEditStudent={handleEditStudent}
-            paymentSheetOpen={paymentSheetOpen}
-            onPaymentSheetChange={setPaymentSheetOpen}
-            enrolmentPlans={enrolmentPlans}
-            classTemplates={classTemplates}
-            openingState={openingState}
-          />
+        <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
+          <Card>
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Family</div>
+                  <div className="text-2xl font-semibold leading-tight">{family.name}</div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    {family.primaryContactName ? (
+                      <span className="font-medium text-foreground">{family.primaryContactName}</span>
+                    ) : null}
+                    {family.primaryPhone ? (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-4 w-4" />
+                        {family.primaryPhone}
+                      </span>
+                    ) : null}
+                    {family.primaryEmail ? (
+                      <span className="flex items-center gap-1">
+                        <Mail className="h-4 w-4" />
+                        {family.primaryEmail}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:items-end">
+                  <div className="rounded-lg border bg-muted/30 p-4 text-right">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Owing</div>
+                    <div
+                      className={cn(
+                        "mt-1 text-2xl font-semibold",
+                        billingPosition.outstandingCents > 0 ? "text-destructive" : "text-emerald-700"
+                      )}
+                    >
+                      {formatCurrencyFromCents(billingPosition.outstandingCents)}
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {lastPayment ? (
+                        <>
+                          Last payment {formatBrisbaneDate(lastPayment.paidAt)} ·{" "}
+                          {formatCurrencyFromCents(lastPayment.amountCents)}
+                        </>
+                      ) : (
+                        "No payments recorded yet."
+                      )}
+                    </div>
+                  </div>
+                  {billingPosition.unallocatedCents > 0 ? (
+                    <Badge variant="outline" className="text-xs">
+                      {formatCurrencyFromCents(billingPosition.unallocatedCents)} unallocated
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="ghost" asChild>
+                <Link href={backHref}>{backLabel}</Link>
+              </Button>
+              {showFamiliesLink ? (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/admin/family">Families</Link>
+                </Button>
+              ) : null}
+              {showReceptionLink ? (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/admin/reception">Reception</Link>
+                </Button>
+              ) : null}
+              <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
+                Edit family
+              </Button>
+              <Button size="sm" variant="secondary" onClick={handleAddStudent}>
+                Add student
+              </Button>
+              <Button size="sm" onClick={() => setPaymentSheetOpen(true)}>
+                Take payment
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)}>
+                Pay ahead
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Students</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {studentRows.length} student{studentRows.length === 1 ? "" : "s"}
+                    </p>
+                    {enrolContext ? (
+                      <p className="text-xs text-muted-foreground">
+                        Select a student to enrol in the class.
+                      </p>
+                    ) : null}
+                  </div>
+                  <Badge variant="secondary">{studentRows.length}</Badge>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {studentRows.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      No students yet.
+                    </div>
+                  ) : (
+                    studentRows.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        onClick={() => handleSelectStudent(row.id)}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition",
+                          selectedStudentId === row.id
+                            ? "border-primary/40 bg-primary/5"
+                            : "hover:bg-muted/40"
+                        )}
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <div className="truncate text-sm font-semibold">{row.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {row.levelName ?? "No level"} · {row.paidThroughLabel}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={row.status.variant} className="text-[11px]">
+                            {row.status.label}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(event) => event.stopPropagation()}
+                                aria-label="Student actions"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              {enrolContext ? (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => handleEnrolInClass(row.id)}
+                                  >
+                                    Enrol in class
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                </>
+                              ) : null}
+                              <DropdownMenuItem onClick={() => handleEditStudent(row.student)}>
+                                Edit student
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleManageEnrolments(row.id)}>
+                                Enrol / change class
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditPaidThrough(row.id)}>
+                                Edit paid-through
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setChangingStudent(row.student)}>
+                                Change level
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleOpenStudent(row.id)}>
+                                Open student
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleDeleteStudent(row.id)}
+                              >
+                                Remove student
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+                <Card>
+                  <CardHeader className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <CardTitle className="text-base">Action workspace</CardTitle>
+                      <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="billing">Billing</TabsTrigger>
+                        <TabsTrigger value="enrolments">Enrolments</TabsTrigger>
+                        <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                        <TabsTrigger value="history">History</TabsTrigger>
+                      </TabsList>
+                    </div>
+
+                    {selectedStudentRow ? (
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Selected student
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <div className="text-lg font-semibold">{selectedStudentRow.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {selectedStudentRow.levelName ?? "Level not set"}
+                            </div>
+                          </div>
+                          <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
+                            {selectedStudentRow.status.label}
+                          </Badge>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Select a student to manage enrolments and paid-through updates.
+                      </p>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <TabsContent value="overview" className="m-0 space-y-3">
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="text-xs text-muted-foreground">Last payment</div>
+                        {lastPayment ? (
+                          <div className="mt-1 text-sm font-semibold">
+                            {formatCurrencyFromCents(lastPayment.amountCents)}
+                            <span className="text-xs text-muted-foreground">
+                              {" "}
+                              · {formatBrisbaneDate(lastPayment.paidAt)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-sm text-muted-foreground">No payments recorded yet.</div>
+                        )}
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-4">
+                        <div className="text-xs text-muted-foreground">Account opening</div>
+                        <div className="mt-1 text-sm font-medium">
+                          {openingState ? (
+                            <>Opening balance recorded {formatBrisbaneDate(openingState.createdAt)}</>
+                          ) : (
+                            "No opening balance recorded yet."
+                          )}
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {visitedTabs.has("billing") ? (
+                      <TabsContent value="billing" className="m-0 space-y-3">
+                        <FamilyInvoices
+                          family={family}
+                          billing={billing}
+                          billingPosition={billingPosition}
+                          onOpenPayment={() => setPaymentSheetOpen(true)}
+                          onOpenPayAhead={() => setPayAheadOpen(true)}
+                          onUpdated={handleBillingUpdated}
+                        />
+                      </TabsContent>
+                    ) : null}
+
+                    {visitedTabs.has("enrolments") ? (
+                      <TabsContent value="enrolments" className="m-0 space-y-3">
+                        {!selectedStudentId ? (
+                          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                            Select a student to manage enrolments.
+                          </div>
+                        ) : isLoadingStudent && !studentDetails ? (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading student details...
+                          </div>
+                        ) : studentDetails ? (
+                          <StudentEnrolmentsSection
+                            student={studentDetails}
+                            levels={levels}
+                            enrolmentPlans={enrolmentPlans}
+                            onUpdated={() => refreshStudentDetails(selectedStudentId)}
+                          />
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            Unable to load student details.
+                          </div>
+                        )}
+                      </TabsContent>
+                    ) : null}
+
+                    {visitedTabs.has("contacts") ? (
+                      <TabsContent value="contacts" className="m-0 space-y-3">
+                        <Card className="border-dashed">
+                          <CardHeader className="flex flex-row items-center justify-between gap-3">
+                            <CardTitle className="text-base">Contacts</CardTitle>
+                            <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
+                              Edit contacts
+                            </Button>
+                          </CardHeader>
+                          <CardContent className="grid gap-3 sm:grid-cols-2">
+                            <ContactRow label="Primary contact" value={family.primaryContactName ?? "—"} />
+                            <ContactRow label="Primary phone" value={family.primaryPhone ?? "—"} />
+                            <ContactRow label="Primary email" value={family.primaryEmail ?? "—"} className="sm:col-span-2" />
+                            <ContactRow label="Secondary contact" value={family.secondaryContactName ?? "—"} />
+                            <ContactRow label="Secondary phone" value={family.secondaryPhone ?? "—"} />
+                            <ContactRow label="Secondary email" value={family.secondaryEmail ?? "—"} className="sm:col-span-2" />
+                            <ContactRow label="Medical contact" value={family.medicalContactName ?? "—"} />
+                            <ContactRow label="Medical phone" value={family.medicalContactPhone ?? "—"} />
+                            <ContactRow label="Address" value={family.address ?? "—"} className="sm:col-span-2" />
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
+                    ) : null}
+
+                    {visitedTabs.has("history") ? (
+                      <TabsContent value="history" className="m-0 space-y-4">
+                        <HistoryTab billing={billing} family={family} />
+                        <FamilyTransitionWizard
+                          family={family}
+                          enrolmentPlans={enrolmentPlans}
+                          classTemplates={classTemplates}
+                          levels={levels}
+                          openingState={openingState}
+                        />
+                      </TabsContent>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </Tabs>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -272,196 +726,35 @@ export default function FamilyForm({
         onSave={async (payload) => handleSaveStudent(payload)}
         levels={levels}
       />
-    </div>
-  );
-}
 
-type FamilyTabsProps = {
-  activeTab: string;
-  visitedTabs: Set<string>;
-  onTabChange: (value: string) => void;
-  family: FamilyWithStudentsAndInvoices;
-  billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
-  billingPosition: FamilyBillingPosition;
-  enrolContext?: EnrolContext | null;
-  levels: Level[];
-  onAddStudent: () => void;
-  onEditStudent: (student: Student) => void;
-  paymentSheetOpen: boolean;
-  onPaymentSheetChange: (open: boolean) => void;
-  enrolmentPlans: EnrolmentPlan[];
-  classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
-  openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
-};
+      {changingStudent ? (
+        <ChangeStudentLevelDialog
+          open={Boolean(changingStudent)}
+          onOpenChange={(next) => {
+            if (!next) setChangingStudent(null);
+          }}
+          student={changingStudent}
+          levels={levels}
+          enrolmentPlans={enrolmentPlans}
+        />
+      ) : null}
 
-function FamilyTabs({
-  activeTab,
-  visitedTabs,
-  onTabChange,
-  family,
-  billing,
-  billingPosition,
-  enrolContext,
-  levels,
-  onAddStudent,
-  onEditStudent,
-  paymentSheetOpen,
-  onPaymentSheetChange,
-  enrolmentPlans,
-  classTemplates,
-  openingState,
-}: FamilyTabsProps) {
-  return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="space-y-3 p-0">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between px-2">
-          <Badge variant="secondary">{family.students.length} students</Badge>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={onTabChange} className="px-2">
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
-            <TabsTrigger value="students">Students</TabsTrigger>
-            <TabsTrigger value="transition">Transition</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="pt-4">
-            <OverviewTab family={family} billingPosition={billingPosition} billing={billing} />
-          </TabsContent>
-
-          {visitedTabs.has("billing") ? (
-            <TabsContent value="billing" className="pt-4 max-w-none ">
-              <BillingTab
-                family={family}
-                billing={billing}
-                billingPosition={billingPosition}
-                paymentSheetOpen={paymentSheetOpen}
-                onPaymentSheetChange={onPaymentSheetChange}
-              />
-            </TabsContent>
-          ) : null}
-
-          {visitedTabs.has("students") ? (
-            <TabsContent value="students" className="pt-4">
-              <StudentsTab
-                family={family}
-                enrolContext={enrolContext}
-                levels={levels}
-                onAddStudent={onAddStudent}
-                onEditStudent={onEditStudent}
-                enrolmentPlans={enrolmentPlans}
-              />
-            </TabsContent>
-          ) : null}
-
-          {visitedTabs.has("transition") ? (
-            <TabsContent value="transition" className="pt-4">
-              <FamilyTransitionWizard
-                family={family}
-                enrolmentPlans={enrolmentPlans}
-                classTemplates={classTemplates}
-                levels={levels}
-                openingState={openingState}
-              />
-            </TabsContent>
-          ) : null}
-
-          {visitedTabs.has("history") ? (
-            <TabsContent value="history" className="pt-4">
-              <HistoryTab billing={billing} family={family} />
-            </TabsContent>
-          ) : null}
-        </Tabs>
-      </CardHeader>
-    </Card>
-  );
-}
-
-function OverviewTab({
-  family,
-  billingPosition,
-}: {
-  family: FamilyWithStudentsAndInvoices;
-  billingPosition: FamilyBillingPosition;
-  billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-        <div className="text-sm text-muted-foreground">Billing actions</div>
-        <CatchUpPaymentDialog familyId={family.id} familyName={family.name} />
-      </div>
-      <FamilyBillingPositionCard billing={billingPosition} />
-
-      <Card className="border-l-0 border-r-0 border-b-0 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Contact</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <ContactRow label="Primary contact" value={family.primaryContactName ?? "—"} />
-          <ContactRow label="Primary phone" value={family.primaryPhone ?? "—"} />
-          <ContactRow label="Primary email" value={family.primaryEmail ?? "—"} className="sm:col-span-2" />
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function BillingTab({
-  family,
-  billing,
-  billingPosition,
-  paymentSheetOpen,
-  onPaymentSheetChange,
-}: {
-  family: FamilyWithStudentsAndInvoices;
-  billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
-  billingPosition: FamilyBillingPosition;
-  paymentSheetOpen: boolean;
-  onPaymentSheetChange: (open: boolean) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <FamilyInvoices
-        family={family}
-        billing={billing}
-        billingPosition={billingPosition}
-        paymentSheetOpen={paymentSheetOpen}
-        onPaymentSheetChange={onPaymentSheetChange}
-      />
-    </div>
-  );
-}
-
-function StudentsTab({
-  family,
-  enrolContext,
-  levels,
-  onAddStudent,
-  onEditStudent,
-  enrolmentPlans,
-}: {
-  family: FamilyWithStudentsAndInvoices;
-  enrolContext?: EnrolContext | null;
-  levels: Level[];
-  onAddStudent: () => void;
-  onEditStudent: (student: Student) => void;
-  enrolmentPlans: EnrolmentPlan[];
-}) {
-  return (
-    <div className="space-y-3">
-      <StudentDetails
-        students={family.students}
+      <RecordPaymentSheet
         familyId={family.id}
-        enrolContext={enrolContext ?? null}
-        levels={levels}
-        layout="plain"
-        onAddStudent={onAddStudent}
-        onEditStudent={onEditStudent}
-        renderModal={false}
-        enrolmentPlans={enrolmentPlans}
+        enrolments={billingPosition.enrolments}
+        openInvoices={billing.openInvoices ?? []}
+        open={paymentSheetOpen}
+        onOpenChange={setPaymentSheetOpen}
+        trigger={null}
+        onSuccess={handleBillingUpdated}
+      />
+
+      <PayAheadSheet
+        familyId={family.id}
+        open={payAheadOpen}
+        onOpenChange={setPayAheadOpen}
+        trigger={null}
+        onUpdated={handleBillingUpdated}
       />
     </div>
   );
