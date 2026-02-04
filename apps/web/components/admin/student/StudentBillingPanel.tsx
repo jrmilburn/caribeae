@@ -61,7 +61,8 @@ export type StudentBillingPanelProps = {
 
 export function StudentBillingPanel({ billing, studentId, familyId }: StudentBillingPanelProps) {
   const billingStudent = billing.students.find((student) => student.id === studentId) ?? null;
-  const enrolments = billingStudent?.enrolments ?? [];
+  type BillingEnrolment = FamilyBillingPosition["students"][number]["enrolments"][number];
+  const enrolments: BillingEnrolment[] = billingStudent?.enrolments ?? [];
 
   const studentInvoices = React.useMemo(
     () =>
@@ -102,7 +103,7 @@ export function StudentBillingPanel({ billing, studentId, familyId }: StudentBil
               No active billing enrolments for this student.
             </div>
           ) : (
-            enrolments.map((enrolment) => {
+            enrolments.map((enrolment: BillingEnrolment) => {
               const paidThrough =
                 enrolment.projectedCoverageEnd ??
                 enrolment.paidThroughDate ??
