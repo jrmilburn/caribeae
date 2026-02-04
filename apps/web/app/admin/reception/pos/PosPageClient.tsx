@@ -308,7 +308,7 @@ export default function PosPageClient({ categories }: PosPageClientProps) {
         {...inputProps}
       />
       <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <BackButton label="Back" />
             <div>
@@ -328,7 +328,7 @@ export default function PosPageClient({ categories }: PosPageClientProps) {
       </div>
 
       <div className="flex-1">
-        <div className="mx-auto w-full max-w-7xl px-4 py-6">
+        <div className="w-full px-4 py-6">
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_320px]">
             <Card className="border-l-0! shadow-none">
               <CardHeader className="flex flex-row items-center justify-between">
