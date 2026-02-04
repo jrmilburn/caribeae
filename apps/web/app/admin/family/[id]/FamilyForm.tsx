@@ -319,6 +319,7 @@ export default function FamilyForm({
   };
 
   const handleEditStudent = (student: Student) => {
+    setSelectedStudentId(student.id);
     setEditingStudent(student);
     setStudentSheetOpen(true);
   };
@@ -344,6 +345,7 @@ export default function FamilyForm({
   };
 
   const handleDeleteStudent = async (studentId: string) => {
+    setSelectedStudentId(studentId);
     const ok = window.confirm("Delete this student? This cannot be undone.");
     if (!ok) return;
     try {
@@ -384,11 +386,13 @@ export default function FamilyForm({
   };
 
   const handleOpenStudent = (studentId: string) => {
+    setSelectedStudentId(studentId);
     const returnUrl = `/admin/family/${family.id}?tab=enrolments&student=${studentId}`;
     router.push(buildReturnUrl(`/admin/student/${studentId}`, returnUrl));
   };
 
   const handleEnrolInClass = (studentId: string) => {
+    setSelectedStudentId(studentId);
     if (!enrolContext?.templateId) return;
     const qs = new URLSearchParams();
     qs.set("studentId", studentId);
@@ -588,7 +592,11 @@ export default function FamilyForm({
                           <Badge variant={row.status.variant} className="text-[11px]">
                             {row.status.label}
                           </Badge>
-                          <DropdownMenu>
+                          <DropdownMenu
+                            onOpenChange={(open) => {
+                              if (open) setSelectedStudentId(row.id);
+                            }}
+                          >
                             <DropdownMenuTrigger asChild>
                               <Button
                                 variant="ghost"
