@@ -533,11 +533,6 @@ export default function FamilyForm({
                   <Link href="/admin/family">Families</Link>
                 </Button>
               ) : null}
-              {showReceptionLink ? (
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/admin/reception">Reception</Link>
-                </Button>
-              ) : null}
               <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
                 Edit family
               </Button>
