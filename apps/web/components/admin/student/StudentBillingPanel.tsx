@@ -111,7 +111,7 @@ export function StudentBillingPanel({ billing, studentId, familyId }: StudentBil
                 null;
               const assignedSummary = enrolment.assignedClasses?.length
                 ? enrolment.assignedClasses
-                    .map((assignment) => {
+                    .map((assignment: NonNullable<BillingEnrolment["assignedClasses"]>[number]) => {
                       const day =
                         typeof assignment.dayOfWeek === "number" ? dayLabel(assignment.dayOfWeek) : "-";
                       const time = formatTimeRange(assignment.startTime, assignment.endTime);
