@@ -49,6 +49,7 @@ import { StudentEnrolmentsSection } from "@/app/admin/student/[id]/StudentEnrolm
 import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
+import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
