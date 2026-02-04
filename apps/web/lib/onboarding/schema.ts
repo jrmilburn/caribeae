@@ -27,7 +27,7 @@ export const onboardingStudentSchema = z.object({
       { message: "Enter a valid date of birth." }
     ),
   experience: z.enum(studentExperienceOptions, {
-    required_error: "Select a current level or experience.",
+    message: "Select a current level or experience.",
   }),
   notes: z.string().trim().max(500).optional().nullable(),
 });
