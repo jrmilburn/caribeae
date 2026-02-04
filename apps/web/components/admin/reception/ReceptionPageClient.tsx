@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BackButton } from "@/components/navigation/BackButton";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
@@ -306,7 +307,10 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
     <div className="flex h-full flex-col">
       <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <ReceptionSearch onSelectFamily={handleSelectFamily} onSelectStudent={handleSelectStudent} />
+          <div className="flex w-full flex-1 items-center gap-2">
+            <BackButton label="Back" />
+            <ReceptionSearch onSelectFamily={handleSelectFamily} onSelectStudent={handleSelectStudent} />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={handleNewFamily}>
               New family

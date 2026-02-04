@@ -248,6 +248,9 @@ function AccountMenu() {
         <DropdownMenuItem asChild>
           <Link href="/billing">Billing</Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/admin/reception">Reception</Link>
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
@@ -336,6 +339,9 @@ function UserBlock() {
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/admin/billing">Billing</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/admin/reception">Reception</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="gap-2">
