@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { format } from "date-fns";
+import { Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ function formatTimeRange(start?: number | null, end?: number | null) {
   if (typeof start !== "number") return "";
   const startDate = minutesToDate(start);
   const endDate = typeof end === "number" ? minutesToDate(end) : null;
-  return `${format(startDate, "h:mm a")}${endDate ? ` – ${format(endDate, "h:mm a")}` : ""}`;
+  return `${format(startDate, "h:mm a")}${endDate ? ` - ${format(endDate, "h:mm a")}` : ""}`;
 }
 
 function minutesToDate(minutes: number) {
@@ -111,10 +112,10 @@ export function StudentBillingPanel({ billing, studentId, familyId }: StudentBil
                 ? enrolment.assignedClasses
                     .map((assignment) => {
                       const day =
-                        typeof assignment.dayOfWeek === "number" ? dayLabel(assignment.dayOfWeek) : "—";
+                        typeof assignment.dayOfWeek === "number" ? dayLabel(assignment.dayOfWeek) : "-";
                       const time = formatTimeRange(assignment.startTime, assignment.endTime);
                       const label = assignment.name ?? "Class";
-                      return time ? `${label} · ${day} ${time}` : `${label} · ${day}`;
+                      return time ? `${label} - ${day} ${time}` : `${label} - ${day}`;
                     })
                     .join(", ")
                 : enrolment.templateName ?? null;
@@ -147,7 +148,7 @@ export function StudentBillingPanel({ billing, studentId, familyId }: StudentBil
                             className="h-6 w-6 text-muted-foreground/70 hover:text-foreground"
                             aria-label="Edit paid-through date"
                           >
-                            ✎
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
                         }
                       />
@@ -229,10 +230,10 @@ export function StudentBillingPanel({ billing, studentId, familyId }: StudentBil
                     <div>
                       <div className="font-medium">
                         {formatCurrencyFromCents(payment.amountCents ?? 0)}
-                        {payment.method ? ` · ${payment.method}` : ""}
+                        {payment.method ? ` - ${payment.method}` : ""}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {formatBrisbaneDate(payment.paidAt)} · Family payment
+                        {formatBrisbaneDate(payment.paidAt)} - Family payment
                       </div>
                     </div>
                     {payment.note ? (
