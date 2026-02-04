@@ -47,11 +47,12 @@ import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
 import type { ClientStudentWithRelations } from "@/app/admin/student/[id]/types";
 import { StudentEnrolmentsSection } from "@/app/admin/student/[id]/StudentEnrolmentsSection";
+import { AddEnrolmentDialog } from "@/app/admin/student/[id]/AddEnrolmentDialog";
+import { ChangeEnrolmentDialog } from "@/app/admin/student/[id]/ChangeEnrolmentDialog";
 import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
-import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
-import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -190,6 +191,15 @@ export default function FamilyForm({
   const [pendingStudentAction, setPendingStudentAction] = React.useState<{
     type: "add-enrolment" | "change-enrolment" | "edit-paid-through";
     studentId: string;
+  } | null>(null);
+  const [enrolmentDialog, setEnrolmentDialog] = React.useState<{
+    mode: "add" | "change";
+    studentId: string;
+    enrolment: ClientStudentWithRelations["enrolments"][number] | null;
+  } | null>(null);
+  const [paidThroughTarget, setPaidThroughTarget] = React.useState<{
+    enrolmentId: string;
+    currentPaidThrough: Date | null;
   } | null>(null);
   const [changingStudent, setChangingStudent] = React.useState<
     FamilyWithStudentsAndInvoices["students"][number] | null
@@ -363,12 +373,14 @@ export default function FamilyForm({
       type: hasEnrolments ? "change-enrolment" : "add-enrolment",
       studentId,
     });
+    refreshStudentDetails(studentId);
   };
 
   const handleEditPaidThrough = (studentId: string) => {
     setSelectedStudentId(studentId);
     setActiveTab("enrolments");
     setPendingStudentAction({ type: "edit-paid-through", studentId });
+    refreshStudentDetails(studentId);
   };
 
   const handleOpenStudent = (studentId: string) => {
@@ -388,6 +400,63 @@ export default function FamilyForm({
   const handleBillingUpdated = React.useCallback(() => {
     if (selectedStudentId) refreshStudentDetails(selectedStudentId);
   }, [refreshStudentDetails, selectedStudentId]);
+
+  React.useEffect(() => {
+    if (!pendingStudentAction) return;
+    if (!studentDetails || studentDetails.id !== pendingStudentAction.studentId) return;
+
+    const enrolments = studentDetails.enrolments ?? [];
+    const primaryEnrolment =
+      enrolments.find((enrolment) => !enrolment.endDate && enrolment.plan) ??
+      enrolments.find((enrolment) => enrolment.plan) ??
+      enrolments.find((enrolment) => !enrolment.endDate) ??
+      enrolments[0] ??
+      null;
+
+    if (pendingStudentAction.type === "add-enrolment") {
+      setEnrolmentDialog({ mode: "add", studentId: studentDetails.id, enrolment: null });
+      setPendingStudentAction(null);
+      return;
+    }
+
+    if (pendingStudentAction.type === "change-enrolment") {
+      if (!primaryEnrolment) {
+        setEnrolmentDialog({ mode: "add", studentId: studentDetails.id, enrolment: null });
+        setPendingStudentAction(null);
+        return;
+      }
+      if (!primaryEnrolment.plan) {
+        toast.error("Enrolment plan missing; add a plan before changing classes.");
+        setPendingStudentAction(null);
+        return;
+      }
+      setEnrolmentDialog({ mode: "change", studentId: studentDetails.id, enrolment: primaryEnrolment });
+      setPendingStudentAction(null);
+      return;
+    }
+
+    if (pendingStudentAction.type === "edit-paid-through") {
+      if (!primaryEnrolment) {
+        toast.error("No enrolment yet. Add an enrolment first.");
+        setPendingStudentAction(null);
+        return;
+      }
+      setPaidThroughTarget({
+        enrolmentId: primaryEnrolment.id,
+        currentPaidThrough: primaryEnrolment.paidThroughDate ?? null,
+      });
+      setPendingStudentAction(null);
+    }
+  }, [pendingStudentAction, studentDetails]);
+
+  React.useEffect(() => {
+    if (!pendingStudentAction) return;
+    if (isLoadingStudent) return;
+    if (!studentDetails && selectedStudentId === pendingStudentAction.studentId) {
+      toast.error("Unable to load student details.");
+      setPendingStudentAction(null);
+    }
+  }, [isLoadingStudent, pendingStudentAction, selectedStudentId, studentDetails]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -491,9 +560,8 @@ export default function FamilyForm({
                     </div>
                   ) : (
                     studentRows.map((row) => (
-                      <button
+                      <div
                         key={row.id}
-                        type="button"
                         onClick={() => handleSelectStudent(row.id)}
                         className={cn(
                           "flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition",
@@ -501,6 +569,14 @@ export default function FamilyForm({
                             ? "border-primary/40 bg-primary/5"
                             : "hover:bg-muted/40"
                         )}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleSelectStudent(row.id);
+                          }
+                        }}
                       >
                         <div className="min-w-0 space-y-1">
                           <div className="truncate text-sm font-semibold">{row.name}</div>
@@ -529,7 +605,6 @@ export default function FamilyForm({
                                 <>
                                   <DropdownMenuItem
                                     onSelect={(event) => {
-                                      event.preventDefault();
                                       event.stopPropagation();
                                       handleEnrolInClass(row.id);
                                     }}
@@ -541,7 +616,6 @@ export default function FamilyForm({
                               ) : null}
                               <DropdownMenuItem
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   handleEditStudent(row.student);
                                 }}
@@ -550,7 +624,6 @@ export default function FamilyForm({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   handleManageEnrolments(row.id);
                                 }}
@@ -559,7 +632,6 @@ export default function FamilyForm({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   handleEditPaidThrough(row.id);
                                 }}
@@ -568,7 +640,6 @@ export default function FamilyForm({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   setChangingStudent(row.student);
                                 }}
@@ -577,7 +648,6 @@ export default function FamilyForm({
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   handleOpenStudent(row.id);
                                 }}
@@ -588,7 +658,6 @@ export default function FamilyForm({
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
                                 onSelect={(event) => {
-                                  event.preventDefault();
                                   event.stopPropagation();
                                   handleDeleteStudent(row.id);
                                 }}
@@ -598,7 +667,7 @@ export default function FamilyForm({
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
-                      </button>
+                      </div>
                     ))
                   )}
                 </CardContent>
@@ -701,13 +770,6 @@ export default function FamilyForm({
                             levels={levels}
                             enrolmentPlans={enrolmentPlans}
                             onUpdated={() => refreshStudentDetails(selectedStudentId)}
-                            action={
-                              pendingStudentAction &&
-                              pendingStudentAction.studentId === selectedStudentId
-                                ? pendingStudentAction.type
-                                : null
-                            }
-                            onActionHandled={() => setPendingStudentAction(null)}
                           />
                         ) : (
                           <div className="text-sm text-muted-foreground">
@@ -806,6 +868,70 @@ export default function FamilyForm({
         trigger={null}
         onUpdated={handleBillingUpdated}
       />
+
+      {enrolmentDialog?.mode === "add" ? (
+        <AddEnrolmentDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setEnrolmentDialog(null);
+          }}
+          studentId={enrolmentDialog.studentId}
+          levels={levels}
+          enrolmentPlans={enrolmentPlans}
+          studentLevelId={
+            studentDetails?.id === enrolmentDialog.studentId
+              ? studentDetails.levelId
+              : family.students.find((student) => student.id === enrolmentDialog.studentId)?.levelId ?? null
+          }
+          onCreated={() => {
+            setEnrolmentDialog(null);
+            refreshStudentDetails(enrolmentDialog.studentId);
+          }}
+        />
+      ) : null}
+
+      {enrolmentDialog?.mode === "change" && enrolmentDialog.enrolment ? (
+        <ChangeEnrolmentDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setEnrolmentDialog(null);
+          }}
+          enrolment={enrolmentDialog.enrolment as ClientStudentWithRelations["enrolments"][number] & {
+            plan: NonNullable<ClientStudentWithRelations["enrolments"][number]["plan"]>;
+          }}
+          enrolmentPlans={enrolmentPlans}
+          levels={levels}
+          studentLevelId={
+            studentDetails?.id === enrolmentDialog.studentId
+              ? studentDetails.levelId
+              : family.students.find((student) => student.id === enrolmentDialog.studentId)?.levelId ?? null
+          }
+          initialTemplateIds={
+            enrolmentDialog.enrolment.classAssignments?.length
+              ? enrolmentDialog.enrolment.classAssignments.map((assignment) => assignment.templateId)
+              : [enrolmentDialog.enrolment.templateId]
+          }
+          onChanged={() => {
+            setEnrolmentDialog(null);
+            refreshStudentDetails(enrolmentDialog.studentId);
+          }}
+        />
+      ) : null}
+
+      {paidThroughTarget ? (
+        <EditPaidThroughDialog
+          enrolmentId={paidThroughTarget.enrolmentId}
+          currentPaidThrough={paidThroughTarget.currentPaidThrough}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPaidThroughTarget(null);
+          }}
+          onUpdated={() => {
+            setPaidThroughTarget(null);
+            refreshStudentDetails(selectedStudentId);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

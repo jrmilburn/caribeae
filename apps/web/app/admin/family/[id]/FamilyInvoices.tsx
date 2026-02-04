@@ -148,6 +148,8 @@ export default function FamilyInvoices({
 
   const [paymentModalOpen, setPaymentModalOpen] = React.useState(false);
   const [editingPayment, setEditingPayment] = React.useState<BillingPayment | null>(null);
+  const [paymentDetailOpen, setPaymentDetailOpen] = React.useState(false);
+  const [selectedPayment, setSelectedPayment] = React.useState<BillingPayment | null>(null);
 
   const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
   const [isUndoing, startUndo] = React.useTransition();
@@ -232,6 +234,18 @@ export default function FamilyInvoices({
     setSelectedInvoice(null);
     setEditingInvoice(invoice);
     setInvoiceModalOpen(true);
+  };
+
+  const handleOpenPaymentDetail = (payment: BillingPayment) => {
+    setSelectedPayment(payment);
+    setPaymentDetailOpen(true);
+  };
+
+  const handleEditPayment = (payment: BillingPayment) => {
+    setPaymentDetailOpen(false);
+    setSelectedPayment(null);
+    setEditingPayment(payment);
+    setPaymentModalOpen(true);
   };
 
   const handleSaveInvoice: React.ComponentProps<typeof InvoiceForm>["onSubmit"] = async (payload) => {
@@ -502,8 +516,8 @@ export default function FamilyInvoices({
                       <TableCell className="text-right">
                         <InvoiceActions
                           invoice={invoice}
-                          onEdit={(row) => {
-                            handleEditInvoice(row);
+                          onView={(row) => {
+                            handleOpenInvoiceDetail(row);
                           }}
                           onDelete={handleDeleteInvoice}
                           onMarkPaid={(row) => markInvoice(row, InvoiceStatus.PAID)}
@@ -542,10 +556,7 @@ export default function FamilyInvoices({
                   <TableRow
                     key={payment.id}
                     className="cursor-pointer hover:bg-muted/30"
-                    onClick={() => {
-                      setEditingPayment(payment as BillingPayment);
-                      setPaymentModalOpen(true);
-                    }}
+                    onClick={() => handleOpenPaymentDetail(payment as BillingPayment)}
                   >
                     <TableCell className="font-medium">{formatDate(payment.paidAt)}</TableCell>
                     <TableCell>{payment.method ?? "—"}</TableCell>
@@ -558,10 +569,7 @@ export default function FamilyInvoices({
                     <TableCell className="text-right">
                       <PaymentActions
                         payment={payment as BillingPayment}
-                        onEdit={(row) => {
-                          setEditingPayment(row);
-                          setPaymentModalOpen(true);
-                        }}
+                        onView={handleOpenPaymentDetail}
                         onDelete={handleDeletePayment}
                         onUndo={handleUndoPayment}
                         undoingId={undoingPaymentId}
@@ -606,6 +614,94 @@ export default function FamilyInvoices({
         onSubmit={handleSavePayment}
         onDelete={editingPayment ? () => handleDeletePayment(editingPayment) : undefined}
       />
+
+      <Dialog
+        open={paymentDetailOpen}
+        onOpenChange={(open) => {
+          setPaymentDetailOpen(open);
+          if (!open) setSelectedPayment(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Payment details</DialogTitle>
+          </DialogHeader>
+          {selectedPayment ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold">Payment {selectedPayment.id}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedPayment.method ?? "Payment"} · {formatDate(selectedPayment.paidAt)}
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {formatCurrencyFromCents(selectedPayment.amountCents)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <PrintReceiptButton
+                    href={`/admin/payment/${selectedPayment.id}/receipt`}
+                    label="Print payment receipt"
+                    size="sm"
+                    variant="outline"
+                  />
+                  <Button size="sm" onClick={() => handleEditPayment(selectedPayment)}>
+                    Edit payment
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Meta label="Paid on" value={formatDate(selectedPayment.paidAt)} />
+                <Meta label="Method" value={selectedPayment.method ?? "—"} />
+                <Meta label="Status" value={selectedPayment.status ?? "—"} />
+              </div>
+
+              {selectedPayment.note ? (
+                <div className="rounded-lg border bg-muted/10 p-3 text-sm">
+                  <div className="text-xs text-muted-foreground">Note</div>
+                  <div className="mt-1 font-medium">{selectedPayment.note}</div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold">Allocations</div>
+                  <div className="text-xs text-muted-foreground">
+                    {selectedPayment.allocations?.length
+                      ? `${selectedPayment.allocations.length} allocation(s)`
+                      : "None yet"}
+                  </div>
+                </div>
+                {selectedPayment.allocations?.length ? (
+                  <div className="mt-2 space-y-2">
+                    {selectedPayment.allocations.map((allocation) => (
+                      <div
+                        key={`${selectedPayment.id}-${allocation.invoiceId}`}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-xs"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">Invoice {allocation.invoiceId}</Badge>
+                          <span className="text-muted-foreground">
+                            {allocation.invoice?.status ?? "—"}
+                          </span>
+                        </div>
+                        <div className="font-semibold">
+                          {formatCurrencyFromCents(allocation.amountCents)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    No allocations recorded for this payment.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={invoiceDetailOpen}
@@ -756,14 +852,14 @@ function Meta({ label, value }: { label: string; value: string }) {
 
 function InvoiceActions({
   invoice,
-  onEdit,
+  onView,
   onDelete,
   onMarkSent,
   onMarkPaid,
   onMarkVoid,
 }: {
   invoice: InvoiceRow;
-  onEdit: (invoice: InvoiceRow) => void;
+  onView: (invoice: InvoiceRow) => void;
   onDelete: (invoice: InvoiceRow) => Promise<void>;
   onMarkSent: (invoice: InvoiceRow) => Promise<void>;
   onMarkPaid: (invoice: InvoiceRow) => Promise<void>;
@@ -797,7 +893,8 @@ function InvoiceActions({
         <DropdownMenuItem
           onSelect={(event) => {
             event.preventDefault();
-            onEdit(invoice);
+            event.stopPropagation();
+            onView(invoice);
           }}
         >
           View / Edit
@@ -815,6 +912,7 @@ function InvoiceActions({
           disabled={pending === "sent"}
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             handle(onMarkSent, "sent");
           }}
         >
@@ -824,6 +922,7 @@ function InvoiceActions({
           disabled={pending === "paid"}
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             handle(onMarkPaid, "paid");
           }}
         >
@@ -833,6 +932,7 @@ function InvoiceActions({
           disabled={pending === "void"}
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             handle(onMarkVoid, "void");
           }}
         >
@@ -844,6 +944,7 @@ function InvoiceActions({
           disabled={pending === "delete"}
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             handle(onDelete, "delete");
           }}
         >
@@ -856,14 +957,14 @@ function InvoiceActions({
 
 function PaymentActions({
   payment,
-  onEdit,
+  onView,
   onDelete,
   onUndo,
   undoingId,
   isUndoing,
 }: {
   payment: BillingPayment;
-  onEdit: (payment: BillingPayment) => void;
+  onView: (payment: BillingPayment) => void;
   onDelete: (payment: BillingPayment) => Promise<void>;
   onUndo: (paymentId: string) => void;
   undoingId: string | null;
@@ -891,7 +992,8 @@ function PaymentActions({
         <DropdownMenuItem
           onSelect={(event) => {
             event.preventDefault();
-            onEdit(payment);
+            event.stopPropagation();
+            onView(payment);
           }}
         >
           View / Edit
@@ -909,6 +1011,7 @@ function PaymentActions({
           className="text-destructive focus:text-destructive"
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             onUndo(payment.id);
           }}
         >
@@ -918,6 +1021,7 @@ function PaymentActions({
           className="text-destructive focus:text-destructive"
           onSelect={(event) => {
             event.preventDefault();
+            event.stopPropagation();
             onDelete(payment);
           }}
         >
