@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Loader2, Mail, MoreVertical, Phone } from "lucide-react";
@@ -49,7 +49,6 @@ import type { ClientStudentWithRelations } from "@/app/admin/student/[id]/types"
 import { StudentEnrolmentsSection } from "@/app/admin/student/[id]/StudentEnrolmentsSection";
 import { AddEnrolmentDialog } from "@/app/admin/student/[id]/AddEnrolmentDialog";
 import { ChangeEnrolmentDialog } from "@/app/admin/student/[id]/ChangeEnrolmentDialog";
-import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
@@ -166,20 +165,16 @@ export default function FamilyForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = parseReturnContext(searchParams);
-  const [activeTab, setActiveTab] = useSyncedQueryState<string>("tab", {
-    defaultValue: "overview",
-    parse: (value) => {
-      if (value === "billing") return "billing";
-      if (value === "enrolments") return "enrolments";
-      if (value === "contacts") return "contacts";
-      if (value === "history") return "history";
-      if (value === "students") return "enrolments";
-      if (value === "transition") return "history";
-      return "overview";
-    },
-    serialize: (value) => (value === "overview" ? null : value),
-  });
-  const pathname = usePathname();
+  const parseTabParam = React.useCallback((value: string | null) => {
+    if (value === "billing") return "billing";
+    if (value === "enrolments") return "enrolments";
+    if (value === "contacts") return "contacts";
+    if (value === "history") return "history";
+    if (value === "students") return "enrolments";
+    if (value === "transition") return "history";
+    return "overview";
+  }, []);
+  const [activeTab, setActiveTab] = React.useState<string>(() => parseTabParam(searchParams.get("tab")));
   const [selectedStudentId, setSelectedStudentId] = React.useState<string>(() => searchParams.get("student") ?? "");
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
@@ -225,18 +220,26 @@ export default function FamilyForm({
     });
   }, [activeTab]);
 
-  React.useEffect(() => {
-    const current = searchParams.get("student") ?? "";
-    if (current === (selectedStudentId ?? "")) return;
-    const params = new URLSearchParams(searchParams.toString());
-    if (selectedStudentId) {
-      params.set("student", selectedStudentId);
+  const syncQueryParam = React.useCallback((key: string, value: string | null) => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (!value) {
+      params.delete(key);
     } else {
-      params.delete("student");
+      params.set(key, value);
     }
     const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
-  }, [pathname, router, searchParams, selectedStudentId]);
+    const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", next);
+  }, []);
+
+  React.useEffect(() => {
+    syncQueryParam("student", selectedStudentId || null);
+  }, [selectedStudentId, syncQueryParam]);
+
+  React.useEffect(() => {
+    syncQueryParam("tab", activeTab === "overview" ? null : activeTab);
+  }, [activeTab, syncQueryParam]);
 
   React.useEffect(() => {
     if (!selectedStudentId) return;
