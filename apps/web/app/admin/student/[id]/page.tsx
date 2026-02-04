@@ -1,6 +1,7 @@
 import { getLevels } from "@/server/level/getLevels";
 import { getStudent } from "@/server/student/getStudent";
 import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
+import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 
 import StudentPageClient from "./StudentPageClient";
 
@@ -14,11 +15,20 @@ export default async function StudentPage({ params }: PageProps) {
   const student = await getStudent(id);
   if (!student) return null;
 
-  const [levels, enrolmentPlans] = await Promise.all([getLevels(), getEnrolmentPlans()]);
+  const [levels, enrolmentPlans, billingPosition] = await Promise.all([
+    getLevels(),
+    getEnrolmentPlans(),
+    getFamilyBillingPosition(student.familyId),
+  ]);
 
   return (
     <div className="max-h-screen overflow-y-auto">
-      <StudentPageClient student={student} levels={levels} enrolmentPlans={enrolmentPlans} />
+      <StudentPageClient
+        student={student}
+        levels={levels}
+        enrolmentPlans={enrolmentPlans}
+        billingPosition={billingPosition}
+      />
     </div>
   );
 }

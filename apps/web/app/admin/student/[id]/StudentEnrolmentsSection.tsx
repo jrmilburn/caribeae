@@ -17,6 +17,7 @@ export function StudentEnrolmentsSection({
   levels,
   enrolmentPlans,
   onUpdated,
+  showPaidThroughAction = true,
   action,
   onActionHandled,
 }: {
@@ -24,6 +25,7 @@ export function StudentEnrolmentsSection({
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
   onUpdated?: () => void;
+  showPaidThroughAction?: boolean;
   action?: "add-enrolment" | "change-enrolment" | "edit-paid-through" | null;
   onActionHandled?: () => void;
 }) {
@@ -77,6 +79,7 @@ export function StudentEnrolmentsSection({
           studentLevelId={student.levelId}
           enrolmentPlans={enrolmentPlans}
           onUpdated={onUpdated}
+          showPaidThroughAction={showPaidThroughAction}
           action={
             action === "change-enrolment" || action === "edit-paid-through"
               ? primaryEnrolment

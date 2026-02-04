@@ -11,6 +11,12 @@ export async function getStudent(id: string) {
   const student = await prisma.student.findUnique({
     where: { id },
     include: {
+      family: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       level: true,
       enrolments: {
         orderBy: { startDate: "desc" },

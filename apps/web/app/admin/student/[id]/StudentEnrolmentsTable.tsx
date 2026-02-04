@@ -63,6 +63,7 @@ export function StudentEnrolmentsTable({
   studentLevelId,
   enrolmentPlans,
   onUpdated,
+  showPaidThroughAction = true,
   action,
   onActionHandled,
 }: {
@@ -71,6 +72,7 @@ export function StudentEnrolmentsTable({
   studentLevelId?: string | null;
   enrolmentPlans: EnrolmentPlan[];
   onUpdated?: () => void;
+  showPaidThroughAction?: boolean;
   action?: { type: "change-enrolment" | "edit-paid-through"; enrolmentId: string } | null;
   onActionHandled?: () => void;
 }) {
@@ -101,10 +103,14 @@ export function StudentEnrolmentsTable({
       }
       setEditing(target);
     } else if (action.type === "edit-paid-through") {
+      if (!showPaidThroughAction) {
+        onActionHandled?.();
+        return;
+      }
       setEditingPaidThrough(target);
     }
     onActionHandled?.();
-  }, [action, enrolments, onActionHandled]);
+  }, [action, enrolments, onActionHandled, showPaidThroughAction]);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
@@ -212,9 +218,11 @@ export function StudentEnrolmentsTable({
                         >
                           Change
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setEditingPaidThrough(enrolment)}>
-                          Edit paid-through
-                        </DropdownMenuItem>
+                        {showPaidThroughAction ? (
+                          <DropdownMenuItem onClick={() => setEditingPaidThrough(enrolment)}>
+                            Edit paid-through
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
@@ -253,7 +261,7 @@ export function StudentEnrolmentsTable({
           }}
         />
       ) : null}
-      {editingPaidThrough ? (
+      {showPaidThroughAction && editingPaidThrough ? (
         <EditPaidThroughDialog
           enrolmentId={editingPaidThrough.id}
           currentPaidThrough={editingPaidThrough.paidThroughDate ?? null}
