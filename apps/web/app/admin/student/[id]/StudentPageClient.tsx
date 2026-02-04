@@ -236,6 +236,7 @@ export default function StudentPageClient({
   };
 
   const paidThroughOptions = billingStudent?.enrolments ?? [];
+  type BillingEnrolment = FamilyBillingPosition["students"][number]["enrolments"][number];
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
@@ -322,7 +323,7 @@ export default function StudentPageClient({
               {paidThroughOptions.length === 0 ? (
                 <DropdownMenuItem disabled>No enrolments available</DropdownMenuItem>
               ) : (
-                paidThroughOptions.map((enrolment) => {
+                paidThroughOptions.map((enrolment: BillingEnrolment) => {
                   const paidThrough =
                     enrolment.projectedCoverageEnd ??
                     enrolment.paidThroughDate ??
