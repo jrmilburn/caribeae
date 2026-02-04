@@ -100,6 +100,7 @@ function formatPhone(value: string | null) {
 function buildSelectionSummary(selectedTemplates: Record<string, NormalizedScheduleClass>) {
   return Object.values(selectedTemplates).map((template) => {
     const label = template.template?.name ?? template.templateName ?? template.level?.name ?? "Class";
+    const label = template.template?.name ?? template.levelName ?? "Class";
     const time = formatScheduleWeekdayTime(template.startTime);
     return `${label} · ${time}`;
   });
