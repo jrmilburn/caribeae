@@ -153,7 +153,11 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
           { skipAuth: true }
         );
         if (!result.ok) {
-          const err = new Error(result.error?.message ?? "Unable to create enrolments.");
+          const message =
+            result.error.code === "CAPACITY_EXCEEDED"
+              ? "Class capacity exceeded."
+              : result.error.message || "Unable to create enrolments.";
+          const err = new Error(message);
           (err as Error & { result?: typeof result }).result = result;
           throw err;
         }

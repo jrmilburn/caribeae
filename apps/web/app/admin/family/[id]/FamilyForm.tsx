@@ -5,24 +5,32 @@ import type { Prisma, Student } from "@prisma/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
+import { Loader2, Mail, MoreVertical, Phone } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
+import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { cn } from "@/lib/utils";
 
 import FamilyDetails from "./FamilyDetails";
-import StudentDetails from "./StudentDetails";
 import FamilyInvoices from "./FamilyInvoices";
-import { FamilyBillingPositionCard } from "./FamilyBillingPositionCard";
 import { StudentModal } from "./StudentModal";
 import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
-import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
+
+import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
+import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
@@ -40,6 +48,7 @@ export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
     students: {
       include: {
+        level: true;
         enrolments: {
           select: {
             id: true;
