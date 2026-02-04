@@ -486,7 +486,7 @@ export function ProductsSection({ categories }: { categories: CategoryWithProduc
                           <p className="text-sm font-semibold">{product.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {changed
-                              ? `Was ${product.stockOnHand} -> Now ${nextValue ?? \"--\"}`
+                              ? `Was ${product.stockOnHand} -> Now ${nextValue ?? "--"}`
                               : `Current ${product.stockOnHand}`}
                           </p>
                         </div>
