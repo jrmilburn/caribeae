@@ -251,11 +251,11 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
       <div className="mx-auto flex min-h-[70vh] w-full max-w-2xl flex-col justify-center px-4 py-10">
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">You're all set</CardTitle>
+            <CardTitle className="text-xl">You&apos;re all set</CardTitle>
             <CardDescription>We received your onboarding request.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>Thanks for sharing your family's details. Our team will review availability and reach out shortly.</p>
+            <p>Thanks for sharing your family&apos;s details. Our team will review availability and reach out shortly.</p>
             <p>If anything changes, just reply to our email or give us a call.</p>
           </CardContent>
         </Card>
@@ -268,9 +268,9 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
       <header className="space-y-3">
         <div className="space-y-1">
           <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Swim school onboarding</p>
-          <h1 className="text-2xl font-semibold">Let's get your swimmers started</h1>
+          <h1 className="text-2xl font-semibold">Let&apos;s get your swimmers started</h1>
           <p className="text-sm text-muted-foreground">
-            Four quick steps, built for mobile. We'll save your progress automatically.
+            Four quick steps, built for mobile. We&apos;ll save your progress automatically.
           </p>
         </div>
         <div className="space-y-2">
@@ -351,7 +351,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 <Label htmlFor="emergencyContactName">Emergency contact (optional)</Label>
                 <Input
                   id="emergencyContactName"
-                  value={contact.emergencyContactName ?? ""}
+                  value={contact.emergencyContactName ?? "none"}
                   onChange={(event) =>
                     setContact((prev) => ({ ...prev, emergencyContactName: event.target.value }))
                   }
@@ -362,7 +362,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 <Input
                   id="emergencyContactPhone"
                   type="tel"
-                  value={contact.emergencyContactPhone ?? ""}
+                  value={contact.emergencyContactPhone ?? "none"}
                   onChange={(event) =>
                     setContact((prev) => ({ ...prev, emergencyContactPhone: event.target.value }))
                   }
@@ -373,7 +373,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 <Textarea
                   id="address"
                   rows={3}
-                  value={contact.address ?? ""}
+                  value={contact.address ?? "none"}
                   autoComplete="street-address"
                   onChange={(event) => setContact((prev) => ({ ...prev, address: event.target.value }))}
                 />
@@ -440,7 +440,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                           <Input
                             id={`dob-${student.id}`}
                             type="date"
-                            value={student.dateOfBirth ?? ""}
+                            value={student.dateOfBirth ?? "none"}
                             onChange={(event) => updateStudent(student.id, { dateOfBirth: event.target.value })}
                           />
                           {studentErrors.dateOfBirth ? (
@@ -475,7 +475,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                         <Textarea
                           id={`notes-${student.id}`}
                           rows={3}
-                          value={student.notes ?? ""}
+                          value={student.notes ?? "none"}
                           onChange={(event) => updateStudent(student.id, { notes: event.target.value })}
                         />
                       </div>
@@ -558,7 +558,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
               <div className="grid gap-2">
                 <Label>Desired level (optional)</Label>
                 <Select
-                  value={availability.desiredLevelId ?? ""}
+                  value={availability.desiredLevelId ?? "none"}
                   onValueChange={(value) =>
                     setAvailability((prev) => ({ ...prev, desiredLevelId: value || null }))
                   }
@@ -582,7 +582,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 <Textarea
                   id="availability-notes"
                   rows={3}
-                  value={availability.notes ?? ""}
+                  value={availability.notes ?? "none"}
                   onChange={(event) => setAvailability((prev) => ({ ...prev, notes: event.target.value }))}
                 />
               </div>

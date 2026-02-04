@@ -34,10 +34,12 @@ export function StudentEnrolmentsSection({
     [enrolmentPlans, student.levelId]
   );
 
-  const primaryEnrolment = React.useMemo(
-    () => student.enrolments.find((enrolment) => !enrolment.endDate) ?? student.enrolments[0] ?? null,
-    [student.enrolments]
-  );
+  const primaryEnrolment = React.useMemo(() => {
+    const withPlan =
+      student.enrolments.find((enrolment) => !enrolment.endDate && enrolment.plan) ??
+      student.enrolments.find((enrolment) => enrolment.plan);
+    return withPlan ?? student.enrolments.find((enrolment) => !enrolment.endDate) ?? student.enrolments[0] ?? null;
+  }, [student.enrolments]);
 
   React.useEffect(() => {
     if (!action) return;

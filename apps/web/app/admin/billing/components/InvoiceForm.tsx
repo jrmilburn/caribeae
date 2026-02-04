@@ -288,71 +288,82 @@ export function InvoiceForm({
                 return (
                   <div
                     key={`${index}-${item.description}-${item.kind}`}
-                    className="grid gap-2 md:grid-cols-12 md:items-end"
+                    className="rounded-md border bg-background/50 p-3"
                   >
-                    <div className="md:col-span-2 space-y-1">
-                      <Label className="text-xs text-muted-foreground">Kind</Label>
-                      <Select
-                        value={item.kind}
-                        onValueChange={(value) =>
-                          updateLineItem(index, { kind: value as InvoiceLineItemKind })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {lineItemKinds.map((kind) => (
-                            <SelectItem key={kind} value={kind}>
-                              {kind}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="md:col-span-4 space-y-1">
-                      <Label className="text-xs text-muted-foreground">Description</Label>
-                      <Input
-                        value={item.description}
-                        onChange={(e) => updateLineItem(index, { description: e.target.value })}
-                        placeholder="Fee or product name"
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-1">
-                      <Label className="text-xs text-muted-foreground">Qty</Label>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-1">
-                      <Label className="text-xs text-muted-foreground">Unit price (cents)</Label>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        value={item.unitPriceCents}
-                        onChange={(e) => updateLineItem(index, { unitPriceCents: e.target.value })}
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-1">
-                      <Label className="text-xs text-muted-foreground">Amount (optional)</Label>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        value={item.amountCents ?? ""}
-                        onChange={(e) => updateLineItem(index, { amountCents: e.target.value })}
-                        placeholder="Auto (qty x unit)"
-                      />
-                      <div className="text-[11px] text-muted-foreground">
-                        Calculated: {formatCurrencyFromCents(derivedAmount)}
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,1fr)]">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Kind</Label>
+                        <Select
+                          value={item.kind}
+                          onValueChange={(value) =>
+                            updateLineItem(index, { kind: value as InvoiceLineItemKind })
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {lineItemKinds.map((kind) => (
+                              <SelectItem key={kind} value={kind}>
+                                {kind}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Description</Label>
+                        <Input
+                          value={item.description}
+                          onChange={(e) => updateLineItem(index, { description: e.target.value })}
+                          placeholder="Fee or product name"
+                        />
                       </div>
                     </div>
-                    <div className="md:col-span-12 text-right">
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Unit price (cents)</Label>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={item.unitPriceCents}
+                          onChange={(e) => updateLineItem(index, { unitPriceCents: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Amount (optional)</Label>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          value={item.amountCents ?? ""}
+                          onChange={(e) => updateLineItem(index, { amountCents: e.target.value })}
+                          placeholder="Auto (qty x unit)"
+                        />
+                        <div className="text-[11px] text-muted-foreground">
+                          Calculated: {formatCurrencyFromCents(derivedAmount)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex justify-end">
                       {form.lineItems.length > 1 ? (
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeLineItem(index)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeLineItem(index)}
+                        >
                           Remove
                         </Button>
                       ) : null}

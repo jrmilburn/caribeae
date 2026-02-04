@@ -81,7 +81,10 @@ export function StudentEnrolmentsTable({
   const lastActionRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
-    if (!action) return;
+    if (!action) {
+      lastActionRef.current = null;
+      return;
+    }
     const key = `${action.type}:${action.enrolmentId}`;
     if (lastActionRef.current === key) return;
     lastActionRef.current = key;
@@ -91,6 +94,11 @@ export function StudentEnrolmentsTable({
       return;
     }
     if (action.type === "change-enrolment") {
+      if (!target.plan) {
+        toast.error("Enrolment plan missing; cannot change selection.");
+        onActionHandled?.();
+        return;
+      }
       setEditing(target);
     } else if (action.type === "edit-paid-through") {
       setEditingPaidThrough(target);
