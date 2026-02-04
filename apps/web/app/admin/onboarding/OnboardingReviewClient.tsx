@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -99,11 +100,7 @@ function formatPhone(value: string | null) {
 
 function buildSelectionSummary(selectedTemplates: Record<string, NormalizedScheduleClass>) {
   return Object.values(selectedTemplates).map((template) => {
-<<<<<<< ours
-    const label = template.template?.name ?? template.levelName ?? "Class";
-=======
     const label = template.template?.name ?? template.templateName ?? template.level?.name ?? "Class";
->>>>>>> theirs
     const time = formatScheduleWeekdayTime(template.startTime);
     return `${label} · ${time}`;
   });
@@ -599,7 +596,7 @@ function AcceptOnboardingDialog({
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Accept onboarding request</DialogTitle>
-          <DialogDescription>Choose how you'd like to move this family forward.</DialogDescription>
+          <DialogDescription>Choose how you&apos;d like to move this family forward.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -664,7 +661,7 @@ function AcceptOnboardingDialog({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Create family + students</CardTitle>
-                  <p className="text-sm text-muted-foreground">We'll leave class placements unassigned for now.</p>
+                  <p className="text-sm text-muted-foreground">We&apos;ll leave class placements unassigned for now.</p>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p>Next steps:</p>
