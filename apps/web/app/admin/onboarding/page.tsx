@@ -24,7 +24,7 @@ function parseStatus(value: string | undefined) {
 export default async function OnboardingAdminPage({ searchParams }: PageProps) {
   const resolved = await searchParams;
   const params = resolved ?? {};
-  const { q, cursor, pageSize } = parsePaginationSearchParams(params);
+  const { q, cursor, pageSize, cursorStack } = parsePaginationSearchParams(params);
   const status = parseStatus(first(params.status));
 
   const [requests, levels, enrolmentPlans] = await Promise.all([
@@ -49,6 +49,7 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
       totalCount={requests.totalCount}
       nextCursor={requests.nextCursor}
       pageSize={pageSize}
+      cursorStack={cursorStack}
       statusFilter={status}
       levels={levels}
       enrolmentPlans={enrolmentPlans}

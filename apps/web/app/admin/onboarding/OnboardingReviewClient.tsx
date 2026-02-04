@@ -99,11 +99,8 @@ function formatPhone(value: string | null) {
 
 function buildSelectionSummary(selectedTemplates: Record<string, NormalizedScheduleClass>) {
   return Object.values(selectedTemplates).map((template) => {
-<<<<<<< ours
-    const label = template.template?.name ?? template.levelName ?? "Class";
-=======
     const label = template.template?.name ?? template.templateName ?? template.level?.name ?? "Class";
->>>>>>> theirs
+    const label = template.template?.name ?? template.levelName ?? "Class";
     const time = formatScheduleWeekdayTime(template.startTime);
     return `${label} · ${time}`;
   });
@@ -724,6 +721,7 @@ export function OnboardingReviewClient({
   totalCount,
   nextCursor,
   pageSize,
+  cursorStack,
   statusFilter,
   levels,
   enrolmentPlans,
@@ -732,6 +730,7 @@ export function OnboardingReviewClient({
   totalCount: number;
   nextCursor: string | null;
   pageSize: number;
+  cursorStack: string[];
   statusFilter: "NEW" | "ACCEPTED" | "DECLINED" | null;
   levels: Level[];
   enrolmentPlans: (EnrolmentPlan & { level: Level })[];
@@ -843,10 +842,10 @@ export function OnboardingReviewClient({
       </div>
 
       <AdminPagination
-        totalCount={totalCount}
+        basePath="/admin/onboarding"
         pageSize={pageSize}
-        currentCount={parsedRequests.length}
         nextCursor={nextCursor}
+        cursorStack={cursorStack}
       />
 
       <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && setSelectedId(null)}>
