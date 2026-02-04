@@ -17,7 +17,8 @@ import {
   ChevronDown,
   LogIn,
   LogOut,
-  LucideIcon
+  LucideIcon,
+  ClipboardList
 } from "lucide-react";
 
 
@@ -55,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Classes", href: "/admin/class", icon: BookOpen },
 
   { label: "Messages", href: "/admin/messages", icon: Inbox },
+  { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
