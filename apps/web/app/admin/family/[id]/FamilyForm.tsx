@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Loader2, Mail, MoreVertical, Phone } from "lucide-react";
@@ -179,11 +179,8 @@ export default function FamilyForm({
     },
     serialize: (value) => (value === "overview" ? null : value),
   });
-  const [selectedStudentId, setSelectedStudentId] = useSyncedQueryState<string>("student", {
-    defaultValue: "",
-    parse: (value) => value ?? "",
-    serialize: (value) => (value ? value : null),
-  });
+  const pathname = usePathname();
+  const [selectedStudentId, setSelectedStudentId] = React.useState<string>(() => searchParams.get("student") ?? "");
   const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
@@ -227,6 +224,19 @@ export default function FamilyForm({
       return next;
     });
   }, [activeTab]);
+
+  React.useEffect(() => {
+    const current = searchParams.get("student") ?? "";
+    if (current === (selectedStudentId ?? "")) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (selectedStudentId) {
+      params.set("student", selectedStudentId);
+    } else {
+      params.delete("student");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, router, searchParams, selectedStudentId]);
 
   React.useEffect(() => {
     if (!selectedStudentId) return;
