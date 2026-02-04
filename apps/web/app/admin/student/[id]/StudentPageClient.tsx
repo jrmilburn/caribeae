@@ -366,7 +366,17 @@ export default function StudentPageClient({
         </CardContent>
       </Card>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          if (value === "billing" || value === "details") {
+            setActiveTab(value);
+          } else {
+            setActiveTab("enrolment");
+          }
+        }}
+        className="space-y-4"
+      >
         <Card>
           <CardHeader className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
