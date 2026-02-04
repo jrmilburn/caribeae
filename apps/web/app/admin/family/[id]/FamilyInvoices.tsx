@@ -586,7 +586,7 @@ export default function FamilyInvoices({
           setInvoiceModalOpen(open);
           if (!open) setEditingInvoice(null);
         }}
-        invoice={editingInvoice as (BillingInvoice & { amountOwingCents: number }) | undefined}
+        invoice={editingInvoice}
         families={[{ id: family.id, name: family.name }]}
         statuses={Object.values(InvoiceStatus)}
         onSubmit={handleSaveInvoice}

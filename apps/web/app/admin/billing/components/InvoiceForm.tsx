@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
 
-import type { BillingInvoice } from "@/server/billing/types";
 import type { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
 type LineItemDraft = {
@@ -32,6 +31,28 @@ type LineItemDraft = {
   quantity: string;
   unitPriceCents: string;
   amountCents?: string;
+};
+
+type InvoiceFormInvoice = {
+  id: string;
+  familyId: string;
+  status: InvoiceStatus;
+  issuedAt: Date;
+  dueAt: Date | null;
+  coverageStart?: Date | null;
+  coverageEnd?: Date | null;
+  creditsPurchased?: number | null;
+  amountPaidCents: number;
+  amountOwingCents: number;
+  paidAt?: Date | null;
+  lineItems: Array<{
+    id: string;
+    kind: InvoiceLineItemKind;
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    amountCents: number | null;
+  }>;
 };
 
 type InvoiceFormState = {
@@ -50,7 +71,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   families: { id: string; name: string }[];
   statuses: InvoiceStatus[];
-  invoice?: (BillingInvoice & { amountOwingCents: number }) | null;
+  invoice?: InvoiceFormInvoice | null;
   onSubmit: (payload: {
     familyId: string;
     status: InvoiceStatus;
