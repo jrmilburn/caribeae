@@ -120,7 +120,7 @@ export function ProductFormDialog({
       isActive: form.isActive,
     };
 
-    if (mode === \"create\" || !product || form.categoryId !== product.categoryId) {
+    if (mode === "create" || !product || form.categoryId !== product.categoryId) {
       payload.categoryId = form.categoryId;
     }
 
