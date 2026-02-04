@@ -11,7 +11,6 @@ import { resolveNextPaidThroughForCredit } from "@/server/billing/enrolmentBilli
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
 import { brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
-import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type CancelClassOccurrenceInput = {
   templateId: string;
@@ -140,6 +139,5 @@ export async function cancelClassOccurrence({
     return { cancellation, creditedAdjustments };
   });
 
-  await upsertTimesheetEntryForOccurrence({ templateId, date });
   return result;
 }

@@ -11,18 +11,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -34,10 +25,6 @@ import {
 
 import { deleteTeacher } from "@/server/teacher/deleteTeacher";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
-import { getTeacherPayRates } from "@/server/payRates/getTeacherPayRates";
-import { saveTeacherPayRate } from "@/server/payRates/saveTeacherPayRate";
-import { deleteTeacherPayRate } from "@/server/payRates/deleteTeacherPayRate";
-import { formatCurrencyFromCents } from "@/lib/currency";
 import { TeacherForm } from "./TeacherForm";
 
 export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
@@ -46,8 +33,6 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Teacher | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
-  const [ratesTeacher, setRatesTeacher] = React.useState<Teacher | null>(null);
-  const [ratesOpen, setRatesOpen] = React.useState(false);
 
   const filtered = React.useMemo(() => {
     const query = search.toLowerCase();
@@ -164,17 +149,6 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => {
-                                setRatesTeacher(teacher);
-                                setRatesOpen(true);
-                              }}
-                            >
-                              Pay rates
-                            </DropdownMenuItem>
-
-                            <DropdownMenuSeparator />
-
-                            <DropdownMenuItem
                               onClick={() => handleDelete(teacher)}
                               disabled={deletingId === teacher.id}
                               className="text-destructive"
@@ -203,162 +177,6 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
           if (!next) setEditing(null);
         }}
       />
-
-      <TeacherPayRatesDialog
-        teacher={ratesTeacher}
-        open={ratesOpen}
-        onClose={() => {
-          setRatesOpen(false);
-          setRatesTeacher(null);
-        }}
-        onSaved={() => router.refresh()}
-      />
     </div>
-  );
-}
-
-type PayRate = Awaited<ReturnType<typeof getTeacherPayRates>>[number];
-
-function TeacherPayRatesDialog({
-  teacher,
-  open,
-  onClose,
-  onSaved,
-}: {
-  teacher: Teacher | null;
-  open: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [rates, setRates] = React.useState<PayRate[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [form, setForm] = React.useState({
-    effectiveFrom: "",
-    effectiveTo: "",
-    hourlyRateCents: 0,
-  });
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!teacher || !open) return;
-    setLoading(true);
-    getTeacherPayRates({ teacherId: teacher.id })
-      .then(setRates)
-      .catch((err) => setError(err instanceof Error ? err.message : "Unable to load rates"))
-      .finally(() => setLoading(false));
-  }, [teacher, open]);
-
-  const handleSave = async () => {
-    if (!teacher) return;
-    setLoading(true);
-    try {
-      await saveTeacherPayRate({
-        teacherId: teacher.id,
-        hourlyRateCents: Number(form.hourlyRateCents),
-        effectiveFrom: form.effectiveFrom,
-        effectiveTo: form.effectiveTo || null,
-      });
-      const updated = await getTeacherPayRates({ teacherId: teacher.id });
-      setRates(updated);
-      onSaved();
-      setForm({ effectiveFrom: "", effectiveTo: "", hourlyRateCents: 0 });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save rate.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!teacher) return;
-    if (!window.confirm("Delete this pay rate?")) return;
-    setLoading(true);
-    try {
-      await deleteTeacherPayRate({ id });
-      const updated = await getTeacherPayRates({ teacherId: teacher.id });
-      setRates(updated);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to delete rate.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!teacher) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Pay rates • {teacher.name}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label>Hourly rate (cents)</Label>
-            <Input
-              type="number"
-              value={form.hourlyRateCents}
-              onChange={(e) => setForm((p) => ({ ...p, hourlyRateCents: Number(e.target.value) }))}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Effective from</Label>
-              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm((p) => ({ ...p, effectiveFrom: e.target.value }))} />
-            </div>
-            <div className="space-y-1">
-              <Label>Effective to (optional)</Label>
-              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm((p) => ({ ...p, effectiveTo: e.target.value }))} />
-            </div>
-          </div>
-          <Button onClick={handleSave} disabled={loading || !form.effectiveFrom}>
-            {loading ? "Saving..." : "Add rate"}
-          </Button>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Effective from</TableHead>
-                  <TableHead>Effective to</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rates.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                      No pay rates yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rates.map((rate) => (
-                    <TableRow key={rate.id}>
-                      <TableCell>{new Date(rate.effectiveFrom).toLocaleDateString()}</TableCell>
-                      <TableCell>{rate.effectiveTo ? new Date(rate.effectiveTo).toLocaleDateString() : "—"}</TableCell>
-                      <TableCell className="text-right text-sm">{formatCurrencyFromCents(rate.hourlyRateCents)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(rate.id)} disabled={loading}>
-                          Delete
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

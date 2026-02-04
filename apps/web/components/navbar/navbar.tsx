@@ -362,7 +362,6 @@ function isActive(pathname: string, href: string) {
     const settingsRoutes = [
       "/admin/settings",
       "/admin/communications",
-      "/admin/payroll",
       "/admin/billing",
       "/admin/reports",
     ];

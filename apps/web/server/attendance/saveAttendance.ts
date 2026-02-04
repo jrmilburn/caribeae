@@ -1,6 +1,6 @@
 "use server";
 
-import { AttendanceStatus, TimesheetSource, TimesheetStatus } from "@prisma/client";
+import { AttendanceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -8,7 +8,6 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { AttendanceChangeDTO, AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
 import { registerCreditConsumptionForDate } from "@/server/billing/enrolmentBilling";
-import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 import { getEligibleStudentsForOccurrence } from "@/server/class/getClassOccurrenceRoster";
 
 type SaveAttendancePayload = {
@@ -89,13 +88,6 @@ export async function saveAttendance({
       registerCreditConsumptionForDate({ templateId, studentId: entry.studentId, date })
     )
   );
-
-  await upsertTimesheetEntryForOccurrence({
-    templateId,
-    date,
-    status: TimesheetStatus.CONFIRMED,
-    source: TimesheetSource.ATTENDANCE,
-  });
 
   return loadAttendance(templateId, date);
 }

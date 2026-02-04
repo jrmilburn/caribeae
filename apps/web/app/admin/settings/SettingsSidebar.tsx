@@ -24,8 +24,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 
 const SETTINGS_LINKS = [
   { href: "/admin/communications", label: "Communications" },
-  { href: "/admin/reports/teacher-hours", label: "Teacher hours" },
-  { href: "/admin/payroll", label: "Payroll" },
   { href: "/admin/billing", label: "Billing" },
   { href: "/admin/reports/audit", label: "Reports" },
 ];

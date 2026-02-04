@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
-import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type UpsertTeacherSubstitutionPayload = {
   templateId: string;
@@ -57,11 +56,6 @@ export async function upsertTeacherSubstitution({
     update: { teacherId },
     create: { templateId, date, teacherId },
     include: { teacher: true },
-  });
-
-  await upsertTimesheetEntryForOccurrence({
-    templateId,
-    date,
   });
 
   return {

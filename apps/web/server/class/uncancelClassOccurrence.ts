@@ -8,7 +8,6 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import { removeCancellationCredit } from "@/server/billing/enrolmentBilling";
 import { recalculateEnrolmentCoverage } from "@/server/billing/recalculateEnrolmentCoverage";
-import { upsertTimesheetEntryForOccurrence } from "@/server/timesheet/upsertTimesheetEntryForOccurrence";
 
 type UncancelInput = {
   templateId: string;
@@ -72,6 +71,5 @@ export async function uncancelClassOccurrence({ templateId, dateKey }: UncancelI
     return { removed: true, adjustmentsRemoved: adjustments.length };
   });
 
-  await upsertTimesheetEntryForOccurrence({ templateId, date });
   return result;
 }
