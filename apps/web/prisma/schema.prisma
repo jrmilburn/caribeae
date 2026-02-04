@@ -34,6 +34,7 @@ model User {
   payrollAdjustments   PayrollAdjustment[]          @relation("PayrollAdjustmentCreator")
   studentLevelChanges  StudentLevelChange[]         @relation("StudentLevelChangeCreator")
   accountOpeningStates AccountOpeningState[]        @relation("AccountOpeningStateCreator")
+  reviewedOnboardingRequests OnboardingRequest[]    @relation("OnboardingReview")
 }
 
 model Family {
@@ -63,6 +64,7 @@ model Family {
   conversations       Conversation[]
   messages            Message[]
   accountOpeningState AccountOpeningState?
+  onboardingRequests  OnboardingRequest[] @relation("OnboardingFamily")
 }
 
 model AccountOpeningState {
@@ -216,6 +218,45 @@ enum TimesheetStatus {
   SCHEDULED
   CONFIRMED
   CANCELLED
+}
+
+enum OnboardingStatus {
+  NEW
+  ACCEPTED
+  DECLINED
+}
+
+model OnboardingRequest {
+  id String @id @default(cuid())
+
+  guardianName String
+  phone        String?
+  email        String?
+
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  address               String?
+
+  studentsJson     Json
+  availabilityJson Json
+
+  status OnboardingStatus @default(NEW)
+
+  familyId String?
+  family   Family? @relation("OnboardingFamily", fields: [familyId], references: [id])
+
+  reviewedById String?
+  reviewedBy   User? @relation("OnboardingReview", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([guardianName])
+  @@index([email])
+  @@index([phone])
 }
 
 enum TimesheetSource {
