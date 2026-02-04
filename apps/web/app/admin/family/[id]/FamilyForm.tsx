@@ -31,6 +31,7 @@ import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
 import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
+import { FamilyHeaderSummary } from "@/components/admin/FamilyHeaderSummary";
 
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import type { UnpaidFamiliesSummary } from "@/server/invoicing";
@@ -39,10 +40,15 @@ import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPos
 import type getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
 import { createStudent } from "@/server/student/createStudent";
+import { deleteStudent } from "@/server/student/deleteStudent";
+import { getStudent } from "@/server/student/getStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
+import type { ClientStudentWithRelations } from "@/app/admin/student/[id]/types";
+import { StudentEnrolmentsSection } from "@/app/admin/student/[id]/StudentEnrolmentsSection";
 import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
-import { parseReturnContext } from "@/lib/returnContext";
+import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
+import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
