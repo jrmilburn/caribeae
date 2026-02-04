@@ -14,6 +14,7 @@ export default async function getFamily(id: string) {
     include: {
       students: {
         include: {
+          level: true,
           enrolments: {
             select: {
               id: true,

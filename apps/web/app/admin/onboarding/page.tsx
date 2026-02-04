@@ -36,7 +36,7 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
         status,
       },
     }),
-    prisma.level.findMany({ orderBy: { levelOrder: "asc" }, select: { id: true, name: true } }),
+    prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
     prisma.enrolmentPlan.findMany({
       orderBy: { name: "asc" },
       include: { level: true },
