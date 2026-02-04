@@ -15,10 +15,12 @@ export function StudentEnrolmentsSection({
   student,
   levels,
   enrolmentPlans,
+  onUpdated,
 }: {
   student: ClientStudentWithRelations;
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
+  onUpdated?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [mergeOpen, setMergeOpen] = React.useState(false);
@@ -44,6 +46,7 @@ export function StudentEnrolmentsSection({
           levels={levels}
           studentLevelId={student.levelId}
           enrolmentPlans={enrolmentPlans}
+          onUpdated={onUpdated}
         />
         <AddEnrolmentDialog
           open={open}
@@ -52,12 +55,14 @@ export function StudentEnrolmentsSection({
           levels={levels}
           enrolmentPlans={levelPlans}
           studentLevelId={student.levelId}
+          onCreated={onUpdated}
         />
         <MergeEnrolmentsDialog
           open={mergeOpen}
           onOpenChange={setMergeOpen}
           enrolments={student.enrolments}
           enrolmentPlans={enrolmentPlans}
+          onMerged={onUpdated}
         />
       </CardContent>
     </Card>

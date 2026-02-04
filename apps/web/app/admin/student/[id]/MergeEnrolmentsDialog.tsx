@@ -51,11 +51,13 @@ export function MergeEnrolmentsDialog({
   onOpenChange,
   enrolments,
   enrolmentPlans,
+  onMerged,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   enrolments: Enrolment[];
   enrolmentPlans: EnrolmentPlan[];
+  onMerged?: () => void;
 }) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -168,6 +170,7 @@ export function MergeEnrolmentsDialog({
       }
       toast.success("Enrolments merged.");
       onOpenChange(false);
+      onMerged?.();
       router.refresh();
     } catch (err) {
       console.error(err);

@@ -31,9 +31,10 @@ function formatDate(value?: Date | string | null) {
 type Props = {
   familyId: string;
   familyName: string;
+  trigger?: React.ReactNode;
 };
 
-export function CatchUpPaymentDialog({ familyId, familyName }: Props) {
+export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [payAheadBlocks, setPayAheadBlocks] = React.useState(0);
@@ -100,11 +101,15 @@ export function CatchUpPaymentDialog({ familyId, familyName }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="secondary">
-          Catch up payment
-        </Button>
-      </DialogTrigger>
+      {trigger === null ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button size="sm" variant="secondary">
+              Catch up payment
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="flex max-h-[90vh] w-[calc(100vw-3rem)] max-w-[1100px] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Catch up payment for {familyName}</DialogTitle>

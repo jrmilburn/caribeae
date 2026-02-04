@@ -18,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -313,8 +314,10 @@ export default function FamilyForm({
     try {
       if (payload.id) {
         await updateStudent({ ...payload, id: payload.id });
+        toast.success("Student updated.");
       } else {
         await createStudent(payload);
+        toast.success("Student added.");
       }
       router.refresh();
       setStudentSheetOpen(false);
@@ -322,6 +325,7 @@ export default function FamilyForm({
       return { success: true };
     } catch (err) {
       console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to save student.");
       return { success: false };
     }
   };
@@ -331,6 +335,7 @@ export default function FamilyForm({
     if (!ok) return;
     try {
       await deleteStudent(studentId);
+      toast.success("Student removed.");
       router.refresh();
       if (selectedStudentId === studentId) {
         setSelectedStudentId("");
@@ -413,16 +418,6 @@ export default function FamilyForm({
                       )}
                     >
                       {formatCurrencyFromCents(billingPosition.outstandingCents)}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {lastPayment ? (
-                        <>
-                          Last payment {formatBrisbaneDate(lastPayment.paidAt)} ·{" "}
-                          {formatCurrencyFromCents(lastPayment.amountCents)}
-                        </>
-                      ) : (
-                        "No payments recorded yet."
-                      )}
                     </div>
                   </div>
                   {billingPosition.unallocatedCents > 0 ? (

@@ -62,11 +62,13 @@ export function StudentEnrolmentsTable({
   levels,
   studentLevelId,
   enrolmentPlans,
+  onUpdated,
 }: {
   enrolments: EnrolmentRow[];
   levels: Level[];
   studentLevelId?: string | null;
   enrolmentPlans: EnrolmentPlan[];
+  onUpdated?: () => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
@@ -85,6 +87,7 @@ export function StudentEnrolmentsTable({
       await undoEnrolment(id);
       toast.success("Enrolment undone.");
       router.refresh();
+      onUpdated?.();
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Unable to undo enrolment.");
@@ -215,6 +218,7 @@ export function StudentEnrolmentsTable({
           onChanged={() => {
             setEditing(null);
             router.refresh();
+            onUpdated?.();
           }}
         />
       ) : null}
@@ -227,6 +231,7 @@ export function StudentEnrolmentsTable({
           onUpdated={() => {
             setEditingPaidThrough(null);
             router.refresh();
+            onUpdated?.();
           }}
         />
       ) : null}
