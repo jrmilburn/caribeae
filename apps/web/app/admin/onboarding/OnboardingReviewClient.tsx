@@ -365,7 +365,6 @@ function StudentAssignmentCard({
               <SelectValue placeholder="Select level" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Select level</SelectItem>
               {levels.map((level) => (
                 <SelectItem key={level.id} value={level.id}>
                   {level.name}
