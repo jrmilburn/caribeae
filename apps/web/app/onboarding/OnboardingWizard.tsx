@@ -36,6 +36,7 @@ const steps = [
 ];
 
 type LevelOption = { id: string; name: string };
+type StudentExperience = (typeof studentExperienceOptions)[number];
 
 type ContactState = z.infer<typeof onboardingContactSchema>;
 
@@ -68,6 +69,10 @@ const defaultAvailability: AvailabilityState = {
   desiredLevelId: null,
   notes: "",
 };
+
+function isStudentExperience(value: string): value is StudentExperience {
+  return (studentExperienceOptions as readonly string[]).includes(value);
+}
 
 function createStudent(): StudentState {
   return {
@@ -446,7 +451,11 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                           <Label htmlFor={`experience-${student.id}`}>Current level</Label>
                           <Select
                             value={student.experience}
-                            onValueChange={(value) => updateStudent(student.id, { experience: value })}
+                            onValueChange={(value) => {
+                              if (isStudentExperience(value)) {
+                                updateStudent(student.id, { experience: value });
+                              }
+                            }}
                           >
                             <SelectTrigger id={`experience-${student.id}`}>
                               <SelectValue placeholder="Select level" />
