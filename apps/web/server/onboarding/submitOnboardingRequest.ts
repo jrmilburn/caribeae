@@ -22,8 +22,8 @@ if (!(globalThis as typeof globalThis & { __onboardingRateLimit?: RateLimitStore
     rateLimitStore;
 }
 
-function getClientIp() {
-  const headerList = headers();
+async function getClientIp() {
+  const headerList = await headers();
   const forwarded = headerList.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0]?.trim() ?? "unknown";
@@ -63,7 +63,7 @@ export async function submitOnboardingRequest(
     return { ok: false, error: "Unable to submit the request." };
   }
 
-  const ip = getClientIp();
+  const ip = await getClientIp();
   const rateLimit = checkRateLimit(`onboarding:${ip}`);
   if (!rateLimit.ok) {
     return { ok: false, error: "Too many requests. Please try again shortly." };
