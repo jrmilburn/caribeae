@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { EnrolmentPlan, Level } from "@prisma/client";
-import { Mail, Phone, Loader2 } from "lucide-react";
+import { Mail, Phone, Loader2, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -317,6 +317,11 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
             </Button>
             <Button variant="outline" onClick={handleNewStudent}>
               New student
+            </Button>
+            <Button variant="ghost" size="icon-sm" asChild>
+              <Link href="/admin/reception/pos" aria-label="Open POS">
+                <ShoppingBag className="h-4 w-4" />
+              </Link>
             </Button>
           </div>
         </div>

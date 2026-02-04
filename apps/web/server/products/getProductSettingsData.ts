@@ -4,12 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 
-export async function getActiveProducts() {
+export async function getProductSettingsData() {
   await getOrCreateUser();
   await requireAdmin();
 
-  return prisma.product.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
+  return prisma.productCategory.findMany({
+    orderBy: { sortOrder: "asc" },
+    include: {
+      products: {
+        orderBy: { sortOrder: "asc" },
+      },
+    },
   });
 }

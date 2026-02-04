@@ -30,6 +30,7 @@ model User {
   studentLevelChanges  StudentLevelChange[]         @relation("StudentLevelChangeCreator")
   accountOpeningStates AccountOpeningState[]        @relation("AccountOpeningStateCreator")
   reviewedOnboardingRequests OnboardingRequest[]    @relation("OnboardingReview")
+  posSales             PosSale[]
 }
 
 model Family {
@@ -512,15 +513,114 @@ model Product {
 
   name       String
   sku        String?
+  barcode    String?
   priceCents Int
-  active     Boolean @default(true)
+
+  trackInventory   Boolean @default(true)
+  stockOnHand      Int     @default(0)
+  lowStockThreshold Int?
+
+  sortOrder Int @default(0)
+  isActive  Boolean @default(true)
+
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id])
 
   lineItems InvoiceLineItem[]
+  posLineItems PosSaleLineItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([sku])
+  @@unique([barcode])
+  @@index([categoryId, sortOrder])
+}
+
+model ProductCategory {
+  id String @id @default(cuid())
+
+  name      String
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@index([sortOrder])
+}
+
+enum PosSaleStatus {
+  DRAFT
+  COMPLETED
+  VOID
+}
+
+enum PosPaymentMethod {
+  CASH
+  CARD
+  OTHER
+}
+
+model PosSale {
+  id     String @id @default(cuid())
+  saleNo Int    @unique @default(autoincrement())
+
+  status        PosSaleStatus @default(DRAFT)
+  subtotalCents Int
+  discountCents Int @default(0)
+  totalCents    Int
+  notes         String?
+
+  createdByUserId String
+  createdByUser   User   @relation(fields: [createdByUserId], references: [id])
+
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lineItems PosSaleLineItem[]
+  payments  PosPayment[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model PosSaleLineItem {
+  id String @id @default(cuid())
+
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  nameSnapshot        String
+  priceCentsSnapshot  Int
+  quantity            Int
+  lineTotalCents      Int
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model PosPayment {
+  id String @id @default(cuid())
+
+  saleId String
+  sale   PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  method      PosPaymentMethod
+  amountCents Int
+  providerRef String?
+
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
 }
 
 model Invoice {

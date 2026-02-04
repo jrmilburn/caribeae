@@ -1236,7 +1236,7 @@ function CounterActionSheet({
                         <div className="text-sm font-semibold">{formatCurrencyFromCents(product.priceCents)}</div>
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground">{product.active ? "Active" : "Inactive"}</div>
+                        <div className="text-xs text-muted-foreground">{product.isActive ? "Active" : "Inactive"}</div>
                         <Button size="sm" variant="outline" onClick={() => addToCart(product.id)}>
                           Add
                         </Button>

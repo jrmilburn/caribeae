@@ -48,7 +48,7 @@ export async function createCounterInvoice(input: z.infer<typeof checkoutSchema>
   const productIds = payload.items.map((item) => item.productId);
 
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, active: true },
+    where: { id: { in: productIds }, isActive: true },
   });
 
   if (products.length !== productIds.length) {

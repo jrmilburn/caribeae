@@ -20,6 +20,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "plans", label: "Enrolment plans", href: "/admin/settings/plans" },
   { id: "teachers", label: "Teachers", href: "/admin/settings/teachers" },
   { id: "holidays", label: "Holidays", href: "/admin/settings/holidays" },
+  { id: "products", label: "Products", href: "/admin/settings/products" },
 ];
 
 const SETTINGS_LINKS = [
