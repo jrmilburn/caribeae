@@ -63,17 +63,40 @@ export function StudentEnrolmentsTable({
   studentLevelId,
   enrolmentPlans,
   onUpdated,
+  action,
+  onActionHandled,
 }: {
   enrolments: EnrolmentRow[];
   levels: Level[];
   studentLevelId?: string | null;
   enrolmentPlans: EnrolmentPlan[];
   onUpdated?: () => void;
+  action?: { type: "change-enrolment" | "edit-paid-through"; enrolmentId: string } | null;
+  onActionHandled?: () => void;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentRow | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
+  const lastActionRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!action) return;
+    const key = `${action.type}:${action.enrolmentId}`;
+    if (lastActionRef.current === key) return;
+    lastActionRef.current = key;
+    const target = enrolments.find((enrolment) => enrolment.id === action.enrolmentId) ?? enrolments[0];
+    if (!target) {
+      onActionHandled?.();
+      return;
+    }
+    if (action.type === "change-enrolment") {
+      setEditing(target);
+    } else if (action.type === "edit-paid-through") {
+      setEditingPaidThrough(target);
+    }
+    onActionHandled?.();
+  }, [action, enrolments, onActionHandled]);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;

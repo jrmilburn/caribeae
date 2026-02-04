@@ -567,7 +567,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                     <SelectValue placeholder="No preference" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No preference</SelectItem>
+                    <SelectItem value="none">No preference</SelectItem>
                     {levels.map((level) => (
                       <SelectItem key={level.id} value={level.id}>
                         {level.name}

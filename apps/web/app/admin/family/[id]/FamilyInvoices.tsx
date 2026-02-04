@@ -228,6 +228,8 @@ export default function FamilyInvoices({
   };
 
   const handleEditInvoice = (invoice: InvoiceRow) => {
+    setInvoiceDetailOpen(false);
+    setSelectedInvoice(null);
     setEditingInvoice(invoice);
     setInvoiceModalOpen(true);
   };

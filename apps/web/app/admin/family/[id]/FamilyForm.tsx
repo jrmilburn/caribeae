@@ -187,6 +187,10 @@ export default function FamilyForm({
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
+  const [pendingStudentAction, setPendingStudentAction] = React.useState<{
+    type: "add-enrolment" | "change-enrolment" | "edit-paid-through";
+    studentId: string;
+  } | null>(null);
   const [changingStudent, setChangingStudent] = React.useState<
     FamilyWithStudentsAndInvoices["students"][number] | null
   >(null);
@@ -353,11 +357,18 @@ export default function FamilyForm({
   const handleManageEnrolments = (studentId: string) => {
     setSelectedStudentId(studentId);
     setActiveTab("enrolments");
+    const row = studentRows.find((student) => student.id === studentId);
+    const hasEnrolments = (row?.enrolments?.length ?? 0) > 0;
+    setPendingStudentAction({
+      type: hasEnrolments ? "change-enrolment" : "add-enrolment",
+      studentId,
+    });
   };
 
   const handleEditPaidThrough = (studentId: string) => {
     setSelectedStudentId(studentId);
     setActiveTab("enrolments");
+    setPendingStudentAction({ type: "edit-paid-through", studentId });
   };
 
   const handleOpenStudent = (studentId: string) => {
@@ -517,32 +528,70 @@ export default function FamilyForm({
                               {enrolContext ? (
                                 <>
                                   <DropdownMenuItem
-                                    onClick={() => handleEnrolInClass(row.id)}
+                                    onSelect={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      handleEnrolInClass(row.id);
+                                    }}
                                   >
                                     Enrol in class
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                 </>
                               ) : null}
-                              <DropdownMenuItem onClick={() => handleEditStudent(row.student)}>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleEditStudent(row.student);
+                                }}
+                              >
                                 Edit student
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleManageEnrolments(row.id)}>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleManageEnrolments(row.id);
+                                }}
+                              >
                                 Enrol / change class
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditPaidThrough(row.id)}>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleEditPaidThrough(row.id);
+                                }}
+                              >
                                 Edit paid-through
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setChangingStudent(row.student)}>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  setChangingStudent(row.student);
+                                }}
+                              >
                                 Change level
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenStudent(row.id)}>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleOpenStudent(row.id);
+                                }}
+                              >
                                 Open student
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => handleDeleteStudent(row.id)}
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleDeleteStudent(row.id);
+                                }}
                               >
                                 Remove student
                               </DropdownMenuItem>
@@ -652,6 +701,13 @@ export default function FamilyForm({
                             levels={levels}
                             enrolmentPlans={enrolmentPlans}
                             onUpdated={() => refreshStudentDetails(selectedStudentId)}
+                            action={
+                              pendingStudentAction &&
+                              pendingStudentAction.studentId === selectedStudentId
+                                ? pendingStudentAction.type
+                                : null
+                            }
+                            onActionHandled={() => setPendingStudentAction(null)}
                           />
                         ) : (
                           <div className="text-sm text-muted-foreground">

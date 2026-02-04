@@ -5,6 +5,7 @@ import type { EnrolmentPlan, Level } from "@prisma/client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 import type { ClientStudentWithRelations } from "./types";
 import { StudentEnrolmentsTable } from "./StudentEnrolmentsTable";
@@ -16,11 +17,15 @@ export function StudentEnrolmentsSection({
   levels,
   enrolmentPlans,
   onUpdated,
+  action,
+  onActionHandled,
 }: {
   student: ClientStudentWithRelations;
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
   onUpdated?: () => void;
+  action?: "add-enrolment" | "change-enrolment" | "edit-paid-through" | null;
+  onActionHandled?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [mergeOpen, setMergeOpen] = React.useState(false);
@@ -28,6 +33,29 @@ export function StudentEnrolmentsSection({
     () => enrolmentPlans.filter((plan) => plan.levelId === student.levelId),
     [enrolmentPlans, student.levelId]
   );
+
+  const primaryEnrolment = React.useMemo(
+    () => student.enrolments.find((enrolment) => !enrolment.endDate) ?? student.enrolments[0] ?? null,
+    [student.enrolments]
+  );
+
+  React.useEffect(() => {
+    if (!action) return;
+    if (action === "add-enrolment") {
+      setOpen(true);
+      onActionHandled?.();
+      return;
+    }
+
+    if (!primaryEnrolment) {
+      if (action === "change-enrolment") {
+        setOpen(true);
+      } else {
+        toast.error("No enrolment yet. Add an enrolment first.");
+      }
+      onActionHandled?.();
+    }
+  }, [action, onActionHandled, primaryEnrolment]);
 
   return (
     <Card>
@@ -47,6 +75,14 @@ export function StudentEnrolmentsSection({
           studentLevelId={student.levelId}
           enrolmentPlans={enrolmentPlans}
           onUpdated={onUpdated}
+          action={
+            action === "change-enrolment" || action === "edit-paid-through"
+              ? primaryEnrolment
+                ? { type: action, enrolmentId: primaryEnrolment.id }
+                : null
+              : null
+          }
+          onActionHandled={onActionHandled}
         />
         <AddEnrolmentDialog
           open={open}
