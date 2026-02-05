@@ -23,14 +23,15 @@ model User {
 
   admin Boolean @default(false)
 
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @updatedAt
-  classCancellations   ClassCancellation[]          @relation("ClassCancellationCreator")
-  enrolmentAdjustments EnrolmentAdjustment[]
-  studentLevelChanges  StudentLevelChange[]         @relation("StudentLevelChangeCreator")
-  accountOpeningStates AccountOpeningState[]        @relation("AccountOpeningStateCreator")
-  reviewedOnboardingRequests OnboardingRequest[]    @relation("OnboardingReview")
-  posSales             PosSale[]
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+  classCancellations         ClassCancellation[]   @relation("ClassCancellationCreator")
+  enrolmentAdjustments       EnrolmentAdjustment[]
+  studentLevelChanges        StudentLevelChange[]  @relation("StudentLevelChangeCreator")
+  accountOpeningStates       AccountOpeningState[] @relation("AccountOpeningStateCreator")
+  reviewedOnboardingRequests OnboardingRequest[]   @relation("OnboardingReview")
+  posSales                   PosSale[]
+  waitlistRequests           WaitlistRequest[]
 }
 
 model Family {
@@ -60,7 +61,8 @@ model Family {
   conversations       Conversation[]
   messages            Message[]
   accountOpeningState AccountOpeningState?
-  onboardingRequests  OnboardingRequest[] @relation("OnboardingFamily")
+  onboardingRequests  OnboardingRequest[]  @relation("OnboardingFamily")
+  waitlistRequests    WaitlistRequest[]
 }
 
 model AccountOpeningState {
@@ -100,6 +102,7 @@ model Student {
   attendances      Attendance[]
   invoiceLineItems InvoiceLineItem[]
   levelChanges     StudentLevelChange[]
+  waitlistRequests WaitlistRequest[]
 }
 
 model ClassTemplate {
@@ -131,6 +134,7 @@ model ClassTemplate {
   cancellations        ClassCancellation[]
   enrolmentAdjustments EnrolmentAdjustment[]
   holidays             Holiday[]
+  waitlistRequests     WaitlistRequest[]
 }
 
 model TeacherSubstitution {
@@ -188,7 +192,7 @@ model OnboardingRequest {
   family   Family? @relation("OnboardingFamily", fields: [familyId], references: [id])
 
   reviewedById String?
-  reviewedBy   User? @relation("OnboardingReview", fields: [reviewedById], references: [id])
+  reviewedBy   User?     @relation("OnboardingReview", fields: [reviewedById], references: [id])
   reviewedAt   DateTime?
 
   createdAt DateTime @default(now())
@@ -214,7 +218,7 @@ model WaitlistRequest {
   requestedClass   ClassTemplate @relation(fields: [requestedClassId], references: [id])
 
   requestedLevelId String?
-  requestedLevel   Level? @relation(fields: [requestedLevelId], references: [id])
+  requestedLevel   Level?  @relation(fields: [requestedLevelId], references: [id])
 
   effectiveDate DateTime
   notes         String?
@@ -222,9 +226,9 @@ model WaitlistRequest {
   status     WaitlistRequestStatus @default(PENDING)
   adminNotes String?
 
-  decidedAt        DateTime?
-  decidedByUserId  String?
-  decidedBy        User? @relation(fields: [decidedByUserId], references: [id])
+  decidedAt       DateTime?
+  decidedByUserId String?
+  decidedBy       User?     @relation(fields: [decidedByUserId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -477,9 +481,9 @@ model EnrolmentPlan {
 
   blockLength Int @default(1)
 
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  enrolments Enrolment[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  enrolments       Enrolment[]
   invoiceLineItems InvoiceLineItem[]
 }
 
@@ -521,6 +525,7 @@ model Level {
   levelChangesTo   StudentLevelChange[] @relation("StudentLevelChangeTo")
   levelChangesFrom StudentLevelChange[] @relation("StudentLevelChangeFrom")
   holidays         Holiday[]
+  waitlistRequests WaitlistRequest[]
 }
 
 model Makeup {
@@ -541,9 +546,9 @@ model Teacher {
   phone    String?
   email    String?
 
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  classTemplates       ClassTemplate[]         @relation("ClassTemplateTeacher")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  classTemplates       ClassTemplate[]       @relation("ClassTemplateTeacher")
   teacherSubstitutions TeacherSubstitution[]
 }
 
@@ -555,17 +560,17 @@ model Product {
   barcode    String?
   priceCents Int
 
-  trackInventory   Boolean @default(true)
-  stockOnHand      Int     @default(0)
+  trackInventory    Boolean @default(true)
+  stockOnHand       Int     @default(0)
   lowStockThreshold Int?
 
-  sortOrder Int @default(0)
+  sortOrder Int     @default(0)
   isActive  Boolean @default(true)
 
   categoryId String
   category   ProductCategory @relation(fields: [categoryId], references: [id])
 
-  lineItems InvoiceLineItem[]
+  lineItems    InvoiceLineItem[]
   posLineItems PosSaleLineItem[]
 
   createdAt DateTime @default(now())
@@ -609,7 +614,7 @@ model PosSale {
 
   status        PosSaleStatus @default(DRAFT)
   subtotalCents Int
-  discountCents Int @default(0)
+  discountCents Int           @default(0)
   totalCents    Int
   notes         String?
 
@@ -617,8 +622,8 @@ model PosSale {
   createdByUser   User   @relation(fields: [createdByUserId], references: [id])
 
   completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   lineItems PosSaleLineItem[]
   payments  PosPayment[]
@@ -636,10 +641,10 @@ model PosSaleLineItem {
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
-  nameSnapshot        String
-  priceCentsSnapshot  Int
-  quantity            Int
-  lineTotalCents      Int
+  nameSnapshot       String
+  priceCentsSnapshot Int
+  quantity           Int
+  lineTotalCents     Int
 
   createdAt DateTime @default(now())
 
