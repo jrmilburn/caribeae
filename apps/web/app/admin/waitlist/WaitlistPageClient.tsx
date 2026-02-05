@@ -154,12 +154,16 @@ export default function WaitlistPageClient({
     );
   };
 
-  const handleDecline = async (request: WaitlistRequestSummary) => {
+  const handleDecline = async (request: WaitlistRequestSummary, adminNotes?: string) => {
     const ok = window.confirm("Decline this request?");
     if (!ok) return;
 
     await runMutationWithToast(
-      () => declineWaitlistRequest({ requestId: request.id }),
+      () =>
+        declineWaitlistRequest({
+          requestId: request.id,
+          adminNotes: adminNotes?.trim() || null,
+        }),
       {
         pending: { title: "Declining request..." },
         success: { title: "Request declined" },
@@ -360,7 +364,7 @@ export default function WaitlistPageClient({
               <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => handleDecline(selected)}
+                  onClick={() => handleDecline(selected, form.adminNotes)}
                   disabled={!canEdit}
                 >
                   Decline
