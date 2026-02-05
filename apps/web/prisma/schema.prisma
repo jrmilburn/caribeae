@@ -161,6 +161,13 @@ enum OnboardingStatus {
   DECLINED
 }
 
+enum WaitlistRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELLED
+}
+
 model OnboardingRequest {
   id String @id @default(cuid())
 
@@ -192,6 +199,38 @@ model OnboardingRequest {
   @@index([guardianName])
   @@index([email])
   @@index([phone])
+}
+
+model WaitlistRequest {
+  id String @id @default(cuid())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  requestedClassId String
+  requestedClass   ClassTemplate @relation(fields: [requestedClassId], references: [id])
+
+  requestedLevelId String?
+  requestedLevel   Level? @relation(fields: [requestedLevelId], references: [id])
+
+  effectiveDate DateTime
+  notes         String?
+
+  status     WaitlistRequestStatus @default(PENDING)
+  adminNotes String?
+
+  decidedAt        DateTime?
+  decidedByUserId  String?
+  decidedBy        User? @relation(fields: [decidedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([familyId])
 }
 
 model ClassCancellation {
