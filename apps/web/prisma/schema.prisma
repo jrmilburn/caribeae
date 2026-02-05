@@ -447,11 +447,11 @@ model EnrolmentPlan {
 model Holiday {
   id String @id @default(cuid())
 
-  name       String
-  startDate  DateTime
-  endDate    DateTime
-  note       String?
-  levelId    String?
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  note      String?
+  levelId   String?
   templateId String?
 
   level    Level?         @relation(fields: [levelId], references: [id])
