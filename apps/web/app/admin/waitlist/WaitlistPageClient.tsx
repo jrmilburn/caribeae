@@ -43,6 +43,11 @@ const STATUS_OPTIONS: Array<{ value: WaitlistRequestStatus | "ALL"; label: strin
 ];
 
 type TemplateOption = ClassTemplate & { level?: Level | null };
+type TemplateLabelInput = {
+  name: string | null;
+  dayOfWeek: number | null;
+  startTime: number | null;
+};
 
 function statusBadge(status: WaitlistRequestStatus) {
   if (status === "APPROVED") return "secondary" as const;
@@ -51,7 +56,7 @@ function statusBadge(status: WaitlistRequestStatus) {
   return "default" as const;
 }
 
-function formatTemplateLabel(template: Pick<TemplateOption, "name" | "dayOfWeek" | "startTime" | "level">) {
+function formatTemplateLabel(template: TemplateLabelInput) {
   const name = template.name?.trim() || "Class";
   if (template.startTime != null && template.dayOfWeek != null) {
     const weekStart = scheduleWeekStart(new Date());
