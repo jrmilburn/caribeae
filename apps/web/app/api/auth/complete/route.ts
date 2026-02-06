@@ -26,7 +26,8 @@ export async function POST() {
     return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
 
-  const token = cookies().get("caribeae_auth")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("caribeae_auth")?.value;
   const pending = token ? consumePendingAuth(token) : null;
 
   const familyId = pending?.familyId ?? null;
