@@ -19,10 +19,10 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 import { ReceptionSearch } from "@/components/admin/reception/ReceptionSearch";
-import { FamilyModal } from "@/app/admin/family/FamilyModal";
-import { StudentModal } from "@/app/admin/family/[id]/StudentModal";
-import { AddEnrolmentDialog } from "@/app/admin/student/[id]/AddEnrolmentDialog";
-import { ChangeEnrolmentDialog } from "@/app/admin/student/[id]/ChangeEnrolmentDialog";
+import { FamilyModal } from "@/app/admin/(protected)/family/FamilyModal";
+import { StudentModal } from "@/app/admin/(protected)/family/[id]/StudentModal";
+import { AddEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/AddEnrolmentDialog";
+import { ChangeEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/ChangeEnrolmentDialog";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
 import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
@@ -35,7 +35,7 @@ import { updateFamily } from "@/server/family/updateFamily";
 import { createStudent } from "@/server/student/createStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 
-import type { ClientStudentWithRelations } from "@/app/admin/student/[id]/types";
+import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
 
 type FamilyPickerEntry = Awaited<ReturnType<typeof searchReception>>["families"][number];
 const EMPTY_FAMILY_PICKER: FamilyPickerEntry[] = [];

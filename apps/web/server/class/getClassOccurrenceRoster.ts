@@ -6,7 +6,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
-import type { ClassOccurrenceRoster } from "@/app/admin/class/[id]/types";
+import type { ClassOccurrenceRoster } from "@/app/admin/(protected)/class/[id]/types";
 import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
 
 type ContextOptions = { skipAuth?: boolean; includeAttendance?: boolean };

@@ -8,7 +8,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
-import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/class/[id]/types";
+import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/(protected)/class/[id]/types";
 import { getClassOccurrenceRoster } from "./getClassOccurrenceRoster";
 import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
 

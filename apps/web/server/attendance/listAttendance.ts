@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
-import type { AttendanceEntryDTO } from "@/app/admin/class/[id]/types";
+import type { AttendanceEntryDTO } from "@/app/admin/(protected)/class/[id]/types";
 
 export async function listAttendance({
   templateId,

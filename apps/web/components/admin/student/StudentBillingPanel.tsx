@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
-import { dayLabel } from "@/app/admin/class/[id]/utils/time";
+import { dayLabel } from "@/app/admin/(protected)/class/[id]/utils/time";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 
 const STATUS_LABELS: Record<string, string> = {

@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
-import type { ClientStudentWithRelations } from "@/app/admin/student/[id]/types";
+import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
