@@ -184,7 +184,7 @@ export default function AuthPage() {
                 autoCorrect="off"
                 autoCapitalize="none"
                 enterKeyHint="send"
-                placeholder="name@example.com or +61 412 345 678"
+                placeholder="name@example.com or 0412 345 678"
                 disabled={isLoading}
                 aria-invalid={Boolean(error)}
               />
