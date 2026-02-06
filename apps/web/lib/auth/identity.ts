@@ -1,3 +1,5 @@
+import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
+
 export type IdentifierType = "email" | "phone";
 
 const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
@@ -13,6 +15,10 @@ export function normalizeEmail(value: string): string {
 export function normalizePhone(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
+
+  const auNormalized = normalizeAuMobileToE164(trimmed);
+  if (auNormalized) return auNormalized;
+
   const plusPrefixed = trimmed.startsWith("+");
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return "";

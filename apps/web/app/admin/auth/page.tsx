@@ -57,7 +57,7 @@ export default function AdminAuthPage() {
     const normalized = normalizeIdentifier(trimmed, type);
 
     if (type === "phone" && !isValidE164(normalized)) {
-      setError("Use international format like +61 412 345 678.");
+      setError("Use +61 412 345 678 or 0412 345 678.");
       return;
     }
 
@@ -127,7 +127,7 @@ export default function AdminAuthPage() {
 
   const helperText =
     detectedType === "phone" && identifier.trim().length > 0
-      ? "Admin email or mobile number. Use +61 412 345 678."
+      ? "Admin email or mobile number. Use +61 412 345 678 or 0412 345 678."
       : "Admin email or mobile number.";
 
   return (
