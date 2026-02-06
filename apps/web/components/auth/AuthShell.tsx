@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { CheckCircle2, LifeBuoy, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,30 +11,16 @@ type AuthShellMode = "client" | "admin";
 const SUPPORT_EMAIL = "rachele@caribeae.com.au";
 
 const COPY: Record<AuthShellMode, {
-  headerLabel: string;
   brandEyebrow: string;
   brandHeading: string;
-  bullets: string[];
 }> = {
   client: {
-    headerLabel: "Client Portal",
     brandEyebrow: "Client Portal",
     brandHeading: "Your family portal, streamlined.",
-    bullets: [
-      "One-time codes only.",
-      "Access schedules and updates.",
-      "Designed for mobile.",
-    ],
   },
   admin: {
-    headerLabel: "Admin Portal",
     brandEyebrow: "Staff Access",
     brandHeading: "Staff access, verified.",
-    bullets: [
-      "OTP-only sign in.",
-      "Quick access to admin tools.",
-      "Session protected.",
-    ],
   },
 };
 
@@ -48,37 +34,25 @@ export function AuthShell({
   const copy = COPY[mode];
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col lg:flex-row">
-        <AuthPanel className="order-1 lg:order-2">
-          <div className="flex min-h-screen flex-col px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
-            <header className="flex items-center gap-3">
-              <LogoMark />
-              <div className="space-y-0.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                  Caribeae
-                </p>
-                <p className="text-base font-semibold">{copy.headerLabel}</p>
+      <div className="grid min-h-screen w-full grid-cols-1 lg:grid-cols-[45%_55%]">
+        <BrandPanel className="order-1" mode={mode} />
+        <AuthPanel className="order-2">
+          <div className="flex min-h-screen flex-col">
+            <div className="flex flex-1 flex-col justify-center">
+              <div className="mx-auto w-full max-w-md px-6 py-10 sm:px-10 lg:px-12">
+                <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2">
+                  {children}
+                </div>
               </div>
-            </header>
-
-            <main className="mt-10 flex-1">
-              <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2">
-                {children}
-              </div>
-            </main>
-
-            <footer className="mt-10 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <a
-                className="rounded-full border border-transparent px-2 py-1 transition hover:border-slate-200 hover:text-slate-900"
-                href={`mailto:${SUPPORT_EMAIL}`}
-              >
+            </div>
+            <div className="mx-auto w-full max-w-md px-6 pb-10 text-xs text-muted-foreground sm:px-10 lg:px-12">
+              <span>Need help? </span>
+              <a className="text-slate-900 underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
                 {SUPPORT_EMAIL}
               </a>
-            </footer>
+            </div>
           </div>
         </AuthPanel>
-
-        <BrandPanel className="order-2 lg:order-1" mode={mode} />
       </div>
     </div>
   );
@@ -95,38 +69,36 @@ export function BrandPanel({
   return (
     <section
       className={cn(
-        "relative flex w-full items-stretch overflow-hidden bg-slate-950 text-white lg:w-5/12",
+        "relative flex w-full items-stretch overflow-hidden bg-slate-950 text-white",
         className
       )}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.14),_transparent_45%)]" />
-      <div className="absolute inset-0 bg-[url('/globe.svg')] bg-[length:420px] bg-right-top bg-no-repeat opacity-20" />
-      <div className="absolute -right-16 -top-10 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl" />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(4,47,74,0.96),rgba(4,78,92,0.92))]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_55%)]" />
+      <div className="absolute inset-0 bg-[url('/globe.svg')] bg-[length:420px] bg-right-top bg-no-repeat opacity-12" />
+      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
       <div className="absolute -left-24 bottom-0 h-64 w-64 rounded-full bg-sky-400/10 blur-3xl" />
 
-      <div className="relative z-10 flex w-full flex-col justify-between px-6 py-8 sm:px-10 lg:min-h-screen lg:px-12 lg:py-12">
-        <div className="space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-200/80">
-            {copy.brandEyebrow}
-          </p>
-          <h2 className="text-2xl font-semibold leading-tight sm:text-3xl">{copy.brandHeading}</h2>
-        </div>
-
-        <ul className="mt-8 space-y-3 text-sm text-slate-200/90">
-          {copy.bullets.map((item) => (
-            <li key={item} className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-8 flex items-center gap-2 text-xs text-slate-200/80">
-          <LifeBuoy className="h-4 w-4 text-emerald-200/80" />
-          <span>Need help?</span>
-          <a className="text-white underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
-            {SUPPORT_EMAIL}
-          </a>
+      <div className="relative z-10 flex w-full flex-col px-8 py-10 sm:px-10 lg:min-h-screen lg:px-12 lg:py-14">
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Image
+              src="/logo.png"
+              alt="Caribeae logo"
+              width={140}
+              height={140}
+              className="h-16 w-auto object-contain sm:h-20"
+              priority
+            />
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-200/80">
+              {copy.brandEyebrow}
+            </p>
+            <h2 className="text-2xl font-semibold leading-tight text-white sm:text-3xl">
+              {copy.brandHeading}
+            </h2>
+          </div>
         </div>
       </div>
     </section>
@@ -149,14 +121,6 @@ export function AuthPanel({
     >
       {children}
     </section>
-  );
-}
-
-function LogoMark() {
-  return (
-    <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
-      <Image src="/logo.png" alt="Caribeae logo" width={44} height={44} className="h-11 w-11 object-contain" />
-    </div>
   );
 }
 
