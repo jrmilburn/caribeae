@@ -4,7 +4,10 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { isValidE164, normalizeEmail, normalizePhone } from "@/lib/auth/identity";
 import { publicOnboardingRequestSchema } from "@/lib/onboarding/schema";
+import { findEligibleFamilyForIdentifiers } from "@/server/auth/eligibility";
+import { resolveFamilyName } from "@/server/onboarding/resolveFamilyName";
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
@@ -49,6 +52,7 @@ function checkRateLimit(key: string) {
 const submitResultSchema = z.object({
   ok: z.boolean(),
   id: z.string().optional(),
+  familyId: z.string().optional(),
   error: z.string().optional(),
 });
 
@@ -69,19 +73,56 @@ export async function submitOnboardingRequest(
     return { ok: false, error: "Too many requests. Please try again shortly." };
   }
 
-  const created = await prisma.onboardingRequest.create({
-    data: {
-      guardianName: payload.contact.guardianName,
-      phone: payload.contact.phone,
-      email: payload.contact.email,
-      emergencyContactName: payload.contact.emergencyContactName?.trim() || null,
-      emergencyContactPhone: payload.contact.emergencyContactPhone?.trim() || null,
-      address: payload.contact.address?.trim() || null,
-      studentsJson: payload.students,
-      availabilityJson: payload.availability,
-      status: "NEW",
-    },
+  const normalizedEmail = normalizeEmail(payload.contact.email);
+  const normalizedPhoneRaw = normalizePhone(payload.contact.phone);
+  const normalizedPhone = isValidE164(normalizedPhoneRaw) ? normalizedPhoneRaw : null;
+
+  const emergencyContactName = payload.contact.emergencyContactName?.trim() || null;
+  const emergencyContactPhone = payload.contact.emergencyContactPhone?.trim() || null;
+  const address = payload.contact.address?.trim() || null;
+
+  const existingFamily = await findEligibleFamilyForIdentifiers(
+    normalizedEmail ? [normalizedEmail] : [],
+    normalizedPhone ? [normalizedPhone] : []
+  );
+
+  const created = await prisma.$transaction(async (tx) => {
+    let familyId = existingFamily?.id ?? null;
+
+    if (!familyId) {
+      const family = await tx.family.create({
+        data: {
+          name: resolveFamilyName(payload.contact.guardianName),
+          primaryContactName: payload.contact.guardianName,
+          primaryEmail: normalizedEmail,
+          primaryPhone: normalizedPhone,
+          medicalContactName: emergencyContactName,
+          medicalContactPhone: emergencyContactPhone,
+          address,
+        },
+        select: { id: true },
+      });
+      familyId = family.id;
+    }
+
+    const onboarding = await tx.onboardingRequest.create({
+      data: {
+        guardianName: payload.contact.guardianName,
+        phone: normalizedPhone ?? payload.contact.phone.trim(),
+        email: normalizedEmail,
+        emergencyContactName,
+        emergencyContactPhone,
+        address,
+        studentsJson: payload.students,
+        availabilityJson: payload.availability,
+        status: "NEW",
+        familyId,
+      },
+      select: { id: true, familyId: true },
+    });
+
+    return onboarding;
   });
 
-  return { ok: true, id: created.id };
+  return { ok: true, id: created.id, familyId: created.familyId ?? undefined };
 }

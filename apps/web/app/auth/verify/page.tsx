@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthShell, InlineErrorSlot, LoadingButton, OtpInput } from "@/components/auth/AuthShell";
 import { maskIdentifier, type IdentifierType } from "@/lib/auth/identity";
 
 type PendingAuth = {
@@ -34,8 +32,6 @@ export default function VerifyPage() {
   const [resendCountdown, setResendCountdown] = React.useState(RESEND_SECONDS);
   const [isResending, setIsResending] = React.useState(false);
 
-  const inputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
-
   React.useEffect(() => {
     const raw = sessionStorage.getItem("caribeae.auth.pending");
     if (!raw) return;
@@ -49,8 +45,6 @@ export default function VerifyPage() {
 
   React.useEffect(() => {
     if (!pending) return;
-    const firstInput = inputRefs.current[0];
-    firstInput?.focus();
     if (pending.startedAt) {
       const elapsed = Math.floor((Date.now() - pending.startedAt) / 1000);
       setResendCountdown(Math.max(0, RESEND_SECONDS - elapsed));
@@ -66,66 +60,6 @@ export default function VerifyPage() {
   }, [resendCountdown]);
 
   const code = digits.join("");
-
-  const updateDigit = (index: number, value: string) => {
-    setDigits((prev) => {
-      const next = [...prev];
-      next[index] = value;
-      return next;
-    });
-  };
-
-  const handleInputChange = (index: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value.replace(/\D/g, "");
-    if (!value) {
-      updateDigit(index, "");
-      setError(null);
-      return;
-    }
-
-    const digit = value.slice(-1);
-    updateDigit(index, digit);
-    setError(null);
-
-    if (index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index: number) => (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      handleVerify();
-      return;
-    }
-    if (event.key === "Backspace") {
-      if (digits[index]) {
-        updateDigit(index, "");
-        return;
-      }
-      if (index > 0) {
-        inputRefs.current[index - 1]?.focus();
-      }
-    }
-  };
-
-  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    const text = event.clipboardData.getData("text").replace(/\D/g, "");
-    if (!text) return;
-    event.preventDefault();
-    setError(null);
-
-    const nextDigits = Array(OTP_LENGTH)
-      .fill("")
-      .map((_, idx) => text[idx] ?? "");
-
-    setDigits(nextDigits);
-
-    const lastIndex = Math.min(text.length, OTP_LENGTH) - 1;
-    if (lastIndex >= 0) {
-      inputRefs.current[lastIndex]?.focus();
-    }
-  };
 
   const clearPending = () => {
     sessionStorage.removeItem("caribeae.auth.pending");
@@ -199,12 +133,6 @@ export default function VerifyPage() {
     signUpLoaded,
   ]);
 
-  React.useEffect(() => {
-    if (pending && code.length === OTP_LENGTH && !isSubmitting) {
-      handleVerify();
-    }
-  }, [code, handleVerify, isSubmitting, pending]);
-
   const handleResend = async () => {
     if (!pending || isResending || resendCountdown > 0 || isSubmitting) return;
     setIsResending(true);
@@ -252,19 +180,20 @@ export default function VerifyPage() {
   if (!pending) {
     return (
       <AuthShell>
-        <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-2xl">Verification needed</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Your verification session has expired. Start again to get a new code.
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              Verification needed
             </p>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" onClick={() => router.push("/auth")}>
-              Back to sign in
-            </Button>
-          </CardContent>
-        </Card>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Start again</h1>
+            <p className="text-sm text-muted-foreground">
+              Your verification session has expired. Request a new code to continue.
+            </p>
+          </div>
+          <Button className="w-full sm:w-auto" onClick={() => router.push("/auth")}>
+            Back to sign in
+          </Button>
+        </div>
       </AuthShell>
     );
   }
@@ -273,81 +202,73 @@ export default function VerifyPage() {
 
   return (
     <AuthShell>
-      <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl">Enter your code</CardTitle>
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            Verification
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Enter your code</h1>
           <p className="text-sm text-muted-foreground">
             We sent a 6-digit code to <span className="font-medium text-foreground">{masked}</span>.
           </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-3" onPaste={handlePaste}>
-            <div className="flex justify-between gap-2">
-              {digits.map((digit, index) => (
-                <input
-                  key={`otp-${index}`}
-                  ref={(el) => {
-                    inputRefs.current[index] = el;
-                  }}
-                  value={digit}
-                  onChange={handleInputChange(index)}
-                  onKeyDown={handleKeyDown(index)}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="one-time-code"
-                  className="h-12 w-12 rounded-xl border border-input text-center text-lg font-semibold shadow-xs focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                  maxLength={1}
-                  disabled={isSubmitting}
-                  aria-label={`Digit ${index + 1}`}
-                  aria-invalid={Boolean(error)}
-                />
-              ))}
-            </div>
-            <div
-              className="min-h-[20px] text-xs text-destructive transition-opacity"
-              aria-live="polite"
-            >
-              {error ? error : null}
-            </div>
-          </div>
+        </div>
 
-          <Button
-            className="w-full"
-            onClick={handleVerify}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleVerify();
+          }}
+          className="space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1"
+        >
+          <OtpInput
+            value={digits}
+            onChange={(next) => {
+              setDigits(next);
+              if (error) setError(null);
+            }}
+            length={OTP_LENGTH}
             disabled={isSubmitting}
-            aria-busy={isSubmitting}
-          >
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            <span>{isSubmitting ? "Verifying" : "Verify"}</span>
-          </Button>
+            error={Boolean(error)}
+            autoFocus
+            onComplete={() => {
+              if (!isSubmitting) {
+                handleVerify();
+              }
+            }}
+          />
+          <InlineErrorSlot message={error} />
 
-          <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resendCountdown > 0 || isResending || isSubmitting}
-              className="text-sm font-medium text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-            >
-              {resendCountdown > 0
-                ? `Resend code in ${resendCountdown}s`
-                : isResending
-                  ? "Resending..."
-                  : "Resend code"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                clearPending();
-                router.push("/auth");
-              }}
-              disabled={isSubmitting}
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Change email or phone
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+          <LoadingButton type="submit" isLoading={isSubmitting} loadingText="Verifying">
+            Verify
+          </LoadingButton>
+        </form>
+
+        <div className="flex flex-col items-start gap-2 text-sm text-muted-foreground">
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resendCountdown > 0 || isResending || isSubmitting}
+            className="text-sm font-medium text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+          >
+            {resendCountdown > 0
+              ? `Resend code in ${resendCountdown}s`
+              : isResending
+                ? "Resending..."
+                : "Resend code"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              clearPending();
+              router.push("/auth");
+            }}
+            disabled={isSubmitting}
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Change email or phone
+          </button>
+        </div>
+      </div>
     </AuthShell>
   );
 }

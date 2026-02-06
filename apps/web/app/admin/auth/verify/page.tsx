@@ -216,7 +216,7 @@ export default function AdminVerifyPage() {
 
   if (!pending) {
     return (
-      <AuthShell>
+      <AuthShell mode="admin">
         <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
           <CardHeader className="space-y-2">
             <CardTitle className="text-2xl">Verification needed</CardTitle>
@@ -237,7 +237,7 @@ export default function AdminVerifyPage() {
   const masked = pending.masked || maskIdentifier(pending.identifier, pending.type);
 
   return (
-    <AuthShell>
+    <AuthShell mode="admin">
       <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">Enter your code</CardTitle>

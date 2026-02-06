@@ -7,6 +7,7 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { onboardingRequestSchema } from "@/lib/onboarding/schema";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
+import { resolveFamilyName } from "@/server/onboarding/resolveFamilyName";
 
 const assignmentSchema = z.object({
   studentIndex: z.number().int().nonnegative(),
@@ -22,12 +23,6 @@ const acceptSchema = z.object({
   mode: z.enum(["later", "assign"]),
   assignments: z.array(assignmentSchema).optional(),
 });
-
-function resolveFamilyName(guardianName: string) {
-  const tokens = guardianName.trim().split(/\s+/).filter(Boolean);
-  const last = tokens[tokens.length - 1] ?? guardianName.trim();
-  return `${last} Family`;
-}
 
 function parseDate(date?: string | null) {
   if (!date) return null;
@@ -81,7 +76,7 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
     }
   }
 
-  let createdFamilyId = payload.familyId ?? null;
+  let createdFamilyId = payload.familyId ?? request.familyId ?? null;
   let createdFamilyName: string | null = null;
   let createdStudentIds: Array<{ id: string; index: number }> = [];
   let familyWasCreated = false;

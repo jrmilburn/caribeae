@@ -131,7 +131,7 @@ export default function AdminAuthPage() {
       : "Admin email or mobile number.";
 
   return (
-    <AuthShell>
+    <AuthShell mode="admin">
       <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">Admin access</CardTitle>

@@ -2,14 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { useSignIn, useSignUp } from "@clerk/nextjs";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthShell, InlineErrorSlot, LoadingButton } from "@/components/auth/AuthShell";
 import {
   detectIdentifierType,
   isValidE164,
@@ -158,57 +155,51 @@ export default function AuthPage() {
 
   return (
     <AuthShell>
-      <Card className="w-full rounded-2xl border border-border/60 shadow-md sm:border-border">
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Enter your email or mobile number to get a one-time code.
+      <div className="space-y-8">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            Welcome back
           </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="identifier">Email or mobile number</Label>
-              <Input
-                id="identifier"
-                name="identifier"
-                ref={inputRef}
-                value={identifier}
-                onChange={(event) => {
-                  setIdentifier(event.target.value);
-                  if (error) setError(null);
-                }}
-                type={detectedType === "email" ? "email" : "tel"}
-                inputMode={detectedType === "email" ? "email" : "tel"}
-                autoComplete={detectedType === "email" ? "email" : "tel"}
-                autoCorrect="off"
-                autoCapitalize="none"
-                enterKeyHint="send"
-                placeholder="name@example.com or 0412 345 678"
-                disabled={isLoading}
-                aria-invalid={Boolean(error)}
-              />
-              <p className="text-xs text-muted-foreground">{helperText}</p>
-              <div
-                className="min-h-[20px] text-xs text-destructive transition-opacity"
-                aria-live="polite"
-              >
-                {error ? error : null}
-              </div>
-            </div>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in securely</h1>
+          <p className="text-sm text-muted-foreground">
+            Enter your email or mobile number and we&apos;ll send a one-time code.
+          </p>
+        </div>
 
-            <Button
-              type="submit"
-              className="w-full"
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="identifier">Email or mobile number</Label>
+            <Input
+              id="identifier"
+              name="identifier"
+              ref={inputRef}
+              value={identifier}
+              onChange={(event) => {
+                setIdentifier(event.target.value);
+                if (error) setError(null);
+              }}
+              type={detectedType === "email" ? "email" : "tel"}
+              inputMode={detectedType === "email" ? "email" : "tel"}
+              autoComplete={detectedType === "email" ? "email" : "tel"}
+              autoCorrect="off"
+              autoCapitalize="none"
+              enterKeyHint="send"
+              placeholder="name@example.com or 0412 345 678"
               disabled={isLoading}
-              aria-busy={isLoading}
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              <span>{isLoading ? "Sending code" : "Send code"}</span>
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              aria-invalid={Boolean(error)}
+            />
+            <p className="text-xs text-muted-foreground">{helperText}</p>
+            <InlineErrorSlot message={error} />
+          </div>
+
+          <LoadingButton type="submit" isLoading={isLoading} loadingText="Sending code">
+            Send code
+          </LoadingButton>
+        </form>
+      </div>
     </AuthShell>
   );
 }
