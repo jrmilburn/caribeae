@@ -210,9 +210,26 @@ export default function VerifyPage() {
     try {
       if (pending.flow === "signIn") {
         if (!signInLoaded || !signIn) throw new Error("Sign-in not ready");
-        await signIn.prepareFirstFactor({
-          strategy: pending.type === "email" ? "email_code" : "phone_code",
-        });
+        const factors = signIn.supportedFirstFactors ?? [];
+        if (pending.type === "email") {
+          const emailFactor = factors.find((factor) => factor.strategy === "email_code");
+          if (!emailFactor || !("emailAddressId" in emailFactor)) {
+            throw new Error("Email factor not available");
+          }
+          await signIn.prepareFirstFactor({
+            strategy: "email_code",
+            emailAddressId: emailFactor.emailAddressId,
+          });
+        } else {
+          const phoneFactor = factors.find((factor) => factor.strategy === "phone_code");
+          if (!phoneFactor || !("phoneNumberId" in phoneFactor)) {
+            throw new Error("Phone factor not available");
+          }
+          await signIn.prepareFirstFactor({
+            strategy: "phone_code",
+            phoneNumberId: phoneFactor.phoneNumberId,
+          });
+        }
       } else {
         if (!signUpLoaded || !signUp) throw new Error("Sign-up not ready");
         if (pending.type === "email") {

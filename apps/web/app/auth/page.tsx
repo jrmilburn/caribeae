@@ -101,9 +101,27 @@ export default function AuthPage() {
 
       if (start.flow === "signIn") {
         const signInAttempt = await signIn.create({ identifier: normalized });
-        await signInAttempt.prepareFirstFactor({
-          strategy: type === "email" ? "email_code" : "phone_code",
-        });
+        const factors = signInAttempt.supportedFirstFactors ?? [];
+
+        if (type === "email") {
+          const emailFactor = factors.find((factor) => factor.strategy === "email_code");
+          if (!emailFactor || !("emailAddressId" in emailFactor)) {
+            throw new Error("Email factor not available");
+          }
+          await signInAttempt.prepareFirstFactor({
+            strategy: "email_code",
+            emailAddressId: emailFactor.emailAddressId,
+          });
+        } else {
+          const phoneFactor = factors.find((factor) => factor.strategy === "phone_code");
+          if (!phoneFactor || !("phoneNumberId" in phoneFactor)) {
+            throw new Error("Phone factor not available");
+          }
+          await signInAttempt.prepareFirstFactor({
+            strategy: "phone_code",
+            phoneNumberId: phoneFactor.phoneNumberId,
+          });
+        }
       } else {
         if (type === "email") {
           const signUpAttempt = await signUp.create({ emailAddress: normalized });
