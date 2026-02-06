@@ -1,10 +1,14 @@
 // app/(protected)/layout.tsx
+import { Suspense } from "react";
+
 import { AppNavbar } from "@/components/navbar/navbar";
 import { AppFooter } from "./footer";
-import { Suspense } from "react";
 import { SettingsShell } from "./settings/SettingsShell";
+import { ensureAdminAccess } from "@/server/admin/ensureAdminAccess";
 
-export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
+export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  await ensureAdminAccess();
+
   return (
     <Suspense fallback={null}>
     <AppNavbar>

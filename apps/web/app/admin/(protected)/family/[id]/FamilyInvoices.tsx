@@ -23,8 +23,8 @@ import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 
-import { InvoiceForm } from "@/app/admin/billing/components/InvoiceForm";
-import { PaymentForm } from "@/app/admin/billing/components/PaymentForm";
+import { InvoiceForm } from "@/app/admin/(protected)/billing/components/InvoiceForm";
+import { PaymentForm } from "@/app/admin/(protected)/billing/components/PaymentForm";
 import { CatchUpPaymentDialog } from "./CatchUpPaymentDialog";
 import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 

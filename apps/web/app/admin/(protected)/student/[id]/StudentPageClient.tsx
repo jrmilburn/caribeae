@@ -26,7 +26,7 @@ import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 
 import type { ClientStudentWithRelations } from "./types";
 import { StudentEnrolmentsSection } from "./StudentEnrolmentsSection";
-import { StudentModal } from "@/app/admin/family/[id]/StudentModal";
+import { StudentModal } from "@/app/admin/(protected)/family/[id]/StudentModal";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
@@ -35,7 +35,7 @@ import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
 import { StudentBillingPanel } from "@/components/admin/student/StudentBillingPanel";
 import { StudentDetailsPanel } from "@/components/admin/student/StudentDetailsPanel";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
-import { dayLabel } from "@/app/admin/class/[id]/utils/time";
+import { dayLabel } from "@/app/admin/(protected)/class/[id]/utils/time";
 import {
   formatScheduleWeekdayTime,
   scheduleAddDays,

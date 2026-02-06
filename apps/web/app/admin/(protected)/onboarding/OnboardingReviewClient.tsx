@@ -46,7 +46,7 @@ import {
   type ScheduleClassClickContext,
 } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
-import { resolveSelectionDay, isSaturdayOccurrence } from "@/app/admin/student/[id]/dayUtils";
+import { resolveSelectionDay, isSaturdayOccurrence } from "@/app/admin/(protected)/student/[id]/dayUtils";
 
 import type { OnboardingRequestSummary } from "@/server/onboarding/listOnboardingRequests";
 import type { OnboardingFamilyMatch } from "@/server/onboarding/findMatchingFamilies";
