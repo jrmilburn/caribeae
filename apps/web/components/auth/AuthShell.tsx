@@ -1,40 +1,39 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { CheckCircle2, LifeBuoy, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 type AuthShellMode = "client" | "admin";
+const SUPPORT_EMAIL = "rachele@caribeae.com.au";
 
 const COPY: Record<AuthShellMode, {
   headerLabel: string;
   brandEyebrow: string;
   brandHeading: string;
-  brandCopy: string;
   bullets: string[];
 }> = {
   client: {
     headerLabel: "Client Portal",
     brandEyebrow: "Client Portal",
-    brandHeading: "A calm, secure place to manage your swim journey.",
-    brandCopy: "Access schedules, enrolments, invoices, and updates with a one-time code.",
+    brandHeading: "Your family portal, streamlined.",
     bullets: [
-      "OTP-only access keeps your account protected.",
-      "Switch devices without resetting passwords.",
-      "Instant updates once your family is approved.",
+      "One-time codes only.",
+      "Access schedules and updates.",
+      "Designed for mobile.",
     ],
   },
   admin: {
     headerLabel: "Admin Portal",
     brandEyebrow: "Staff Access",
-    brandHeading: "Secure access for staff and operations.",
-    brandCopy: "Manage schedules, families, and payments with a one-time code.",
+    brandHeading: "Staff access, verified.",
     bullets: [
-      "Staff-only OTP access with no passwords.",
-      "Fast entry to scheduling and billing tools.",
-      "Protected by your Caribeae admin account.",
+      "OTP-only sign in.",
+      "Quick access to admin tools.",
+      "Session protected.",
     ],
   },
 };
@@ -53,9 +52,7 @@ export function AuthShell({
         <AuthPanel className="order-1 lg:order-2">
           <div className="flex min-h-screen flex-col px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
             <header className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-900 text-sm font-semibold text-white shadow-sm">
-                C
-              </div>
+              <LogoMark />
               <div className="space-y-0.5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
                   Caribeae
@@ -73,18 +70,9 @@ export function AuthShell({
             <footer className="mt-10 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <a
                 className="rounded-full border border-transparent px-2 py-1 transition hover:border-slate-200 hover:text-slate-900"
-                href="https://caribeae.com"
-                target="_blank"
-                rel="noreferrer"
+                href={`mailto:${SUPPORT_EMAIL}`}
               >
-                caribeae.com
-              </a>
-              <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" />
-              <a
-                className="rounded-full border border-transparent px-2 py-1 transition hover:border-slate-200 hover:text-slate-900"
-                href="mailto:billing@caribeae.com"
-              >
-                billing@caribeae.com
+                {SUPPORT_EMAIL}
               </a>
             </footer>
           </div>
@@ -112,6 +100,7 @@ export function BrandPanel({
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.14),_transparent_45%)]" />
+      <div className="absolute inset-0 bg-[url('/globe.svg')] bg-[length:420px] bg-right-top bg-no-repeat opacity-20" />
       <div className="absolute -right-16 -top-10 h-64 w-64 rounded-full bg-emerald-400/20 blur-3xl" />
       <div className="absolute -left-24 bottom-0 h-64 w-64 rounded-full bg-sky-400/10 blur-3xl" />
 
@@ -121,7 +110,6 @@ export function BrandPanel({
             {copy.brandEyebrow}
           </p>
           <h2 className="text-2xl font-semibold leading-tight sm:text-3xl">{copy.brandHeading}</h2>
-          <p className="text-sm text-slate-200/80">{copy.brandCopy}</p>
         </div>
 
         <ul className="mt-8 space-y-3 text-sm text-slate-200/90">
@@ -136,8 +124,8 @@ export function BrandPanel({
         <div className="mt-8 flex items-center gap-2 text-xs text-slate-200/80">
           <LifeBuoy className="h-4 w-4 text-emerald-200/80" />
           <span>Need help?</span>
-          <a className="text-white underline-offset-4 hover:underline" href="mailto:billing@caribeae.com">
-            billing@caribeae.com
+          <a className="text-white underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+            {SUPPORT_EMAIL}
           </a>
         </div>
       </div>
@@ -161,6 +149,14 @@ export function AuthPanel({
     >
       {children}
     </section>
+  );
+}
+
+function LogoMark() {
+  return (
+    <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+      <Image src="/logo.png" alt="Caribeae logo" width={44} height={44} className="h-11 w-11 object-contain" />
+    </div>
   );
 }
 
