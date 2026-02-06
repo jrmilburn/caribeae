@@ -146,7 +146,10 @@ export default function VerifyPage() {
     try {
       if (pending.flow === "signIn") {
         if (!signInLoaded || !signIn) throw new Error("Sign-in not ready");
-        const result = await signIn.attemptFirstFactor({ code });
+        const result = await signIn.attemptFirstFactor({
+          strategy: pending.type === "email" ? "email_code" : "phone_code",
+          code,
+        });
         if (result.status !== "complete") {
           setError("That code didn't work. Try again.");
           setIsSubmitting(false);
