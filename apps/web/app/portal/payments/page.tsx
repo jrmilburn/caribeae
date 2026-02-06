@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PortalBlockedState } from "@/components/portal/PortalBlockedState";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { getFamilyForCurrentUser } from "@/server/portal/getFamilyForCurrentUser";
@@ -14,11 +13,11 @@ export default async function PortalPaymentsPage() {
   const access = await getFamilyForCurrentUser();
 
   if (access.status === "SIGNED_OUT") {
-    redirect("/sign-in");
+    redirect("/auth");
   }
 
   if (access.status !== "OK") {
-    return <PortalBlockedState />;
+    redirect("/auth/error");
   }
 
   const payments = await getFamilyPayments(access.family.id);

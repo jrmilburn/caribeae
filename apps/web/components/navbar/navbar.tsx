@@ -204,7 +204,7 @@ function AccountMenu() {
   if (!isSignedIn) {
     return (
       <Button asChild variant="outline" className="gap-2">
-        <Link href="/sign-in">
+        <Link href="/auth">
           <LogIn className="h-4 w-4" />
           Sign in
         </Link>
@@ -219,7 +219,7 @@ function AccountMenu() {
 
   const handleSignOut = async () => {
     // Send them somewhere public after sign out
-    await signOut(() => router.push("/sign-in"));
+    await signOut(() => router.push("/auth"));
   };
 
   return (
@@ -293,7 +293,7 @@ function UserBlock() {
           </div>
         </div>
         <Button asChild size="sm" variant="outline">
-          <Link href="/sign-in">Sign in</Link>
+          <Link href="/auth">Sign in</Link>
         </Button>
       </div>
     );
@@ -305,7 +305,7 @@ function UserBlock() {
   const initials = getInitials(name ?? email);
 
   const handleSignOut = async () => {
-    await signOut(() => router.push("/sign-in"));
+    await signOut(() => router.push("/auth"));
   };
 
   return (

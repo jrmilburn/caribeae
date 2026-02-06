@@ -1,49 +1,54 @@
 import "server-only";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
+import { findEligibleFamilyForUser } from "@/server/auth/resolveFamily";
 
 export type FamilyAccessResult =
   | { status: "SIGNED_OUT" }
-  | { status: "NO_MATCH"; emails: string[] }
+  | { status: "NO_MATCH" }
   | { status: "OK"; family: { id: string; name: string } };
 
-function normalizeEmail(value: string | null | undefined) {
-  return value?.trim().toLowerCase() ?? "";
-}
-
 export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
-  const { userId } = await auth();
+  const { userId, sessionId } = await auth();
   if (!userId) return { status: "SIGNED_OUT" };
 
-  const user = await currentUser();
-  const emails = Array.from(
-    new Set(
-      (user?.emailAddresses ?? [])
-        .map((entry) => normalizeEmail(entry.emailAddress))
-        .filter(Boolean)
-    )
-  );
-
-  if (!emails.length) return { status: "NO_MATCH", emails: [] };
-
-  const emailFilters = emails.flatMap((email) => [
-    { primaryEmail: { equals: email, mode: "insensitive" as const } },
-    { secondaryEmail: { equals: email, mode: "insensitive" as const } },
-  ]);
-
-  const family = await prisma.family.findFirst({
-    where: {
-      OR: emailFilters,
-    },
-    select: {
-      id: true,
-      name: true,
-    },
+  const mappedUser = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { familyId: true },
   });
 
-  if (!family) return { status: "NO_MATCH", emails };
+  if (mappedUser?.familyId) {
+    const family = await prisma.family.findUnique({
+      where: { id: mappedUser.familyId },
+      select: { id: true, name: true },
+    });
+    if (family) return { status: "OK", family };
+  }
+
+  const clerkUser = await currentUser();
+  const family = await findEligibleFamilyForUser(clerkUser);
+
+  if (!family) {
+    if (sessionId) {
+      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+    }
+    return { status: "NO_MATCH" };
+  }
+
+  try {
+    await prisma.user.upsert({
+      where: { clerkId: userId },
+      create: { clerkId: userId, familyId: family.id },
+      update: { familyId: family.id },
+    });
+  } catch (error) {
+    if (sessionId) {
+      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+    }
+    return { status: "NO_MATCH" };
+  }
 
   return { status: "OK", family };
 }
