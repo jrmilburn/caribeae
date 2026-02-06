@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: NOT_ELIGIBLE_MESSAGE }, { status: 403 });
   }
 
-  const userList = await clerkClient.users.getUserList({
+  const { users } = await clerkClient();
+  const userList = await users.getUserList({
     limit: 1,
     emailAddress: payload.type === "email" ? [normalized] : undefined,
     phoneNumber: payload.type === "phone" ? [normalized] : undefined,

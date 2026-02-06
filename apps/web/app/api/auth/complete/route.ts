@@ -26,6 +26,7 @@ export async function POST() {
     return NextResponse.json({ ok: false, error: "Unauthorized." }, { status: 401 });
   }
 
+  const { sessions } = await clerkClient();
   const cookieStore = await cookies();
   const token = cookieStore.get("caribeae_auth")?.value;
   const pending = token ? consumePendingAuth(token) : null;
@@ -41,7 +42,7 @@ export async function POST() {
 
   if (!resolvedFamilyId) {
     if (sessionId) {
-      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+      await sessions.revokeSession(sessionId).catch(() => null);
     }
     const response = NextResponse.json({ ok: false, error: GENERIC_ERROR }, { status: 403 });
     clearPendingCookie(response);
@@ -56,7 +57,7 @@ export async function POST() {
     });
   } catch (error) {
     if (sessionId) {
-      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+      await sessions.revokeSession(sessionId).catch(() => null);
     }
     const response = NextResponse.json({ ok: false, error: GENERIC_ERROR }, { status: 500 });
     clearPendingCookie(response);

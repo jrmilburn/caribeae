@@ -14,6 +14,7 @@ export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
   const { userId, sessionId } = await auth();
   if (!userId) return { status: "SIGNED_OUT" };
 
+  const { sessions } = await clerkClient();
   const mappedUser = await prisma.user.findUnique({
     where: { clerkId: userId },
     select: { familyId: true },
@@ -32,7 +33,7 @@ export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
 
   if (!family) {
     if (sessionId) {
-      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+      await sessions.revokeSession(sessionId).catch(() => null);
     }
     return { status: "NO_MATCH" };
   }
@@ -45,7 +46,7 @@ export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
     });
   } catch (error) {
     if (sessionId) {
-      await clerkClient.sessions.revokeSession(sessionId).catch(() => null);
+      await sessions.revokeSession(sessionId).catch(() => null);
     }
     return { status: "NO_MATCH" };
   }
