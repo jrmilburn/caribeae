@@ -16,11 +16,11 @@ const COPY: Record<AuthShellMode, {
 }> = {
   client: {
     brandEyebrow: "Client Portal",
-    brandHeading: "Your family portal, streamlined.",
+    brandHeading: "Caribeae",
   },
   admin: {
-    brandEyebrow: "Staff Access",
-    brandHeading: "Staff access, verified.",
+    brandEyebrow: "Admin Portal",
+    brandHeading: "Caribeae",
   },
 };
 
