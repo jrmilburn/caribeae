@@ -160,10 +160,7 @@ export default function AuthPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
             Welcome back
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in securely</h1>
-          <p className="text-sm text-muted-foreground">
-            Enter your email or mobile number and we&apos;ll send a one-time code.
-          </p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in</h1>
         </div>
 
         <form
@@ -171,7 +168,7 @@ export default function AuthPage() {
           className="space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1"
         >
           <div className="space-y-2">
-            <Label htmlFor="identifier">Email or mobile number</Label>
+            <Label htmlFor="identifier">{helperText}</Label>
             <Input
               id="identifier"
               name="identifier"
@@ -191,7 +188,6 @@ export default function AuthPage() {
               disabled={isLoading}
               aria-invalid={Boolean(error)}
             />
-            <p className="text-xs text-muted-foreground">{helperText}</p>
             <InlineErrorSlot message={error} />
           </div>
 

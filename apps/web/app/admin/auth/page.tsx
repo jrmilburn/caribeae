@@ -134,10 +134,7 @@ export default function AdminAuthPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
             Admin access
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in to admin</h1>
-          <p className="text-sm text-muted-foreground">
-            Enter your admin email or mobile number to get a one-time code.
-          </p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in</h1>
         </div>
 
         <form
@@ -145,7 +142,7 @@ export default function AdminAuthPage() {
           className="space-y-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1"
         >
           <div className="space-y-2">
-            <Label htmlFor="identifier">Admin email or mobile number</Label>
+            <Label htmlFor="identifier">{helperText}</Label>
             <Input
               id="identifier"
               name="identifier"
@@ -165,7 +162,6 @@ export default function AdminAuthPage() {
               disabled={isLoading}
               aria-invalid={Boolean(error)}
             />
-            <p className="text-xs text-muted-foreground">{helperText}</p>
             <InlineErrorSlot message={error} />
           </div>
 
