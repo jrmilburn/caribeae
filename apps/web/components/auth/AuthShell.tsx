@@ -38,18 +38,20 @@ export function AuthShell({
         <BrandPanel className="order-1" mode={mode} />
         <AuthPanel className="order-2">
           <div className="flex min-h-screen flex-col">
-            <div className="flex flex-1 flex-col justify-center">
-              <div className="mx-auto w-full max-w-md px-6 py-10 sm:px-10 lg:px-12">
+            <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10 lg:px-12">
+              <div className="w-full max-w-md">
                 <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2">
                   {children}
                 </div>
               </div>
             </div>
-            <div className="mx-auto w-full max-w-md px-6 pb-10 text-xs text-muted-foreground sm:px-10 lg:px-12">
-              <span>Need help? </span>
-              <a className="text-slate-900 underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
-                {SUPPORT_EMAIL}
-              </a>
+            <div className="flex items-center justify-center px-6 pb-10 text-xs text-muted-foreground sm:px-10 lg:px-12">
+              <div className="w-full max-w-md">
+                <span>Need help? </span>
+                <a className="text-slate-900 underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+                  {SUPPORT_EMAIL}
+                </a>
+              </div>
             </div>
           </div>
         </AuthPanel>
