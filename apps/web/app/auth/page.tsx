@@ -155,8 +155,8 @@ export default function AuthPage() {
 
   return (
     <AuthShell>
-      <div className="space-y-8">
-        <div className="space-y-3">
+      <div className="space-y-8 w-full">
+        <div className="space-y-3 w-full">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
             Welcome back
           </p>
