@@ -27,32 +27,71 @@ const COPY: Record<AuthShellMode, {
 export function AuthShell({
   children,
   mode = "client",
+  header,
+  footer,
+  contentMaxWidthClassName = "max-w-md",
+  contentClassName,
+  mainClassName,
+  headerClassName,
+  footerClassName,
 }: {
   children: React.ReactNode;
   mode?: AuthShellMode;
+  header?: React.ReactNode;
+  footer?: React.ReactNode;
+  contentMaxWidthClassName?: string;
+  contentClassName?: string;
+  mainClassName?: string;
+  headerClassName?: string;
+  footerClassName?: string;
 }) {
-  const copy = COPY[mode];
+  const contentClasses = cn("w-full", contentMaxWidthClassName, contentClassName);
+  const footerContent =
+    footer === undefined ? (
+      <>
+        <span>Need help? </span>
+        <a className="text-slate-900 underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+          {SUPPORT_EMAIL}
+        </a>
+      </>
+    ) : (
+      footer
+    );
+  const footerTone = footer === undefined ? "text-xs text-muted-foreground" : "";
   return (
     <div className="min-h-[100dvh] min-h-screen w-full overflow-hidden bg-slate-50 text-slate-900">
       <div className="grid min-h-[100dvh] w-full grid-rows-[auto_1fr] lg:grid-cols-[45%_55%] lg:grid-rows-1">
         <BrandPanel className="order-1" mode={mode} />
         <AuthPanel className="order-2">
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="flex flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-8 lg:px-12 lg:py-10">
-              <div className="w-full max-w-md">
+          <div className="flex h-full min-h-0 flex-col w-full">
+            {header ? (
+              <div className={cn("px-6 pt-6 sm:px-10 lg:px-12", headerClassName)}>
+                <div className={contentClasses}>{header}</div>
+              </div>
+            ) : null}
+            <div
+              className={cn(
+                "flex flex-1 items-center justify-center px-6 py-6 sm:px-10 sm:py-8 lg:px-12 lg:py-10",
+                mainClassName
+              )}
+            >
+              <div className={contentClasses}>
                 <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2">
                   {children}
                 </div>
               </div>
             </div>
-            <div className="mt-auto flex items-center justify-center px-6 pb-6 text-xs text-muted-foreground sm:px-10 lg:px-12">
-              <div className="w-full max-w-md">
-                <span>Need help? </span>
-                <a className="text-slate-900 underline-offset-4 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
-                  {SUPPORT_EMAIL}
-                </a>
+            {footerContent ? (
+              <div
+                className={cn(
+                  "mt-auto flex items-center justify-center px-6 pb-6 sm:px-10 lg:px-12",
+                  footerTone,
+                  footerClassName
+                )}
+              >
+                <div className={contentClasses}>{footerContent}</div>
               </div>
-            </div>
+            ) : null}
           </div>
         </AuthPanel>
       </div>
@@ -81,7 +120,7 @@ export function BrandPanel({
       <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
       <div className="absolute -left-24 bottom-0 h-64 w-64 rounded-full bg-sky-400/10 blur-3xl" />
 
-      <div className="relative z-10 flex h-full w-full flex-col justify-center px-8 py-6 sm:px-10 sm:py-8 lg:min-h-[100dvh] lg:px-12 lg:py-14">
+      <div className="relative z-10 flex h-full w-full flex-col justify-start px-8 py-6 sm:px-10 sm:py-8 lg:min-h-[100dvh] lg:px-12 lg:py-14">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <Image

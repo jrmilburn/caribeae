@@ -58,10 +58,15 @@ const submitResultSchema = z.object({
 
 export type SubmitOnboardingResult = z.infer<typeof submitResultSchema>;
 
+const submitSchema = publicOnboardingRequestSchema.extend({
+  requestId: z.string().trim().optional().nullable(),
+  familyId: z.string().trim().optional().nullable(),
+});
+
 export async function submitOnboardingRequest(
-  input: z.input<typeof publicOnboardingRequestSchema>
+  input: z.input<typeof submitSchema>
 ): Promise<SubmitOnboardingResult> {
-  const payload = publicOnboardingRequestSchema.parse(input);
+  const payload = submitSchema.parse(input);
 
   if (payload.honeypot && payload.honeypot.trim().length > 0) {
     return { ok: false, error: "Unable to submit the request." };
@@ -73,17 +78,75 @@ export async function submitOnboardingRequest(
     return { ok: false, error: "Too many requests. Please try again shortly." };
   }
 
-  const normalizedEmail = normalizeEmail(payload.contact.email);
-  const normalizedPhoneRaw = normalizePhone(payload.contact.phone);
-  const normalizedPhone = isValidE164(normalizedPhoneRaw) ? normalizedPhoneRaw : null;
+  const normalizedEmailRaw = payload.contact.email ? normalizeEmail(payload.contact.email) : "";
+  const normalizedEmail = normalizedEmailRaw ? normalizedEmailRaw : null;
+  const normalizedPhoneRaw = payload.contact.phone ? normalizePhone(payload.contact.phone) : "";
+  const normalizedPhone = normalizedPhoneRaw && isValidE164(normalizedPhoneRaw) ? normalizedPhoneRaw : null;
+
+  const normalizedSecondaryEmailRaw = payload.contact.secondaryEmail
+    ? normalizeEmail(payload.contact.secondaryEmail)
+    : "";
+  const normalizedSecondaryEmail = normalizedSecondaryEmailRaw ? normalizedSecondaryEmailRaw : null;
+  const normalizedSecondaryPhoneRaw = payload.contact.secondaryPhone
+    ? normalizePhone(payload.contact.secondaryPhone)
+    : "";
+  const normalizedSecondaryPhone =
+    normalizedSecondaryPhoneRaw && isValidE164(normalizedSecondaryPhoneRaw) ? normalizedSecondaryPhoneRaw : null;
 
   const emergencyContactName = payload.contact.emergencyContactName?.trim() || null;
   const emergencyContactPhone = payload.contact.emergencyContactPhone?.trim() || null;
   const address = payload.contact.address?.trim() || null;
+  const secondaryContactName = payload.contact.secondaryContactName?.trim() || null;
+
+  if (payload.requestId && payload.familyId) {
+    try {
+      await prisma.$transaction([
+        prisma.family.update({
+          where: { id: payload.familyId },
+          data: {
+            primaryContactName: payload.contact.guardianName,
+            primaryEmail: normalizedEmail,
+            primaryPhone: normalizedPhone,
+            secondaryContactName,
+            secondaryEmail: normalizedSecondaryEmail,
+            secondaryPhone: normalizedSecondaryPhone,
+            medicalContactName: emergencyContactName,
+            medicalContactPhone: emergencyContactPhone,
+            address,
+          },
+        }),
+        prisma.onboardingRequest.update({
+          where: { id: payload.requestId },
+          data: {
+            guardianName: payload.contact.guardianName,
+            phone: normalizedPhone ?? payload.contact.phone?.trim() || null,
+            email: normalizedEmail,
+            secondaryContactName,
+            secondaryEmail: normalizedSecondaryEmail,
+            secondaryPhone: normalizedSecondaryPhone,
+            emergencyContactName,
+            emergencyContactPhone,
+            address,
+            studentsJson: payload.students,
+            availabilityJson: payload.availability,
+          },
+        }),
+      ]);
+      return { ok: true, id: payload.requestId, familyId: payload.familyId };
+    } catch (error) {
+      return { ok: false, error: "Unable to update the request." };
+    }
+  }
 
   const existingFamily = await findEligibleFamilyForIdentifiers(
-    normalizedEmail ? [normalizedEmail] : [],
-    normalizedPhone ? [normalizedPhone] : []
+    [
+      ...(normalizedEmail ? [normalizedEmail] : []),
+      ...(normalizedSecondaryEmail ? [normalizedSecondaryEmail] : []),
+    ],
+    [
+      ...(normalizedPhone ? [normalizedPhone] : []),
+      ...(normalizedSecondaryPhone ? [normalizedSecondaryPhone] : []),
+    ]
   );
 
   const created = await prisma.$transaction(async (tx) => {
@@ -96,6 +159,9 @@ export async function submitOnboardingRequest(
           primaryContactName: payload.contact.guardianName,
           primaryEmail: normalizedEmail,
           primaryPhone: normalizedPhone,
+          secondaryContactName,
+          secondaryEmail: normalizedSecondaryEmail,
+          secondaryPhone: normalizedSecondaryPhone,
           medicalContactName: emergencyContactName,
           medicalContactPhone: emergencyContactPhone,
           address,
@@ -108,8 +174,11 @@ export async function submitOnboardingRequest(
     const onboarding = await tx.onboardingRequest.create({
       data: {
         guardianName: payload.contact.guardianName,
-        phone: normalizedPhone ?? payload.contact.phone.trim(),
+        phone: normalizedPhone ?? payload.contact.phone?.trim() || null,
         email: normalizedEmail,
+        secondaryContactName,
+        secondaryEmail: normalizedSecondaryEmail,
+        secondaryPhone: normalizedSecondaryPhone,
         emergencyContactName,
         emergencyContactPhone,
         address,

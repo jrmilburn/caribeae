@@ -39,10 +39,31 @@ export const onboardingAvailabilitySchema = z.object({
   notes: z.string().trim().max(500).optional().nullable(),
 });
 
+const optionalEmailSchema = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .refine((value) => !value || z.string().email().safeParse(value).success, {
+    message: "Enter a valid email address.",
+  });
+
+const optionalPhoneSchema = z
+  .string()
+  .trim()
+  .optional()
+  .nullable()
+  .refine((value) => !value || value.length >= 6, {
+    message: "Enter a phone number.",
+  });
+
 export const onboardingContactSchema = z.object({
   guardianName: z.string().trim().min(1, "Enter the primary guardian's name."),
-  phone: z.string().trim().min(6, "Enter a phone number."),
-  email: z.string().trim().email("Enter a valid email address."),
+  email: optionalEmailSchema,
+  phone: optionalPhoneSchema,
+  secondaryContactName: z.string().trim().max(200).optional().nullable(),
+  secondaryEmail: optionalEmailSchema,
+  secondaryPhone: optionalPhoneSchema,
   emergencyContactName: z.string().trim().max(200).optional().nullable(),
   emergencyContactPhone: z.string().trim().max(50).optional().nullable(),
   address: z.string().trim().max(400).optional().nullable(),

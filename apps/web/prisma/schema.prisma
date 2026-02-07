@@ -178,6 +178,9 @@ model OnboardingRequest {
   guardianName String
   phone        String?
   email        String?
+  secondaryContactName String?
+  secondaryEmail       String?
+  secondaryPhone       String?
 
   emergencyContactName  String?
   emergencyContactPhone String?
