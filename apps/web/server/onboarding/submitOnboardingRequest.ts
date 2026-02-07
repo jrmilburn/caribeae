@@ -174,7 +174,7 @@ export async function submitOnboardingRequest(
     const onboarding = await tx.onboardingRequest.create({
       data: {
         guardianName: payload.contact.guardianName,
-        phone: normalizedPhone ?? payload.contact.phone?.trim() || null,
+        phone: normalizedPhone ?? (payload.contact.phone?.trim() || null),
         email: normalizedEmail,
         secondaryContactName,
         secondaryEmail: normalizedSecondaryEmail,
