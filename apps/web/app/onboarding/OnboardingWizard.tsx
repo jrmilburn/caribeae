@@ -384,21 +384,21 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
   };
 
   const selectIdentifier = React.useCallback((): { value: string; type: IdentifierType; source: IdentifierSource } | null => {
-    const primaryEmail = contact.email?.trim();
-    if (primaryEmail) {
-      return { value: primaryEmail, type: "email", source: "primaryEmail" };
-    }
     const primaryPhone = contact.phone?.trim();
     if (primaryPhone) {
       return { value: primaryPhone, type: "phone", source: "primaryPhone" };
     }
-    const secondaryEmail = contact.secondaryEmail?.trim();
-    if (secondaryEmail) {
-      return { value: secondaryEmail, type: "email", source: "secondaryEmail" };
+    const primaryEmail = contact.email?.trim();
+    if (primaryEmail) {
+      return { value: primaryEmail, type: "email", source: "primaryEmail" };
     }
     const secondaryPhone = contact.secondaryPhone?.trim();
     if (secondaryPhone) {
       return { value: secondaryPhone, type: "phone", source: "secondaryPhone" };
+    }
+    const secondaryEmail = contact.secondaryEmail?.trim();
+    if (secondaryEmail) {
+      return { value: secondaryEmail, type: "email", source: "secondaryEmail" };
     }
     return null;
   }, [contact.email, contact.phone, contact.secondaryEmail, contact.secondaryPhone]);
@@ -907,7 +907,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Add at least one email or mobile number to access the portal.
+              Add a mobile number (preferred) or email to access the portal.
             </p>
             <div className="hidden">
               <Label htmlFor="company">Company</Label>
@@ -1291,7 +1291,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 </div>
               ) : (
                 <p className="text-sm text-destructive">
-                  Add an email or mobile number to verify. Please contact Caribeae.
+                  No mobile number or email on file. Please talk to the admin to finish setup.
                 </p>
               )}
             </div>
@@ -1305,10 +1305,10 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
         if (verificationIsBlocked) {
           return (
             <div className="space-y-4 text-sm">
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <p className="font-medium text-destructive">We need an email or mobile number to verify.</p>
-                <p className="text-muted-foreground">Please contact Caribeae to finish setup.</p>
-              </div>
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <p className="font-medium text-destructive">We need a mobile number or email to verify.</p>
+              <p className="text-muted-foreground">Please talk to the admin to finish setup.</p>
+            </div>
               {canChangeIdentifier ? (
                 <Button
                   type="button"
