@@ -117,7 +117,7 @@ export function AuthPanel({
   return (
     <section
       className={cn(
-        "flex w-full flex-1 bg-white/80 backdrop-blur-sm lg:border-l lg:border-slate-200",
+        "flex justify-center w-full flex-1 bg-white/80 backdrop-blur-sm lg:border-l lg:border-slate-200",
         className
       )}
     >
