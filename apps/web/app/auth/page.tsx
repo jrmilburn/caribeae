@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { useSignIn, useSignUp } from "@clerk/nextjs";
+import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,8 +27,10 @@ Manual test checklist:
 
 export default function AuthPage() {
   const router = useRouter();
+  const { isLoaded: authLoaded, isSignedIn } = useAuth();
   const { isLoaded: signInLoaded, signIn } = useSignIn();
   const { isLoaded: signUpLoaded, signUp } = useSignUp();
+  const redirectingRef = React.useRef(false);
 
   const [identifier, setIdentifier] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -41,6 +43,34 @@ export default function AuthPage() {
     inputRef.current?.focus();
     sessionStorage.removeItem("caribeae.auth.pending");
   }, []);
+
+  React.useEffect(() => {
+    if (!authLoaded || !isSignedIn || redirectingRef.current) return;
+    redirectingRef.current = true;
+
+    let cancelled = false;
+
+    const redirectIfSignedIn = async () => {
+      try {
+        const res = await fetch("/api/auth/session", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (data?.signedIn) {
+          router.replace(data.admin ? "/admin/dashboard" : "/portal");
+        } else {
+          redirectingRef.current = false;
+        }
+      } catch (error) {
+        redirectingRef.current = false;
+      }
+    };
+
+    void redirectIfSignedIn();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoaded, isSignedIn, router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
