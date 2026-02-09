@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { FamilyModal } from "./FamilyModal";
+import { CreateFamilySheet } from "./CreateFamilySheet";
 
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
@@ -52,7 +53,8 @@ export default function FamilyList({
   nextCursor: string | null;
   pageSize: number;
 }) {
-  const [newFamilyModal, setNewFamilyModal] = useState(false);
+  const [createFamilySheetOpen, setCreateFamilySheetOpen] = useState(false);
+  const [editFamilyModalOpen, setEditFamilyModalOpen] = useState(false);
   const [selected, setSelected] = useState<FamilyListEntry | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [levelFilter, setLevelFilter] = useState("all");
@@ -71,15 +73,16 @@ export default function FamilyList({
   const hasActiveFilters = useMemo(() => currentLevelId !== "all", [currentLevelId]);
 
   const openEdit = (family: FamilyListEntry) => {
+    setCreateFamilySheetOpen(false);
     setSelected(family);
-    setNewFamilyModal(true);
+    setEditFamilyModalOpen(true);
   };
 
   useEffect(() => {
-    if (!newFamilyModal) {
+    if (!editFamilyModalOpen) {
       setSelected(null);
     }
-  }, [newFamilyModal]);
+  }, [editFamilyModalOpen]);
 
   useEffect(() => {
     setLevelFilter(currentLevelId);
@@ -159,8 +162,9 @@ export default function FamilyList({
         totalCount={totalCount}
         searchPlaceholder={isStudentView ? "Search students…" : "Search families…"}
         onNew={() => {
+          setEditFamilyModalOpen(false);
           setSelected(null);
-          setNewFamilyModal(true);
+          setCreateFamilySheetOpen(true);
         }}
         showNew={!isStudentView}
         showFilters
@@ -216,13 +220,21 @@ export default function FamilyList({
       </Dialog>
 
       {!isStudentView ? (
-        <FamilyModal
-          open={newFamilyModal}
-          onOpenChange={setNewFamilyModal}
-          family={selected}
-          onSave={handleSave}
-          levels={levels}
-        />
+        <>
+          <CreateFamilySheet
+            open={createFamilySheetOpen}
+            onOpenChange={setCreateFamilySheetOpen}
+            levels={levels}
+            onSave={handleSave}
+          />
+          <FamilyModal
+            open={editFamilyModalOpen}
+            onOpenChange={setEditFamilyModalOpen}
+            family={selected}
+            onSave={handleSave}
+            levels={levels}
+          />
+        </>
       ) : null}
 
       <div className="">
