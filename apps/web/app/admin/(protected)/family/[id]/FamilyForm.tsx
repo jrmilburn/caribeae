@@ -5,7 +5,7 @@ import type { Prisma, Student } from "@prisma/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Loader2, Mail, MoreVertical, Phone } from "lucide-react";
+import { Info, Loader2, Mail, MoreVertical, Phone } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -475,6 +476,8 @@ export default function FamilyForm({
     }
   }, [isLoadingStudent, pendingStudentAction, selectedStudentId, studentDetails]);
 
+  const balanceBreakdown = billingPosition.balanceBreakdown;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
@@ -506,7 +509,55 @@ export default function FamilyForm({
 
                 <div className="flex flex-col gap-3 sm:items-end">
                   <div className="rounded-lg border bg-muted/30 p-4 text-right">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Owing</div>
+                    <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>Owing</span>
+                      {balanceBreakdown ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/70 transition hover:text-foreground"
+                              aria-label="View owing breakdown"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64">
+                            <div className="text-xs font-semibold text-foreground">Owing breakdown</div>
+                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                              <div className="flex items-center justify-between gap-4">
+                                <span>Invoice outstanding</span>
+                                <span className="font-medium text-foreground">
+                                  {formatCurrencyFromCents(balanceBreakdown.invoiceOutstandingCents)}
+                                </span>
+                              </div>
+                              {balanceBreakdown.overdueOwingCents > 0 ? (
+                                <div className="flex items-center justify-between gap-4">
+                                  <span>Overdue (uninvoiced)</span>
+                                  <span className="font-medium text-foreground">
+                                    {formatCurrencyFromCents(balanceBreakdown.overdueOwingCents)}
+                                  </span>
+                                </div>
+                              ) : null}
+                              <div className="flex items-center justify-between gap-4">
+                                <span>Unallocated credit</span>
+                                <span className="font-medium text-foreground">
+                                  {balanceBreakdown.unallocatedCreditCents > 0
+                                    ? `-${formatCurrencyFromCents(balanceBreakdown.unallocatedCreditCents)}`
+                                    : formatCurrencyFromCents(0)}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-foreground">
+                                <span className="font-semibold">Net owing</span>
+                                <span className="font-semibold">
+                                  {formatCurrencyFromCents(balanceBreakdown.netOwingCents)}
+                                </span>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      ) : null}
+                    </div>
                     <div
                       className={cn(
                         "mt-1 text-2xl font-semibold",

@@ -1,11 +1,9 @@
 import "server-only";
 
-import { PaymentStatus } from "@prisma/client";
-
 import { prisma } from "@/lib/prisma";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
-import { computeFamilyOutstandingBalance } from "@/server/billing/familyBalance";
+import { computeFamilyNetOwing } from "@/server/billing/netOwing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import type { FamilyPortalDashboard, PortalClassOption, PortalStudentSummary } from "@/types/portal";
@@ -97,33 +95,23 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
     today: new Date(),
   });
 
-  const [openInvoices, paymentsAggregate, allocationsAggregate] = await Promise.all([
+  const [openInvoices] = await Promise.all([
     prisma.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
-      select: { amountCents: true, amountPaidCents: true },
-    }),
-    prisma.payment.aggregate({
-      where: { familyId, status: { not: PaymentStatus.VOID } },
-      _sum: { amountCents: true },
-    }),
-    prisma.paymentAllocation.aggregate({
-      where: { invoice: { familyId } },
-      _sum: { amountCents: true },
+      select: {
+        id: true,
+        amountCents: true,
+        amountPaidCents: true,
+        status: true,
+        enrolmentId: true,
+      },
     }),
   ]);
 
-  const invoiceBalanceTotal = openInvoices.reduce(
-    (sum, invoice) => sum + Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
-    0
-  );
-
-  const paidCents = paymentsAggregate._sum.amountCents ?? 0;
-  const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
-  const { outstandingCents } = computeFamilyOutstandingBalance({
-    baselineOwingCents: summary.totalOwingCents,
-    openInvoiceBalanceCents: invoiceBalanceTotal,
-    paymentsTotalCents: paidCents,
-    allocatedCents,
+  const netOwing = await computeFamilyNetOwing({
+    familyId,
+    summary,
+    openInvoices,
   });
 
   const levelIds = Array.from(
@@ -177,7 +165,7 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
 
   return {
     family: { id: family.id, name: family.name },
-    outstandingCents,
+    outstandingCents: netOwing.netOwingCents,
     nextPaymentDueDayKey: summary.nextPaymentDueDayKey,
     students,
   };

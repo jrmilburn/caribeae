@@ -91,7 +91,8 @@ export function PaymentForm({
     setMethod(payment?.method ?? "Cash");
     setNote(payment?.note ?? "");
     setPaidOn(payment?.paidAt ? format(payment.paidAt, "yyyy-MM-dd") : new Date().toISOString().slice(0, 10));
-    setApplyTarget("ALLOCATE_INVOICES");
+    const hasAllocations = (payment?.allocations?.length ?? 0) > 0;
+    setApplyTarget(payment ? (hasAllocations ? "ALLOCATE_INVOICES" : "UNALLOCATED") : "ALLOCATE_INVOICES");
     setCustomBlockEnabled(false);
     setCustomBlockLength("");
 
@@ -249,7 +250,7 @@ export function PaymentForm({
       }
     }
 
-    if (applyTarget === "ALLOCATE_INVOICES" && allocationsPayload.length === 0) {
+    if (!payment && applyTarget === "ALLOCATE_INVOICES" && allocationsPayload.length === 0) {
       toast.error("Add at least one allocation or choose another apply target.");
       return;
     }

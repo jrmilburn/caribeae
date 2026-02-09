@@ -19,7 +19,7 @@ import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 import { calculateUnpaidBlocks } from "@/server/billing/familyBillingCalculations";
-import { computeFamilyOutstandingBalance } from "@/server/billing/familyBalance";
+import { computeFamilyNetOwing } from "@/server/billing/netOwing";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { filterWeeklyPlanOptions, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility";
@@ -115,7 +115,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     )
   );
 
-  const [openInvoices, latestCoverage, paymentsAggregate, allocationsAggregate, payments, statusMap, holidays, plans] = await Promise.all([
+  const [openInvoices, latestCoverage, payments, statusMap, holidays, plans] = await Promise.all([
     client.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       include: {
@@ -135,14 +135,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
           _max: { coverageEnd: true },
         })
       : Promise.resolve([]),
-    client.payment.aggregate({
-      where: { familyId, status: { not: PaymentStatus.VOID } },
-      _sum: { amountCents: true },
-    }),
-    client.paymentAllocation.aggregate({
-      where: { invoice: { familyId } },
-      _sum: { amountCents: true },
-    }),
     client.payment.findMany({
       where: { familyId, status: { not: PaymentStatus.VOID } },
       orderBy: { paidAt: "desc" },
@@ -200,9 +192,6 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     ...invoice,
     balanceCents: Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
   }));
-
-  const paidCents = paymentsAggregate._sum.amountCents ?? 0;
-  const allocatedCents = allocationsAggregate._sum.amountCents ?? 0;
 
   const students = family.students.map((student : any) => {
     const enrolments = (student.enrolments ?? [])
@@ -353,12 +342,11 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     })
     .find((inv) => inv.balanceCents > 0);
 
-  const invoiceBalanceTotal = openInvoicesWithBalance.reduce((sum, invoice) => sum + (invoice.balanceCents ?? 0), 0);
-  const { outstandingCents: combinedOwingCents, unallocatedCents } = computeFamilyOutstandingBalance({
-    baselineOwingCents: summary.totalOwingCents,
-    openInvoiceBalanceCents: invoiceBalanceTotal,
-    paymentsTotalCents: paidCents,
-    allocatedCents,
+  const netOwing = await computeFamilyNetOwing({
+    familyId,
+    client,
+    summary,
+    openInvoices,
   });
 
   return {
@@ -371,8 +359,8 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     students,
     enrolments: enrolmentsFlat,
     openInvoices: openInvoicesWithBalance,
-    outstandingCents: combinedOwingCents,
-    unallocatedCents,
+    outstandingCents: netOwing.netOwingCents,
+    unallocatedCents: netOwing.unallocatedCreditCents,
     nextDueInvoice: nextDueInvoice
       ? {
           id: nextDueInvoice.id,
@@ -387,6 +375,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
     payments,
     holidays,
     breakdown: summary.breakdown,
+    balanceBreakdown: netOwing,
   };
 }
 
