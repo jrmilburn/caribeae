@@ -384,7 +384,7 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
                       </div>
 
                       <div className="rounded-lg border bg-muted/30 p-4 text-right">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Owing</div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance</div>
                         <div
                           className={cn(
                             "mt-1 text-2xl font-semibold",

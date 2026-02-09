@@ -23,7 +23,7 @@ export default function PortalDashboard({ data }: { data: FamilyPortalDashboard 
         <CardContent className="space-y-6">
           <div className="grid gap-3 text-sm sm:grid-cols-2">
             <div className="rounded-md border px-3 py-2">
-              <div className="text-xs text-muted-foreground">Owing balance</div>
+              <div className="text-xs text-muted-foreground">Balance</div>
               <div className="text-base font-semibold">
                 {formatCurrencyFromCents(data.outstandingCents)}
               </div>

@@ -70,7 +70,7 @@ export function computeFamilyNetOwingFromData(input: ComputeNetOwingFromDataInpu
   }, 0);
 
   const unallocatedCreditCents = Math.max(input.paymentsTotalCents - appliedCents, 0);
-  const netOwingCents = Math.max(overdueOwingCents + invoiceOutstandingCents - unallocatedCreditCents, 0);
+  const netOwingCents = overdueOwingCents + invoiceOutstandingCents - unallocatedCreditCents;
 
   return {
     netOwingCents,

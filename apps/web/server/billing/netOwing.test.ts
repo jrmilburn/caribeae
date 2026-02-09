@@ -32,7 +32,7 @@ function baseSummary(overdueCents = 0) {
   };
 }
 
-test("payments without invoices yield credit and zero net owing", () => {
+test("payments without invoices yield negative balance and credit", () => {
   const result = computeFamilyNetOwingFromData({
     summary: baseSummary(0),
     openInvoices: [],
@@ -41,7 +41,7 @@ test("payments without invoices yield credit and zero net owing", () => {
     paymentsTotalCents: 12000,
   });
 
-  assert.strictEqual(result.netOwingCents, 0);
+  assert.strictEqual(result.netOwingCents, -12000);
   assert.strictEqual(result.unallocatedCreditCents, 12000);
 });
 
@@ -66,7 +66,7 @@ test("partial allocations reduce invoice outstanding", () => {
   assert.strictEqual(result.netOwingCents, 4000);
 });
 
-test("overpayments are treated as unallocated credit", () => {
+test("overpayments are treated as negative balance credit", () => {
   const result = computeFamilyNetOwingFromData({
     summary: baseSummary(0),
     openInvoices: [],
@@ -76,7 +76,7 @@ test("overpayments are treated as unallocated credit", () => {
   });
 
   assert.strictEqual(result.unallocatedCreditCents, 2000);
-  assert.strictEqual(result.netOwingCents, 0);
+  assert.strictEqual(result.netOwingCents, -2000);
 });
 
 test("overdue enrolments with open invoices are not double-counted", () => {

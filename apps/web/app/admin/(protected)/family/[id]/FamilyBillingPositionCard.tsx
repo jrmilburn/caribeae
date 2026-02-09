@@ -68,7 +68,7 @@ export function FamilyBillingPositionCard({ billing }: Props) {
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border bg-card p-4">
-            <div className="text-xs text-muted-foreground">Owing</div>
+            <div className="text-xs text-muted-foreground">Balance</div>
             <div
               className={cn(
                 "mt-1 text-2xl font-semibold",

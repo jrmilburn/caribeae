@@ -510,7 +510,7 @@ export default function FamilyForm({
                 <div className="flex flex-col gap-3 sm:items-end">
                   <div className="rounded-lg border bg-muted/30 p-4 text-right">
                     <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Owing</span>
+                      <span>Balance</span>
                       {balanceBreakdown ? (
                         <Popover>
                           <PopoverTrigger asChild>
@@ -523,7 +523,7 @@ export default function FamilyForm({
                             </button>
                           </PopoverTrigger>
                           <PopoverContent align="end" className="w-64">
-                            <div className="text-xs font-semibold text-foreground">Owing breakdown</div>
+                            <div className="text-xs font-semibold text-foreground">Balance breakdown</div>
                             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                               <div className="flex items-center justify-between gap-4">
                                 <span>Invoice outstanding</span>
@@ -548,7 +548,7 @@ export default function FamilyForm({
                                 </span>
                               </div>
                               <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-foreground">
-                                <span className="font-semibold">Net owing</span>
+                                <span className="font-semibold">Net balance</span>
                                 <span className="font-semibold">
                                   {formatCurrencyFromCents(balanceBreakdown.netOwingCents)}
                                 </span>
