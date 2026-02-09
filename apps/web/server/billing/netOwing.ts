@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { InvoiceStatus, PaymentStatus, PrismaClient, type Prisma } from "@prisma/client";
 
