@@ -14,7 +14,7 @@ import {
   type ScheduleFilters,
   type ScheduleClassClickContext,
 } from "@/packages/schedule";
-import { TemplateModal } from "../class/templates/TemplateModal";
+import { CreateClassSheet } from "./CreateClassSheet";
 import { createTemplate } from "@/server/classTemplate/createTemplate";
 import type { ClientTemplate } from "@/server/classTemplate/types";
 import type { NormalizedScheduleClass } from "@/packages/schedule";
@@ -176,7 +176,7 @@ export default function ScheduleWithTemplateModal({
     }
   }, [defaultDateKey, selectedDateKey]);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [createSheetOpen, setCreateSheetOpen] = useState(false);
 
   const [prefill, setPrefill] = useState<{
     date: Date;
@@ -189,7 +189,7 @@ export default function ScheduleWithTemplateModal({
   const handleSlotClick = (date: Date, _dayOfWeek: number) => {
     const minutes = date.getHours() * 60 + date.getMinutes();
     setPrefill({ date, startMinutes: minutes, dayOfWeek: _dayOfWeek });
-    setModalOpen(true);
+    setCreateSheetOpen(true);
   };
 
   const scheduleStateUrl = useMemo(() => {
@@ -228,7 +228,7 @@ export default function ScheduleWithTemplateModal({
       }
     );
 
-    setModalOpen(false);
+    setCreateSheetOpen(false);
     scheduleRef.current?.softRefresh();
   };
 
@@ -267,12 +267,9 @@ export default function ScheduleWithTemplateModal({
         }
       />
 
-      <TemplateModal
-        open={modalOpen}
-        onOpenChange={(open) => {
-          setModalOpen(open);
-        }}
-        template={null}
+      <CreateClassSheet
+        open={createSheetOpen}
+        onOpenChange={setCreateSheetOpen}
         levels={levels}
         teachers={teachers}
         onSave={handleSave}
