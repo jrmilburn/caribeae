@@ -22,10 +22,14 @@ type BillingOverview = {
   currentMonthKey: string;
 };
 
+const BILLING_START_MONTH_KEY = "2026-02";
+
 export async function getBillingOverview(monthCount = 12): Promise<BillingOverview> {
   await requireAdmin();
 
-  const monthKeys = getRecentBrisbaneMonthKeys(monthCount);
+  const monthKeys = getRecentBrisbaneMonthKeys(monthCount).filter(
+    (key) => key >= BILLING_START_MONTH_KEY
+  );
   if (monthKeys.length === 0) {
     return { months: [], currentMonthKey: "" };
   }
