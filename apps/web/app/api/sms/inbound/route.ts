@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supaServer, inboxTopic, convoTopic } from "@/lib/realtime/supabase-server";
 import { twilioValidateRequest } from "@/lib/twilio/validate";
+import { getBrisbaneMonthKey } from "@/lib/billing/brisbane";
+import { INBOUND_SMS_UNIT_COST } from "@/lib/billing/pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +57,8 @@ export async function POST(req: NextRequest) {
     create: { phoneNumber: from, familyId: family?.id ?? null },
   });
 
+  const createdAt = new Date();
+  const monthKey = getBrisbaneMonthKey(createdAt);
   const created = await prisma.message.create({
     data: {
       direction: "INBOUND",
@@ -66,6 +70,9 @@ export async function POST(req: NextRequest) {
       conversationId: conversation.id,
       familyId: conversation.familyId,
       status: "DELIVERED",
+      createdAt,
+      unitCost: INBOUND_SMS_UNIT_COST,
+      monthKey,
     },
   });
 

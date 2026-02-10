@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { getBrisbaneMonthKey } from "@/lib/billing/brisbane";
+import { OUTBOUND_SMS_UNIT_COST } from "@/lib/billing/pricing";
 import twilio from "twilio";
 
 type SendInput = {
@@ -86,6 +88,8 @@ export async function sendSmsAction(input: SendInput): Promise<SendResponse> {
       const to = queue.shift()!;
       const conversation = await findConversationForNumber(to, input.familyId);
 
+      const createdAt = new Date();
+      const monthKey = getBrisbaneMonthKey(createdAt);
       const rec = await prisma.message.create({
         data: {
           direction: "OUTBOUND",
@@ -97,6 +101,9 @@ export async function sendSmsAction(input: SendInput): Promise<SendResponse> {
           conversationId: conversation.id,
           familyId: conversation.familyId,
           campaignId: campaign.id,
+          createdAt,
+          unitCost: OUTBOUND_SMS_UNIT_COST,
+          monthKey,
         },
       });
 

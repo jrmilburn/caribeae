@@ -866,6 +866,7 @@ model Message {
   direction    MessageDirection
   channel      MessageChannel   @default(SMS)
   body         String
+  segments     Int?
   subject      String?
   fromNumber   String?
   toNumber     String?
@@ -875,6 +876,8 @@ model Message {
   providerSid  String?          @unique
   errorCode    String?
   errorMessage String?
+  unitCost     Decimal?         @db.Decimal(10, 2)
+  monthKey     String?          @db.VarChar(7)
 
   deliveredAt DateTime?
   failedAt    DateTime?
@@ -892,6 +895,7 @@ model Message {
   @@index([familyId, createdAt])
   @@index([campaignId, createdAt])
   @@index([status, createdAt])
+  @@index([monthKey])
 }
 
 model EmailCampaign {

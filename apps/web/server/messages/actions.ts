@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { getBrisbaneMonthKey } from "@/lib/billing/brisbane";
+import { OUTBOUND_SMS_UNIT_COST } from "@/lib/billing/pricing";
 import twilio from "twilio";
 import { supaServer, inboxTopic, convoTopic } from "@/lib/realtime/supabase-server";
 
@@ -126,6 +128,8 @@ export async function sendToConversation({
   const from = process.env.TWILIO_FROM;
   if (!messagingServiceSid && !from) return { ok: false, error: "Missing Twilio configuration" } as const;
 
+  const createdAt = new Date();
+  const monthKey = getBrisbaneMonthKey(createdAt);
   const message = await prisma.message.create({
     data: {
       direction: "OUTBOUND",
@@ -136,6 +140,9 @@ export async function sendToConversation({
       status: "PENDING",
       conversationId: conversation.id,
       familyId: conversation.familyId,
+      createdAt,
+      unitCost: OUTBOUND_SMS_UNIT_COST,
+      monthKey,
     },
   });
   await prisma.conversation.update({
