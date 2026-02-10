@@ -83,6 +83,7 @@ type IdentifierSource = "primaryEmail" | "primaryPhone" | "secondaryEmail" | "se
 type OnboardingAuthState = {
   requestId: string;
   familyId: string;
+  updateToken?: string;
   identifier?: string;
   type?: IdentifierType;
   flow?: "signIn" | "signUp";
@@ -684,18 +685,23 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
         honeypot,
         requestId: authState?.requestId ?? undefined,
         familyId: authState?.familyId ?? undefined,
+        updateToken: authState?.updateToken ?? undefined,
       });
       if (!result.ok) {
         setSubmitError(result.error ?? "Unable to submit.");
         return;
       }
-      if (!result.familyId || !result.id) {
+      if (!result.familyId || !result.id || !result.updateToken) {
         setSubmitError("Please contact Caribeae to finish setup.");
         return;
       }
 
       const selection = selectIdentifier();
-      const nextAuth: OnboardingAuthState = { requestId: result.id, familyId: result.familyId };
+      const nextAuth: OnboardingAuthState = {
+        requestId: result.id,
+        familyId: result.familyId,
+        updateToken: result.updateToken,
+      };
       persistAuthState(nextAuth);
 
       if (!selection) {

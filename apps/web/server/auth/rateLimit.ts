@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getRedis } from "@/server/security/redis";
+
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
 
@@ -16,7 +18,21 @@ if (!(globalThis as typeof globalThis & { __authRateLimit?: RateLimitStore }).__
     rateLimitStore;
 }
 
-export function checkRateLimit(key: string) {
+export async function checkRateLimit(key: string) {
+  const redis = getRedis();
+  if (redis) {
+    const redisKey = `auth:rate:${key}`;
+    const count = await redis.incr(redisKey);
+    if (count === 1) {
+      await redis.pexpire(redisKey, RATE_LIMIT_WINDOW_MS);
+    }
+    if (count > RATE_LIMIT_MAX) {
+      const ttl = await redis.pttl(redisKey);
+      return { ok: false, retryAfterMs: ttl > 0 ? ttl : RATE_LIMIT_WINDOW_MS } as const;
+    }
+    return { ok: true } as const;
+  }
+
   const now = Date.now();
   const current = rateLimitStore.get(key);
   if (!current || now > current.resetAt) {

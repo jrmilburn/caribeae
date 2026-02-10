@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   const ip = await getClientIp();
-  const rateLimit = checkRateLimit(`admin-auth:start:${ip}`);
+  const rateLimit = await checkRateLimit(`admin-auth:start:${ip}`);
   if (!rateLimit.ok) {
     return NextResponse.json(
       { ok: false, error: "Too many requests. Please try again shortly." },

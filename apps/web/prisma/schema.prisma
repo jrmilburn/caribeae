@@ -189,6 +189,9 @@ model OnboardingRequest {
   studentsJson     Json
   availabilityJson Json
 
+  updateTokenHash      String?
+  updateTokenExpiresAt DateTime?
+
   status OnboardingStatus @default(NEW)
 
   familyId String?

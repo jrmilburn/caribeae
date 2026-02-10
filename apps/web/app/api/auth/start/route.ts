@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   }
 
   const ip = await getClientIp();
-  const rateLimit = checkRateLimit(`auth:start:${ip}`);
+  const rateLimit = await checkRateLimit(`auth:start:${ip}`);
   if (!rateLimit.ok) {
     return NextResponse.json(
       { ok: false, error: "Too many requests. Please try again shortly." },
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
   const flow = userList.data.length > 0 ? "signIn" : "signUp";
 
-  const token = createPendingAuth({
+  const token = await createPendingAuth({
     familyId: family.id,
     identifier: normalized,
     type: payload.type,

@@ -8,6 +8,10 @@ import { isValidE164, normalizeEmail, normalizePhone } from "@/lib/auth/identity
 import { publicOnboardingRequestSchema } from "@/lib/onboarding/schema";
 import { findEligibleFamilyForIdentifiers } from "@/server/auth/eligibility";
 import { resolveFamilyName } from "@/server/onboarding/resolveFamilyName";
+import {
+  createOnboardingUpdateToken,
+  verifyOnboardingUpdateToken,
+} from "@/server/onboarding/updateToken";
 
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX = 5;
@@ -53,6 +57,7 @@ const submitResultSchema = z.object({
   ok: z.boolean(),
   id: z.string().optional(),
   familyId: z.string().optional(),
+  updateToken: z.string().optional(),
   error: z.string().optional(),
 });
 
@@ -61,6 +66,7 @@ export type SubmitOnboardingResult = z.infer<typeof submitResultSchema>;
 const submitSchema = publicOnboardingRequestSchema.extend({
   requestId: z.string().trim().optional().nullable(),
   familyId: z.string().trim().optional().nullable(),
+  updateToken: z.string().trim().optional().nullable(),
 });
 
 export async function submitOnboardingRequest(
@@ -99,6 +105,30 @@ export async function submitOnboardingRequest(
   const secondaryContactName = payload.contact.secondaryContactName?.trim() || null;
 
   if (payload.requestId && payload.familyId) {
+    const request = await prisma.onboardingRequest.findUnique({
+      where: { id: payload.requestId },
+      select: {
+        id: true,
+        familyId: true,
+        updateTokenHash: true,
+        updateTokenExpiresAt: true,
+      },
+    });
+
+    if (
+      !request ||
+      request.familyId !== payload.familyId ||
+      !verifyOnboardingUpdateToken({
+        token: payload.updateToken ?? undefined,
+        hash: request.updateTokenHash ?? undefined,
+        expiresAt: request.updateTokenExpiresAt ?? undefined,
+      })
+    ) {
+      return { ok: false, error: "Unable to update the request." };
+    }
+
+    const rotated = createOnboardingUpdateToken();
+
     try {
       await prisma.$transaction([
         prisma.family.update({
@@ -129,10 +159,17 @@ export async function submitOnboardingRequest(
             address,
             studentsJson: payload.students,
             availabilityJson: payload.availability,
+            updateTokenHash: rotated.hash,
+            updateTokenExpiresAt: rotated.expiresAt,
           },
         }),
       ]);
-      return { ok: true, id: payload.requestId, familyId: payload.familyId };
+      return {
+        ok: true,
+        id: payload.requestId,
+        familyId: payload.familyId,
+        updateToken: rotated.token,
+      };
     } catch (error) {
       return { ok: false, error: "Unable to update the request." };
     }
@@ -151,6 +188,8 @@ export async function submitOnboardingRequest(
 
   const created = await prisma.$transaction(async (tx) => {
     let familyId = existingFamily?.id ?? null;
+
+    const updateToken = createOnboardingUpdateToken();
 
     if (!familyId) {
       const family = await tx.family.create({
@@ -184,14 +223,21 @@ export async function submitOnboardingRequest(
         address,
         studentsJson: payload.students,
         availabilityJson: payload.availability,
+        updateTokenHash: updateToken.hash,
+        updateTokenExpiresAt: updateToken.expiresAt,
         status: "NEW",
         familyId,
       },
       select: { id: true, familyId: true },
     });
 
-    return onboarding;
+    return { ...onboarding, updateToken: updateToken.token };
   });
 
-  return { ok: true, id: created.id, familyId: created.familyId ?? undefined };
+  return {
+    ok: true,
+    id: created.id,
+    familyId: created.familyId ?? undefined,
+    updateToken: created.updateToken,
+  };
 }

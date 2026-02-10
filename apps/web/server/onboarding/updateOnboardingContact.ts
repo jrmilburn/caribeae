@@ -4,15 +4,22 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { isValidE164, normalizeEmail, normalizePhone } from "@/lib/auth/identity";
+import {
+  createOnboardingUpdateToken,
+  verifyOnboardingUpdateToken,
+} from "@/server/onboarding/updateToken";
 
 const schema = z.object({
   requestId: z.string().min(1),
   familyId: z.string().min(1),
   identifier: z.string().min(1),
   type: z.enum(["email", "phone"]),
+  updateToken: z.string().min(1),
 });
 
-type Result = { ok: true; normalized: string } | { ok: false; error: string };
+type Result =
+  | { ok: true; normalized: string; updateToken: string }
+  | { ok: false; error: string };
 
 export async function updateOnboardingContact(input: z.infer<typeof schema>): Promise<Result> {
   const payload = schema.parse(input);
@@ -30,10 +37,18 @@ export async function updateOnboardingContact(input: z.infer<typeof schema>): Pr
 
   const request = await prisma.onboardingRequest.findUnique({
     where: { id: payload.requestId },
-    select: { id: true, familyId: true },
+    select: { id: true, familyId: true, updateTokenHash: true, updateTokenExpiresAt: true },
   });
 
-  if (!request || request.familyId !== payload.familyId) {
+  if (
+    !request ||
+    request.familyId !== payload.familyId ||
+    !verifyOnboardingUpdateToken({
+      token: payload.updateToken,
+      hash: request.updateTokenHash ?? undefined,
+      expiresAt: request.updateTokenExpiresAt ?? undefined,
+    })
+  ) {
     return { ok: false, error: "Unable to update contact details." };
   }
 
@@ -48,6 +63,8 @@ export async function updateOnboardingContact(input: z.infer<typeof schema>): Pr
     updateRequest.phone = normalized;
   }
 
+  const rotated = createOnboardingUpdateToken();
+
   await prisma.$transaction([
     prisma.family.update({
       where: { id: payload.familyId },
@@ -55,9 +72,13 @@ export async function updateOnboardingContact(input: z.infer<typeof schema>): Pr
     }),
     prisma.onboardingRequest.update({
       where: { id: payload.requestId },
-      data: updateRequest,
+      data: {
+        ...updateRequest,
+        updateTokenHash: rotated.hash,
+        updateTokenExpiresAt: rotated.expiresAt,
+      },
     }),
   ]);
 
-  return { ok: true, normalized };
+  return { ok: true, normalized, updateToken: rotated.token };
 }
