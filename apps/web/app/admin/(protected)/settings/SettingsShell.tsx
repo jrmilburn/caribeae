@@ -8,6 +8,8 @@ import { SettingsSidebar } from "./SettingsSidebar";
 const SETTINGS_SHELL_ROUTES = [
   "/admin/settings",
   "/admin/communications",
+  "/admin/billing",
+  "/admin/reports",
 ];
 
 type SettingsShellProps = {
