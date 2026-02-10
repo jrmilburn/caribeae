@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/requireAdmin";
 import type { Prisma } from "@prisma/client";
 
 const DAY_LOOKUP: Record<string, number> = {
@@ -44,6 +45,7 @@ export async function listClassTemplates(params: {
   teacherId?: string | null;
   status?: "active" | "inactive" | "all" | null;
 }) {
+  await requireAdmin();
   const trimmed = params.q?.trim().toLowerCase() ?? "";
   const dayKey = trimmed.slice(0, 3);
   const dayOfWeek = dayKey in DAY_LOOKUP ? DAY_LOOKUP[dayKey] : null;

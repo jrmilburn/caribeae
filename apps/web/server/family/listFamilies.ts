@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 import type { Family, Prisma } from "@prisma/client";
 
@@ -27,6 +28,7 @@ export async function listFamilies(params: {
   levelId?: string | null;
 }) {
   await getOrCreateUser();
+  await requireAdmin();
 
   const filters: Prisma.FamilyWhereInput[] = [];
 

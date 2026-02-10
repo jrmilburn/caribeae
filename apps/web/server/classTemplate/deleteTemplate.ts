@@ -3,10 +3,12 @@
 import { prisma } from "@/lib/prisma";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export async function deleteTemplate(id : string) {
 
     await getOrCreateUser();
+    await requireAdmin();
 
     const deletedAssignments = await prisma.enrolmentClassAssignment.deleteMany({
         where: {

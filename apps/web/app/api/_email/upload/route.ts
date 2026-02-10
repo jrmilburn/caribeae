@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,12 @@ const supa = createClient(
 const BUCKET = "email-assets"; // create this as public in Supabase Storage
 
 export async function POST(req: Request) {
+  try {
+    await requireAdmin();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   const form = await req.formData();
   const file = form.get("file") as File | null;
 

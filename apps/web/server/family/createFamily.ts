@@ -7,9 +7,11 @@ import { parseFamilyPayload, parseFamilyStudents } from "./types";
 import { normalizeFamilyContactPhones } from "./normalizeFamilyContacts";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export async function createFamily(payload: ClientFamilyWithStudents): Promise<FamilyActionResult> {
     await getOrCreateUser();
+    await requireAdmin();
 
     const parsed = parseFamilyPayload(payload);
     if (!parsed.success) {

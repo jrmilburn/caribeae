@@ -3,9 +3,11 @@
 import { prisma } from "@/lib/prisma";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 
 export default async function getFamily(id: string) {
   await getOrCreateUser();
+  await requireAdmin();
 
   const family = await prisma.family.findUnique({
     where: {

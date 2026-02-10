@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { ClientTemplate } from "./types";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 import { revalidatePath } from "next/cache";
 
 export async function updateTemplate(payload : ClientTemplate, id : string) {
 
         await getOrCreateUser();
+        await requireAdmin();
     
         const updatedTemplate = await prisma.classTemplate.update({
             where: {

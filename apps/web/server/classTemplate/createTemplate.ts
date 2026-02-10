@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
+import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 
 import { autoAssignWeeklyEnrolmentsToTemplate } from "./autoAssignWeeklyEnrolments";
@@ -10,6 +11,7 @@ import { ClientTemplate } from "./types";
 
 export async function createTemplate(payload: ClientTemplate) {
   await getOrCreateUser();
+  await requireAdmin();
 
   const newTemplate = await prisma.$transaction(async (tx) => {
     const template = await tx.classTemplate.create({
