@@ -24,9 +24,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 ];
 
 const SETTINGS_LINKS = [
-  { href: "/admin/communications", label: "Communications" },
   { href: "/admin/billing", label: "Billing" },
-  { href: "/admin/reports/audit", label: "Reports" },
 ];
 
 type SettingsSidebarProps = {
