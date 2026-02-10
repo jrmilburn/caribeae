@@ -175,9 +175,9 @@ enum WaitlistRequestStatus {
 model OnboardingRequest {
   id String @id @default(cuid())
 
-  guardianName String
-  phone        String?
-  email        String?
+  guardianName         String
+  phone                String?
+  email                String?
   secondaryContactName String?
   secondaryEmail       String?
   secondaryPhone       String?
