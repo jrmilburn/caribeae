@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronDown, X } from "lucide-react";
+import { OUTBOUND_SMS_UNIT_COST } from "@/lib/billing/pricing";
 
 import {
   previewBroadcastRecipientsAction,
@@ -36,6 +37,12 @@ type ComposeTabProps = {
 export type Channel = "SMS" | "EMAIL";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const smsCostFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 function toTimeLabel(minutes: number | null) {
   if (minutes === null || minutes === undefined) return null;
@@ -163,6 +170,10 @@ export function ComposeTab({ families, levels, invoiceStatuses, classOptions = [
     () => classOptions.filter((option) => selectedClasses.has(option.id)),
     [classOptions, selectedClasses]
   );
+
+  const estimatedRecipients = preview?.recipients.length ?? 0;
+  const estimatedOutbound = estimatedRecipients;
+  const estimatedCost = estimatedRecipients * OUTBOUND_SMS_UNIT_COST;
 
   const toggleClass = (id: string) => {
     setSelectedClasses((prev) => {
@@ -582,6 +593,32 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
 
         {broadcastStatus ? <div className="mt-2 text-xs text-muted-foreground">{broadcastStatus}</div> : null}
       </div>
+
+      {broadcastChannel === "SMS" ? (
+        <div className="mt-4 rounded-md border bg-muted/30 p-3">
+          <div className="text-sm font-semibold">Cost estimate</div>
+          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between">
+              <span>Recipient count</span>
+              <span className="font-medium text-foreground">{estimatedRecipients}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Estimated outbound messages</span>
+              <span className="font-medium text-foreground">{estimatedOutbound}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Estimated cost</span>
+              <span className="font-medium text-foreground">{smsCostFormatter.format(estimatedCost)}</span>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            Inbound replies are billed at $0.01 each and appear in monthly totals.
+          </div>
+          {!preview ? (
+            <div className="mt-1 text-xs text-muted-foreground">Run Preview to confirm recipient counts.</div>
+          ) : null}
+        </div>
+      ) : null}
 
       {preview ? (
         <div className="mt-5 grid gap-4 md:grid-cols-2">

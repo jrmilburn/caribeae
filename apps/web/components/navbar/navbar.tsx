@@ -18,7 +18,8 @@ import {
   LogIn,
   LogOut,
   LucideIcon,
-  ClipboardList
+  ClipboardList,
+  CreditCard
 } from "lucide-react";
 
 
@@ -56,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Classes", href: "/admin/class", icon: BookOpen },
 
   { label: "Messages", href: "/admin/messages", icon: Inbox },
+  { label: "Billing", href: "/admin/billing", icon: CreditCard },
   { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
   { label: "Waitlist", href: "/admin/waitlist", icon: ClipboardList },
   { label: "Settings", href: "/admin/settings", icon: Settings },

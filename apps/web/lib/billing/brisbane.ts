@@ -1,6 +1,6 @@
 export const BRISBANE_TIME_ZONE = "Australia/Brisbane";
 
-function getPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) {
+function getPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPart["type"]) {
   return parts.find((part) => part.type === type)?.value;
 }
 

@@ -1,377 +1,185 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { CalendarClock, Filter, Loader2, Search } from "lucide-react";
-import type { InvoiceStatus } from "@prisma/client";
-import { toast } from "sonner";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatCurrencyFromCents } from "@/lib/currency";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import type { BillingMonthSummary } from "@/server/billing/actions";
 
-import { createInvoice } from "@/server/billing/createInvoice";
-import { updateInvoice } from "@/server/billing/updateInvoice";
-import { deleteInvoice } from "@/server/billing/deleteInvoice";
-import { createPayment } from "@/server/billing/createPayment";
-import { updatePayment } from "@/server/billing/updatePayment";
-import { deletePayment } from "@/server/billing/deletePayment";
-import type { getBillingDashboardData } from "@/server/billing/getBillingDashboardData";
-import type { BillingInvoice, BillingPayment } from "@/server/billing/types";
+type Props = {
+  months: BillingMonthSummary[];
+  currentMonthKey: string;
+};
 
-import { BillingSummary } from "./components/BillingSummary";
-import { InvoiceTable } from "./components/InvoiceTable";
-import { PaymentTable } from "./components/PaymentTable";
-import { InvoiceForm } from "./components/InvoiceForm";
-import { PaymentForm } from "./components/PaymentForm";
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-type BillingData = Awaited<ReturnType<typeof getBillingDashboardData>>;
-type InvoiceWithBalance = BillingInvoice & { amountOwingCents: number };
+function formatMoney(value: number) {
+  return currencyFormatter.format(value);
+}
 
-type InvoiceFormOnSubmit = React.ComponentProps<typeof InvoiceForm>["onSubmit"];
-type InvoiceFormPayload = Parameters<NonNullable<InvoiceFormOnSubmit>>[0];
+export default function BillingPageClient({ months, currentMonthKey }: Props) {
+  const initialKey = currentMonthKey || months[0]?.monthKey || "";
+  const [selectedKey, setSelectedKey] = React.useState(initialKey);
 
-type PaymentFormOnSubmit = React.ComponentProps<typeof PaymentForm>["onSubmit"];
-type PaymentFormPayload = Parameters<NonNullable<PaymentFormOnSubmit>>[0];
+  const selectedIndex = months.findIndex((month) => month.monthKey === selectedKey);
+  const resolvedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+  const selected = months[resolvedIndex] ?? months[0];
 
-export default function BillingPageClient({
-  data,
-  invoiceStatuses,
-}: {
-  data: BillingData;
-  invoiceStatuses: InvoiceStatus[];
-}) {
-  const router = useRouter();
-  const [search, setSearch] = React.useState(data.filters.search ?? "");
-  const [status, setStatus] = React.useState<string>(data.filters.status ?? "ALL");
-  const [startDate, setStartDate] = React.useState(
-    data.filters.startDate ? data.filters.startDate.toISOString().slice(0, 10) : ""
-  );
-  const [endDate, setEndDate] = React.useState(
-    data.filters.endDate ? data.filters.endDate.toISOString().slice(0, 10) : ""
-  );
-  const [isFiltering, startFiltering] = React.useTransition();
+  if (!months.length || !selected) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading billing data...</div>;
+  }
 
-  const [invoiceModalOpen, setInvoiceModalOpen] = React.useState(false);
-  const [paymentModalOpen, setPaymentModalOpen] = React.useState(false);
-  const [editingInvoice, setEditingInvoice] = React.useState<InvoiceWithBalance | null>(null);
-  const [editingPayment, setEditingPayment] = React.useState<BillingPayment | null>(null);
-
-  React.useEffect(() => {
-    setSearch(data.filters.search ?? "");
-    setStatus(data.filters.status ?? "ALL");
-    setStartDate(data.filters.startDate ? data.filters.startDate.toISOString().slice(0, 10) : "");
-    setEndDate(data.filters.endDate ? data.filters.endDate.toISOString().slice(0, 10) : "");
-  }, [data.filters]);
-
-  const applyFilters = () => {
-    const params = new URLSearchParams();
-    if (search.trim()) params.set("q", search.trim());
-    if (status && status !== "ALL") params.set("status", status);
-    if (startDate) params.set("start", startDate);
-    if (endDate) params.set("end", endDate);
-
-    const qs = params.toString();
-    startFiltering(() => {
-      router.replace(qs ? `/admin/billing?${qs}` : "/admin/billing");
-    });
-  };
-
-  const clearFilters = () => {
-    setSearch("");
-    setStatus("ALL");
-    setStartDate("");
-    setEndDate("");
-    startFiltering(() => router.replace("/admin/billing"));
-  };
-
-
-  const handleSaveInvoice: NonNullable<InvoiceFormOnSubmit> = async (payload: InvoiceFormPayload) => {
-    try {
-      const normalized = normalizeInvoicePayloadForServer(payload);
-
-      if (editingInvoice) {
-        await updateInvoice(editingInvoice.id, normalized);
-        toast.success("Invoice updated.");
-      } else {
-        await createInvoice(normalized);
-        toast.success("Invoice created.");
-      }
-
-      setEditingInvoice(null);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to save invoice.";
-      toast.error(message);
-    }
-  };
-
-
-  const handleDeleteInvoice = async (invoice: InvoiceWithBalance) => {
-    const ok = window.confirm("Delete this invoice? Payments will remain untouched.");
-    if (!ok) return;
-    try {
-      await deleteInvoice(invoice.id);
-      toast.success("Invoice deleted.");
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete invoice.";
-      toast.error(message);
-    }
-  };
-
-  const markInvoice = async (invoice: InvoiceWithBalance, status: InvoiceStatus) => {
-    try {
-      await updateInvoice(invoice.id, {
-        status,
-        amountPaidCents: status === "PAID" ? invoice.amountCents : invoice.amountPaidCents,
-        paidAt: status === "PAID" ? new Date() : undefined,
-        issuedAt: invoice.issuedAt ?? new Date(),
-        dueAt: invoice.dueAt ?? undefined,
-      });
-      toast.success(
-        status === "PAID"
-          ? "Invoice marked paid."
-          : status === "VOID"
-            ? "Invoice voided."
-            : "Invoice marked sent."
-      );
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to update invoice.";
-      toast.error(message);
-    }
-  };
-
-
-  const handleSavePayment: NonNullable<PaymentFormOnSubmit> = async (payload: PaymentFormPayload) => {
-    try {
-      // Build the exact shape your server actions accept
-      const normalized: Parameters<typeof createPayment>[0] = {
-        familyId: payload.familyId,
-        amountCents: payload.amountCents,
-        paidAt: nullToUndefined(payload.paidAt),
-
-        // ✅ fix: null -> undefined
-        method: nullToUndefined(payload.method),
-        note: nullToUndefined(payload.note),
-
-        allocations: payload.allocations,
-        // If your payload might have allocations: null, then:
-        // allocations: nullToUndefined(payload.allocations),
-      };
-      if (payload.customBlockLength) {
-        normalized.customBlockLength = payload.customBlockLength;
-      }
-
-      if (editingPayment) {
-        await updatePayment(editingPayment.id, normalized);
-        toast.success("Payment updated.");
-      } else {
-        normalized.enrolmentId = payload.enrolmentId;
-        normalized.idempotencyKey = payload.idempotencyKey;
-        await createPayment(normalized);
-        toast.success("Payment recorded.");
-      }
-
-      setEditingPayment(null);
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to save payment.";
-      toast.error(message);
-    }
-  };
-
-  const handleDeletePayment = async (payment: BillingPayment) => {
-    const ok = window.confirm("Delete this payment? Allocations will be removed.");
-    if (!ok) return;
-    try {
-      await deletePayment(payment.id);
-      toast.success("Payment deleted.");
-      router.refresh();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to delete payment.";
-      toast.error(message);
-    }
-  };
+  const previousMonth = months[resolvedIndex + 1];
+  const nextMonth = months[resolvedIndex - 1];
+  const isEmptyMonth = selected.outboundCount + selected.inboundCount === 0;
+  const allEmpty = months.every((month) => month.outboundCount + month.inboundCount === 0);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">Billing dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Monitor invoices, payments, and balances across all families.
-          </p>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-card px-6 py-4">
+        <div>
+          <div className="text-base font-semibold">Billing</div>
+          <div className="text-xs text-muted-foreground">Studio Parallel monthly totals (Brisbane time).</div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
-            Total owing {formatCurrencyFromCents(data.summary.totalOwingCents)}
-          </div>
-        </div>
-      </div>
 
-      <BillingSummary summary={data.summary} />
-
-      <div className="rounded-lg border bg-card p-4 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          Filters
-          {isFiltering ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-2">
-            <Label htmlFor="billing-search" className="text-xs text-muted-foreground">
-              Search family
-            </Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="billing-search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by family"
-                className="pl-9"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Invoice status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="All" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All</SelectItem>
-                {invoiceStatuses.map((st) => (
-                  <SelectItem key={st} value={st}>
-                    {st.replace("_", " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">From</Label>
-            <div className="relative">
-              <CalendarClock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <div className="relative">
-              <CalendarClock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={clearFilters}>
-            Clear
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => previousMonth && setSelectedKey(previousMonth.monthKey)}
+            disabled={!previousMonth}
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button type="button" onClick={applyFilters} disabled={isFiltering}>
-            Apply
+
+          <Select value={selectedKey} onValueChange={setSelectedKey}>
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue placeholder="Select month" />
+            </SelectTrigger>
+            <SelectContent>
+              {months.map((month) => (
+                <SelectItem key={month.monthKey} value={month.monthKey}>
+                  {month.monthLabel}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => nextMonth && setSelectedKey(nextMonth.monthKey)}
+            disabled={!nextMonth}
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      <div className="space-y-6">
-        <InvoiceTable
-          invoices={data.invoices}
-          onCreate={() => {
-            setEditingInvoice(null);
-            setInvoiceModalOpen(true);
-          }}
-          onEdit={(invoice) => {
-            setEditingInvoice(invoice);
-            setInvoiceModalOpen(true);
-          }}
-          onDelete={handleDeleteInvoice}
-          onMarkPaid={(invoice) => markInvoice(invoice, "PAID")}
-          onMarkSent={(invoice) => markInvoice(invoice, "SENT")}
-          onMarkVoid={(invoice) => markInvoice(invoice, "VOID")}
-        />
+      <div className="flex-1 space-y-6 p-6">
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold">Summary - {selected.monthLabel}</div>
+            {isEmptyMonth ? <Badge variant="outline">No messaging activity</Badge> : null}
+          </div>
 
-        <PaymentTable
-          payments={data.payments}
-          onCreate={() => {
-            setEditingPayment(null);
-            setPaymentModalOpen(true);
-          }}
-          onEdit={(payment) => {
-            setEditingPayment(payment);
-            setPaymentModalOpen(true);
-          }}
-          onDelete={handleDeletePayment}
-        />
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Retainer</span>
+              <span className="font-medium">{formatMoney(selected.retainer)}</span>
+            </div>
+
+            <div className="border-t pt-3">
+              <div className="text-sm font-medium">Messaging</div>
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>Outbound ({selected.outboundCount})</span>
+                  <span>{formatMoney(selected.outboundCost)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Inbound ({selected.inboundCount})</span>
+                  <span>{formatMoney(selected.inboundCost)}</span>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm font-semibold">
+                <span>Messaging total</span>
+                <span>{formatMoney(selected.messagingTotal)}</span>
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <div className="flex items-center justify-between text-base font-semibold">
+                <span>Month total</span>
+                <span>{formatMoney(selected.totalDue)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {allEmpty ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            No messaging activity recorded yet. Retainers still apply each month.
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border bg-card p-4">
+          <div className="text-sm font-semibold">Monthly history</div>
+
+          <div className="mt-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead>Outbound</TableHead>
+                  <TableHead>Inbound</TableHead>
+                  <TableHead>Messaging total</TableHead>
+                  <TableHead>Total due</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {months.map((month) => {
+                  const isSelected = month.monthKey === selectedKey;
+                  return (
+                    <TableRow key={month.monthKey} data-state={isSelected ? "selected" : undefined}>
+                      <TableCell className="font-medium">{month.monthLabel}</TableCell>
+                      <TableCell>{month.outboundCount}</TableCell>
+                      <TableCell>{month.inboundCount}</TableCell>
+                      <TableCell>{formatMoney(month.messagingTotal)}</TableCell>
+                      <TableCell>{formatMoney(month.totalDue)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedKey(month.monthKey)}
+                          className={cn(isSelected && "opacity-60")}
+                          disabled={isSelected}
+                        >
+                          {isSelected ? "Viewing" : "View"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
-
-      <InvoiceForm
-        open={invoiceModalOpen}
-        onOpenChange={setInvoiceModalOpen}
-        invoice={editingInvoice}
-        families={data.families}
-        statuses={invoiceStatuses}
-        onSubmit={handleSaveInvoice}
-        onDelete={
-          editingInvoice ? () => handleDeleteInvoice(editingInvoice) : undefined
-        }
-      />
-
-      <PaymentForm
-        open={paymentModalOpen}
-        onOpenChange={setPaymentModalOpen}
-        payment={editingPayment}
-        families={data.families}
-        onSubmit={handleSavePayment}
-        onDelete={editingPayment ? () => handleDeletePayment(editingPayment) : undefined}
-      />
     </div>
   );
-}
-
-function nullToUndefined<T>(value: T | null | undefined): T | undefined {
-  return value === null ? undefined : value;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalizeInvoicePayloadForServer(payload: any) {
-  return {
-    ...payload,
-    issuedAt: nullToUndefined(payload.issuedAt),
-    dueAt: nullToUndefined(payload.dueAt),
-    coverageStart: nullToUndefined(payload.coverageStart),
-    coverageEnd: nullToUndefined(payload.coverageEnd),
-    creditsPurchased: nullToUndefined(payload.creditsPurchased),
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lineItems: (payload.lineItems ?? []).map((li: any) => {
-      const quantity = li.quantity ?? 1;
-
-      // If unitPriceCents is missing but amountCents exists, derive it.
-      // If both missing, default to 0 (or you can throw).
-      const unitPriceCents =
-        li.unitPriceCents ??
-        (li.amountCents != null ? Math.round(li.amountCents / quantity) : 0);
-
-      return {
-        ...li,
-        quantity,
-        unitPriceCents,
-      };
-    }),
-  };
 }
