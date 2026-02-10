@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 
 import type { ClientStudent } from "./types";
+import { parseStudentPayload } from "./validators";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
@@ -12,15 +13,15 @@ export async function createStudent(payload : ClientStudent) {
     await getOrCreateUser()
     await requireAdmin()
 
-    const dob = new Date(`${payload.dateOfBirth}T00:00:00.000Z`);   
+    const parsed = parseStudentPayload(payload);
 
     const newStudent = await prisma.student.create({
         data: {
-            name: payload?.name,
-            dateOfBirth: dob,
-            medicalNotes: payload?.medicalNotes,
-            familyId: payload.familyId,
-            levelId: payload.levelId
+            name: parsed.name,
+            dateOfBirth: parsed.dateOfBirth,
+            medicalNotes: parsed.medicalNotes,
+            familyId: parsed.familyId,
+            levelId: parsed.levelId
         }
     })
 

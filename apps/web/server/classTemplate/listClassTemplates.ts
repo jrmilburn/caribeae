@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/requireAdmin";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 
 const DAY_LOOKUP: Record<string, number> = {
   mon: 0,
@@ -46,7 +47,18 @@ export async function listClassTemplates(params: {
   status?: "active" | "inactive" | "all" | null;
 }) {
   await requireAdmin();
-  const trimmed = params.q?.trim().toLowerCase() ?? "";
+  const parsed = z
+    .object({
+      q: z.string().optional().nullable(),
+      pageSize: z.number().int().min(1).max(200),
+      cursor: z.string().optional().nullable(),
+      levelId: z.string().optional().nullable(),
+      teacherId: z.string().optional().nullable(),
+      status: z.enum(["active", "inactive", "all"]).optional().nullable(),
+    })
+    .parse(params);
+
+  const trimmed = parsed.q?.trim().toLowerCase() ?? "";
   const dayKey = trimmed.slice(0, 3);
   const dayOfWeek = dayKey in DAY_LOOKUP ? DAY_LOOKUP[dayKey] : null;
 
@@ -64,12 +76,12 @@ export async function listClassTemplates(params: {
   }
 
   const activeFilter =
-    params.status === "inactive" ? false : params.status === "all" ? undefined : true;
+    parsed.status === "inactive" ? false : parsed.status === "all" ? undefined : true;
 
   const where: Prisma.ClassTemplateWhereInput = {
     ...(activeFilter === undefined ? {} : { active: activeFilter }),
-    ...(params.levelId ? { levelId: params.levelId } : {}),
-    ...(params.teacherId ? { teacherId: params.teacherId } : {}),
+    ...(parsed.levelId ? { levelId: parsed.levelId } : {}),
+    ...(parsed.teacherId ? { teacherId: parsed.teacherId } : {}),
     ...(searchFilters.length ? { OR: searchFilters } : {}),
   };
 
@@ -78,9 +90,9 @@ export async function listClassTemplates(params: {
     prisma.classTemplate.findMany({
       where,
       orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }, { id: "asc" }],
-      cursor: params.cursor ? { id: params.cursor } : undefined,
-      skip: params.cursor ? 1 : 0,
-      take: params.pageSize + 1,
+      cursor: parsed.cursor ? { id: parsed.cursor } : undefined,
+      skip: parsed.cursor ? 1 : 0,
+      take: parsed.pageSize + 1,
       select: {
         id: true,
         name: true,
@@ -104,8 +116,8 @@ export async function listClassTemplates(params: {
     }),
   ]);
 
-  const hasNext = templates.length > params.pageSize;
-  const items = hasNext ? templates.slice(0, params.pageSize) : templates;
+  const hasNext = templates.length > parsed.pageSize;
+  const items = hasNext ? templates.slice(0, parsed.pageSize) : templates;
   const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
 
   return {

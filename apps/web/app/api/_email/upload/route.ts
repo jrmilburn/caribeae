@@ -11,6 +11,14 @@ const supa = createClient(
 );
 
 const BUCKET = "email-assets"; // create this as public in Supabase Storage
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+]);
+const ALLOWED_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
 
 export async function POST(req: Request) {
   try {
@@ -24,7 +32,18 @@ export async function POST(req: Request) {
 
   if (!file) return NextResponse.json({ ok: false, error: "No file" }, { status: 400 });
 
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ ok: false, error: "File too large" }, { status: 413 });
+  }
+
+  if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+    return NextResponse.json({ ok: false, error: "Unsupported file type" }, { status: 415 });
+  }
+
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return NextResponse.json({ ok: false, error: "Unsupported file extension" }, { status: 400 });
+  }
   const key = `uploads/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${ext}`;
 
   const arrayBuffer = await file.arrayBuffer();

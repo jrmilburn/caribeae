@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { z } from "zod";
 
 import type { Prisma } from "@prisma/client";
 
@@ -30,20 +31,29 @@ export async function listStudents(params: {
   await getOrCreateUser();
   await requireAdmin();
 
+  const parsed = z
+    .object({
+      q: z.string().optional().nullable(),
+      pageSize: z.number().int().min(1).max(200),
+      cursor: z.string().optional().nullable(),
+      levelId: z.string().optional().nullable(),
+    })
+    .parse(params);
+
   const filters: Prisma.StudentWhereInput[] = [];
 
-  if (params.q) {
+  if (parsed.q) {
     filters.push({
       name: {
-        contains: params.q,
+        contains: parsed.q,
         mode: "insensitive",
       },
     });
   }
 
-  if (params.levelId) {
+  if (parsed.levelId) {
     filters.push({
-      levelId: params.levelId,
+      levelId: parsed.levelId,
     });
   }
 
@@ -54,9 +64,9 @@ export async function listStudents(params: {
     prisma.student.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      cursor: params.cursor ? { id: params.cursor } : undefined,
-      skip: params.cursor ? 1 : 0,
-      take: params.pageSize + 1,
+      cursor: parsed.cursor ? { id: parsed.cursor } : undefined,
+      skip: parsed.cursor ? 1 : 0,
+      take: parsed.pageSize + 1,
       select: {
         id: true,
         name: true,
@@ -78,8 +88,8 @@ export async function listStudents(params: {
     }),
   ]);
 
-  const hasNext = students.length > params.pageSize;
-  const items = hasNext ? students.slice(0, params.pageSize) : students;
+  const hasNext = students.length > parsed.pageSize;
+  const items = hasNext ? students.slice(0, parsed.pageSize) : students;
   const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
 
   return {

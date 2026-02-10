@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { z } from "zod";
 
 import type { Family, Prisma } from "@prisma/client";
 
@@ -30,22 +31,31 @@ export async function listFamilies(params: {
   await getOrCreateUser();
   await requireAdmin();
 
+  const parsed = z
+    .object({
+      q: z.string().optional().nullable(),
+      pageSize: z.number().int().min(1).max(200),
+      cursor: z.string().optional().nullable(),
+      levelId: z.string().optional().nullable(),
+    })
+    .parse(params);
+
   const filters: Prisma.FamilyWhereInput[] = [];
 
-  if (params.q) {
+  if (parsed.q) {
     filters.push({
       name: {
-        contains: params.q,
+        contains: parsed.q,
         mode: "insensitive",
       },
     });
   }
 
-  if (params.levelId) {
+  if (parsed.levelId) {
     filters.push({
       students: {
         some: {
-          levelId: params.levelId,
+          levelId: parsed.levelId,
         },
       },
     });
@@ -58,9 +68,9 @@ export async function listFamilies(params: {
     prisma.family.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      cursor: params.cursor ? { id: params.cursor } : undefined,
-      skip: params.cursor ? 1 : 0,
-      take: params.pageSize + 1,
+      cursor: parsed.cursor ? { id: parsed.cursor } : undefined,
+      skip: parsed.cursor ? 1 : 0,
+      take: parsed.pageSize + 1,
       select: {
         id: true,
         name: true,
@@ -77,8 +87,8 @@ export async function listFamilies(params: {
     }),
   ]);
 
-  const hasNext = families.length > params.pageSize;
-  const items = hasNext ? families.slice(0, params.pageSize) : families;
+  const hasNext = families.length > parsed.pageSize;
+  const items = hasNext ? families.slice(0, parsed.pageSize) : families;
   const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
 
   return {

@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 
 import type { ClientStudent } from "./types";
+import { parseStudentPayload } from "./validators";
+import { z } from "zod";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
@@ -14,18 +16,19 @@ export async function updateStudent(payload: UpdateStudentPayload) {
     await getOrCreateUser()
     await requireAdmin()
 
-    const dob = new Date(`${payload.dateOfBirth}T00:00:00.000Z`);
+    const studentId = z.string().min(1).parse(payload.id);
+    const parsed = parseStudentPayload(payload);
 
     const updatedStudent = await prisma.student.update({
         where: {
-            id: payload.id
+            id: studentId
         },
         data: {
-            name: payload?.name,
-            dateOfBirth: dob,
-            medicalNotes: payload?.medicalNotes,
-            familyId: payload.familyId,
-            levelId: payload.levelId
+            name: parsed.name,
+            dateOfBirth: parsed.dateOfBirth,
+            medicalNotes: parsed.medicalNotes,
+            familyId: parsed.familyId,
+            levelId: parsed.levelId
         }
     })
 

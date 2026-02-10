@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { ClientTemplate } from "./types";
+import { parseClassTemplatePayload } from "./validators";
+import { z } from "zod";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
@@ -11,22 +13,25 @@ export async function updateTemplate(payload : ClientTemplate, id : string) {
 
         await getOrCreateUser();
         await requireAdmin();
+
+        const templateId = z.string().min(1).parse(id);
+        const parsed = parseClassTemplatePayload(payload);
     
         const updatedTemplate = await prisma.classTemplate.update({
             where: {
-                id
+                id: templateId
             },
             data: {
-                name: payload?.name,
-                levelId: payload?.levelId,
-                dayOfWeek: payload?.dayOfWeek,
-                startTime: payload?.startTime,
-                endTime: payload?.endTime,
-                startDate: new Date(payload.startDate),
-                endDate: payload?.endDate ? new Date(payload.endDate) : null,
-                capacity: payload?.capacity,
-                active: payload?.active,
-                teacherId: payload?.teacherId ?? null
+                name: parsed.name,
+                levelId: parsed.levelId,
+                dayOfWeek: parsed.dayOfWeek,
+                startTime: parsed.startTime,
+                endTime: parsed.endTime,
+                startDate: parsed.startDate,
+                endDate: parsed.endDate,
+                capacity: parsed.capacity,
+                active: parsed.active,
+                teacherId: parsed.teacherId
             }
         })
     

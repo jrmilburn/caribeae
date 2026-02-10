@@ -4,14 +4,17 @@ import { prisma } from "@/lib/prisma";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { z } from "zod";
 
 export default async function getFamily(id: string) {
   await getOrCreateUser();
   await requireAdmin();
 
+  const familyId = z.string().min(1).parse(id);
+
   const family = await prisma.family.findUnique({
     where: {
-      id,
+      id: familyId,
     },
     include: {
       students: {

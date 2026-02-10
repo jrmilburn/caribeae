@@ -8,10 +8,13 @@ import { normalizeFamilyContactPhones } from "./normalizeFamilyContacts";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { z } from "zod";
 
 export async function updateFamily(payload: ClientFamily, id: string): Promise<FamilyActionResult> {
     await getOrCreateUser();
     await requireAdmin();
+
+    const familyId = z.string().min(1).parse(id);
 
     const parsed = parseFamilyPayload(payload);
     if (!parsed.success) {
@@ -28,7 +31,7 @@ export async function updateFamily(payload: ClientFamily, id: string): Promise<F
 
     const newFamily = await prisma.family.update({
         where: {
-            id: id,
+            id: familyId,
         },
         data: {
             ...parsed.data,
