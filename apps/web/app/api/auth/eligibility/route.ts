@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   }
 
   const ip = await getClientIp();
-  const rateLimit = checkRateLimit(`auth:eligibility:${ip}`);
+  const rateLimit = await checkRateLimit(`auth:eligibility:${ip}`);
   if (!rateLimit.ok) {
     return NextResponse.json(
       { ok: false, error: "Too many requests. Please try again shortly." },
@@ -40,5 +40,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: NOT_ELIGIBLE_MESSAGE }, { status: 403 });
   }
 
-  return NextResponse.json({ ok: true, familyId: family.id });
+  return NextResponse.json({ ok: true });
 }
