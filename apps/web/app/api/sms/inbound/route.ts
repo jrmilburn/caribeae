@@ -42,6 +42,16 @@ export async function POST(req: NextRequest) {
 
   if (!from) return NextResponse.json({ ok: false, error: "Missing sender" }, { status: 400 });
 
+  if (messageSid) {
+    const existing = await prisma.message.findUnique({
+      where: { providerSid: messageSid },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+  }
+
   if (/^\s*stop\s*$/i.test(body)) {
     await prisma.conversation.updateMany({
       where: { phoneNumber: from },

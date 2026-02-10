@@ -3,6 +3,7 @@ import { sendEmailBroadcast, type EmailRecipient } from "@/lib/server/email/send
 import { auth } from "@clerk/nextjs/server";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { Prisma, MessageStatus } from "@prisma/client"; // 👈 add MessageStatus
+import { checkRateLimit } from "@/server/security/rateLimit";
 
 export async function sendEmailBroadcastAction(input: {
   subject: string;
@@ -14,6 +15,14 @@ export async function sendEmailBroadcastAction(input: {
   await requireAdmin();
   const { userId } = await auth();
   if (!userId) return { ok: false, error: "Unauthorized" };
+
+  const rateLimit = checkRateLimit(`email-broadcast:${userId}`, {
+    max: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!rateLimit.ok) {
+    return { ok: false, error: "Too many requests. Please try again shortly." };
+  }
 
   if (!input.subject?.trim()) return { ok: false, error: "Subject required" };
   if (!input.html?.trim()) return { ok: false, error: "Email body required" };

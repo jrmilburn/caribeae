@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { getClientIp } from "@/server/auth/getClientIp";
+import { checkRateLimit } from "@/server/security/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -25,6 +27,15 @@ export async function POST(req: Request) {
     await requireAdmin();
   } catch {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ip = await getClientIp();
+  const rateLimit = checkRateLimit(`email-upload:${ip}`, {
+    max: 20,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!rateLimit.ok) {
+    return NextResponse.json({ ok: false, error: "Too many requests" }, { status: 429 });
   }
 
   const form = await req.formData();

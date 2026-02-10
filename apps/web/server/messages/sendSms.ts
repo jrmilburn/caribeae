@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/requireAdmin";
 import { getBrisbaneMonthKey } from "@/lib/billing/brisbane";
 import { OUTBOUND_SMS_UNIT_COST } from "@/lib/billing/pricing";
 import twilio from "twilio";
+import { auth } from "@clerk/nextjs/server";
+import { checkRateLimit } from "@/server/security/rateLimit";
 
 type SendInput = {
   name?: string;
@@ -60,6 +62,15 @@ async function findConversationForNumber(to: string, fallbackFamilyId?: string) 
 
 export async function sendSmsAction(input: SendInput): Promise<SendResponse> {
   await requireAdmin();
+  const { userId } = await auth();
+
+  const rateLimit = checkRateLimit(`sms-broadcast:${userId ?? "unknown"}`, {
+    max: 10,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!rateLimit.ok) {
+    return { ok: false, error: "Too many requests. Please try again shortly." };
+  }
 
   const text = (input.body ?? input.message ?? "").trim();
   if (!text) return { ok: false, error: "Missing message/body" };
