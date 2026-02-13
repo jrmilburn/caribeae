@@ -9,6 +9,7 @@ const csp = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} https://editor.unlayer.com https://clerk.caribeae.com.au https://*.clerk.com https://*.clerk.dev https://*.clerk.accounts.dev`,
+  "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",

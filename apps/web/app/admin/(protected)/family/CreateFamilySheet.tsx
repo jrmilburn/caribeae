@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -306,6 +306,9 @@ export function CreateFamilySheet({ open, onOpenChange, levels, onSave }: Create
       <SheetContent side="right" className="w-full sm:max-w-xl p-0 gap-0">
         <SheetHeader className="px-6 pt-6 pb-4 sm:px-8">
           <SheetTitle>New family</SheetTitle>
+          <SheetDescription className="sr-only">
+            Create a family profile and optionally add students before saving.
+          </SheetDescription>
         </SheetHeader>
 
         <div ref={scrollAreaRef} className="flex-1 overflow-y-auto px-6 pb-6 sm:px-8">
