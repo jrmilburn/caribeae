@@ -186,7 +186,7 @@ export function RequestClassDialog({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="max-h-[90dvh] gap-0 rounded-t-2xl border-x-0 border-b-0 p-0 shadow-2xl"
+          className="h-[88dvh] max-h-[90dvh] gap-0 rounded-t-2xl border-x-0 border-b-0 p-0 shadow-2xl will-change-transform data-[state=open]:duration-400 data-[state=closed]:duration-350 data-[state=open]:ease-out data-[state=closed]:ease-in"
         >
           <SheetHeader className="border-b px-4 py-3 pr-12">
             <SheetTitle>Request a class for {studentName}</SheetTitle>
