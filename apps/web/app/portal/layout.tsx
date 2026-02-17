@@ -1,4 +1,5 @@
 import { PortalTopBar } from "@/components/portal/PortalTopBar";
+import { AttributionFooter } from "@/components/AttributionFooter";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +20,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <PortalTopBar />
           <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
             {children}
+            <AttributionFooter />
           </main>
         </div>
       </div>

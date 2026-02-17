@@ -3,6 +3,7 @@
 import type { Level } from "@prisma/client";
 import { useEffect, useMemo, useState } from "react";
 import { MoreVerticalIcon } from "lucide-react";
+import { toast } from "sonner";
 
 import FamilyListItem from "./FamilyListItem";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ import { CreateFamilySheet } from "./CreateFamilySheet";
 
 import { createFamily } from "@/server/family/createFamily";
 import { updateFamily } from "@/server/family/updateFamily";
-import { deleteFamily } from "@/server/family/deleteFamily";
+import { deleteFamily, getFamilyDeletePreview } from "@/server/family/deleteFamily";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
 
 import type { ClientFamilyWithStudents } from "@/server/family/types";
@@ -35,6 +36,31 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { buildReturnUrl } from "@/lib/returnContext";
+
+function formatDeleteCount(label: string, count: number) {
+  return `${count} ${label}${count === 1 ? "" : "s"}`;
+}
+
+function buildDeleteConfirmationMessage(
+  familyName: string,
+  counts: { students: number; invoices: number; payments: number }
+) {
+  const entries: string[] = [];
+  if (counts.students > 0) entries.push(formatDeleteCount("student", counts.students));
+  if (counts.invoices > 0) entries.push(formatDeleteCount("invoice", counts.invoices));
+  if (counts.payments > 0) entries.push(formatDeleteCount("payment", counts.payments));
+
+  if (entries.length === 0) {
+    return `Delete "${familyName}"?`;
+  }
+
+  return [
+    `Delete "${familyName}" and all linked records?`,
+    "",
+    `This will permanently remove: ${entries.join(", ")}.`,
+    "This cannot be undone.",
+  ].join("\n");
+}
 
 export default function FamilyList({
   view,
@@ -101,10 +127,19 @@ export default function FamilyList({
   };
 
   const handleDelete = async (family: FamilyListEntry) => {
-    const ok = window.confirm(`Delete "${family.name}"?`);
+    const preview = await getFamilyDeletePreview(family.id);
+    if (!preview.success) {
+      toast.error("Unable to delete family", {
+        description: preview.error,
+      });
+      return;
+    }
+
+    const ok = window.confirm(buildDeleteConfirmationMessage(family.name, preview.linkedCounts));
     if (!ok) return;
+
     await runMutationWithToast(
-      () => deleteFamily(family.id),
+      () => deleteFamily(family.id, { confirmed: true }),
       {
         pending: { title: "Deleting family..." },
         success: { title: "Family deleted" },

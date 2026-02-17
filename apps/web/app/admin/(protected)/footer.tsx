@@ -10,7 +10,7 @@ export function AppFooter({ className }: { className?: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <span>Powered by</span>
+          <span>Software by</span>
           <Link
             href="https://www.studioparallel.au"
             target="_blank"
