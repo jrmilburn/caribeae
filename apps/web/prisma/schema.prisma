@@ -58,6 +58,7 @@ model Family {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @default(now()) @updatedAt
   payments            Payment[]
+  stripePayments      StripePayment[]
   conversations       Conversation[]
   messages            Message[]
   accountOpeningState AccountOpeningState?
@@ -363,6 +364,13 @@ enum InvoiceLineItemKind {
 enum PaymentStatus {
   COMPLETED
   VOID
+}
+
+enum StripePaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
 }
 
 enum EnrolmentAdjustmentType {
@@ -726,6 +734,7 @@ model Payment {
   reversalReason String?
 
   allocations PaymentAllocation[]
+  stripePayments StripePayment[] @relation("StripePaymentSettlement")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -749,6 +758,43 @@ model PaymentAllocation {
 
   @@id([paymentId, invoiceId])
   @@index([invoiceId])
+}
+
+model StripePayment {
+  id String @id @default(cuid())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  currency    String              @default("usd")
+  status      StripePaymentStatus @default(PENDING)
+
+  idempotencyKey       String  @unique
+  stripeSessionId      String? @unique
+  stripePaymentIntentId String? @unique
+
+  settledPaymentId String?
+  settledPayment   Payment? @relation("StripePaymentSettlement", fields: [settledPaymentId], references: [id], onDelete: SetNull)
+
+  metadata Json?
+
+  settledAt   DateTime?
+  failedAt    DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([familyId, createdAt])
+  @@index([familyId, status, createdAt])
+}
+
+model StripeWebhookEvent {
+  id String @id
+
+  type String
+
+  receivedAt DateTime @default(now())
 }
 
 model InvoicingSweepState {

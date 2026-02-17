@@ -23,11 +23,17 @@ export type FamilyPortalDashboard = {
   students: PortalStudentSummary[];
 };
 
+export type PortalPaymentStatus = "PENDING" | "PAID" | "FAILED" | "CANCELLED";
+
 export type PortalPayment = {
   id: string;
   amountCents: number;
-  paidAt: Date;
+  currency: string;
+  status: PortalPaymentStatus;
+  createdAt: Date;
+  paidAt: Date | null;
   method: string | null;
   note: string | null;
   invoiceIds: string[];
+  stripeSessionId: string | null;
 };
