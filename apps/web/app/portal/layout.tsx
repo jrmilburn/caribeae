@@ -16,10 +16,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           <div className="absolute inset-0 bg-[url('/globe.svg')] bg-[length:520px] bg-right-top bg-no-repeat opacity-[0.04]" />
         </div>
 
-        <div className="relative z-10">
+        <div className="relative z-10 flex min-h-screen flex-col">
           <PortalTopBar />
-          <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-            {children}
+          <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+            <div className="flex-1">
+              {children}
+            </div>
             <AttributionFooter />
           </main>
         </div>
