@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import type { PortalClassOption } from "@/types/portal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,21 @@ function computeNextClassDate(template: PortalClassOption | null) {
   return classKey;
 }
 
+function useIsMobileRequestClassSheet() {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const handleChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+
+    setIsMobile(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  return isMobile;
+}
+
 export function RequestClassDialog({
   open,
   onOpenChange,
@@ -71,6 +87,7 @@ export function RequestClassDialog({
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const isMobile = useIsMobileRequestClassSheet();
 
   React.useEffect(() => {
     if (!open) return;
@@ -113,6 +130,83 @@ export function RequestClassDialog({
     }
   };
 
+  const formFields = (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Requested class</Label>
+        <Select value={requestedClassId} onValueChange={setRequestedClassId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select class" />
+          </SelectTrigger>
+          <SelectContent>
+            {eligibleClasses.map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {formatTemplateLabel(template)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedTemplate ? (
+          <p className="text-xs text-muted-foreground">
+            {formatTemplateLabel(selectedTemplate)}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label>Effective date</Label>
+        <Input type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
+        <p className="text-xs text-muted-foreground">Starts on {formatBrisbaneDate(effectiveDate)}.</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Notes (optional)</Label>
+        <Textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder="Anything we should know?"
+        />
+      </div>
+    </div>
+  );
+
+  const actions = (
+    <>
+      <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
+        Cancel
+      </Button>
+      <Button onClick={handleSubmit} disabled={!canSubmit}>
+        Submit request
+      </Button>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[90dvh] gap-0 rounded-t-2xl border-x-0 border-b-0 p-0 shadow-2xl"
+        >
+          <SheetHeader className="border-b px-4 py-3 pr-12">
+            <SheetTitle>Request a class for {studentName}</SheetTitle>
+          </SheetHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {formFields}
+            </div>
+            <div className="shrink-0 border-t bg-background px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+              <div className="flex justify-end gap-2">
+                {actions}
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -120,51 +214,10 @@ export function RequestClassDialog({
           <DialogTitle>Request a class for {studentName}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Requested class</Label>
-            <Select value={requestedClassId} onValueChange={setRequestedClassId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select class" />
-              </SelectTrigger>
-              <SelectContent>
-                {eligibleClasses.map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    {formatTemplateLabel(template)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedTemplate ? (
-              <p className="text-xs text-muted-foreground">
-                {formatTemplateLabel(selectedTemplate)}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Effective date</Label>
-            <Input type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
-            <p className="text-xs text-muted-foreground">Starts on {formatBrisbaneDate(effectiveDate)}.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Notes (optional)</Label>
-            <Textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Anything we should know?"
-            />
-          </div>
-        </div>
+        {formFields}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            Submit request
-          </Button>
+          {actions}
         </div>
       </DialogContent>
     </Dialog>
