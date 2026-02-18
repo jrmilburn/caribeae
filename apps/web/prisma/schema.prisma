@@ -789,6 +789,19 @@ model StripePayment {
   @@index([familyId, status, createdAt])
 }
 
+model ConnectedAccount {
+  clientId String @id
+
+  stripeAccountId        String? @unique
+  stripeChargesEnabled   Boolean @default(false)
+  stripePayoutsEnabled   Boolean @default(false)
+  stripeDetailsSubmitted Boolean @default(false)
+  stripeOnboardingStatus String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model StripeWebhookEvent {
   id String @id
 

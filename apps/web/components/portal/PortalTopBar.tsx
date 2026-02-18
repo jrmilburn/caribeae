@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/portal", label: "Dashboard" },
-  { href: "/portal/payments", label: "Billing" },
+  { href: "/portal/billing", label: "Billing" },
 ];
 
 function isActivePath(pathname: string, href: string) {

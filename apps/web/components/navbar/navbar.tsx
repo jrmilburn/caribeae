@@ -13,6 +13,7 @@ import {
   BookOpen,
   Inbox,        // ✅ better for Messages (inbox)
   Settings,
+  CreditCard,
   Menu,
   ChevronDown,
   LogIn,
@@ -59,6 +60,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Messages", href: "/admin/messages", icon: Inbox },
   { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
   { label: "Waitlist", href: "/admin/waitlist", icon: Clock },
+  { label: "Payments", href: "/admin/payments", icon: CreditCard },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

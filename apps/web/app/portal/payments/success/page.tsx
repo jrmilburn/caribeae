@@ -1,16 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { getFamilyForCurrentUser } from "@/server/portal/getFamilyForCurrentUser";
-import { getFamilyBillingOverview } from "@/server/portal/getFamilyBillingOverview";
-import BillingSuccessClient from "./BillingSuccessClient";
-
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type PageProps = {
   searchParams?: SearchParams | Promise<SearchParams>;
 };
-
-export const dynamic = "force-dynamic";
 
 function firstString(value: string | string[] | undefined) {
   if (typeof value === "string") return value;
@@ -18,34 +12,15 @@ function firstString(value: string | string[] | undefined) {
   return null;
 }
 
-export default async function BillingSuccessPage({ searchParams }: PageProps) {
-  const access = await getFamilyForCurrentUser();
-
-  if (access.status === "SIGNED_OUT") {
-    redirect("/auth");
-  }
-
-  if (access.status !== "OK") {
-    redirect("/auth/error");
-  }
-
+export default async function PortalPaymentsSuccessAliasPage({ searchParams }: PageProps) {
   const sp = await Promise.resolve(searchParams ?? {});
-  const checkoutSessionId = firstString(sp.session_id);
+  const query = new URLSearchParams();
 
-  if (!checkoutSessionId) {
-    redirect("/portal/payments");
+  const sessionId = firstString(sp.session_id);
+  if (sessionId) {
+    query.set("session_id", sessionId);
   }
 
-  const overview = await getFamilyBillingOverview(access.family.id, {
-    checkoutSessionId,
-  });
-
-  return (
-    <BillingSuccessClient
-      checkoutSessionId={checkoutSessionId}
-      initialOutstandingCents={overview.outstandingCents}
-      initialStatus={overview.checkoutSessionStatus}
-      initialRecentPayments={overview.recentPayments}
-    />
-  );
+  const queryString = query.toString();
+  redirect(queryString ? `/portal/billing/success?${queryString}` : "/portal/billing");
 }

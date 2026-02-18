@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/portal", label: "Dashboard" },
-  { href: "/portal/payments", label: "Payments" },
+  { href: "/portal/billing", label: "Payments" },
 ];
 
 export function PortalHeader() {

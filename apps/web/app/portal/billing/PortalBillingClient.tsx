@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import type { PortalPayment } from "@/types/portal";
 
 type PortalBillingClientProps = {
+  clientId: string;
+  familyId: string;
   outstandingCents: number;
   recentPayments: PortalPayment[];
   showCancelledNotice: boolean;
@@ -63,7 +65,7 @@ function paymentSortTimestamp(payment: PortalPayment) {
 }
 
 export default function PortalBillingClient(props: PortalBillingClientProps) {
-  const { outstandingCents, recentPayments, showCancelledNotice } = props;
+  const { clientId, familyId, outstandingCents, recentPayments, showCancelledNotice } = props;
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -90,8 +92,14 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
     setErrorMessage(null);
 
     try {
-      const response = await fetch("/api/stripe/checkout/create", {
+      const response = await fetch("/api/stripe/checkout/create-session", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          familyId,
+          amountInCents: outstandingCents,
+        }),
       });
 
       const payload = (await response.json().catch(() => null)) as CheckoutCreateResponse | null;
@@ -107,7 +115,7 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
       setErrorMessage(message);
       setSubmitting(false);
     }
-  }, []);
+  }, [clientId, familyId, outstandingCents]);
 
   const confirmBody = (
     <div className="space-y-4">
@@ -139,7 +147,7 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
       {showCancelledNotice ? (
         <Card className="border-amber-200 bg-amber-50/70">
           <CardContent className="pt-6 text-sm text-amber-800">
-            Payment cancelled. You can retry whenever you are ready.
+            Payment canceled. You can retry whenever you are ready.
           </CardContent>
         </Card>
       ) : null}

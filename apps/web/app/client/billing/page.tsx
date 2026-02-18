@@ -16,11 +16,11 @@ export default async function ClientBillingAliasPage({ searchParams }: PageProps
   const sp = await Promise.resolve(searchParams ?? {});
   const query = new URLSearchParams();
 
-  const cancelled = firstString(sp.cancelled);
-  if (cancelled) {
-    query.set("cancelled", cancelled);
+  const canceled = firstString(sp.canceled) ?? firstString(sp.cancelled);
+  if (canceled) {
+    query.set("canceled", canceled);
   }
 
   const queryString = query.toString();
-  redirect(queryString ? `/portal/payments?${queryString}` : "/portal/payments");
+  redirect(queryString ? `/portal/billing?${queryString}` : "/portal/billing");
 }

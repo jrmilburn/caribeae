@@ -1,40 +1,26 @@
 import { redirect } from "next/navigation";
 
-import { getFamilyForCurrentUser } from "@/server/portal/getFamilyForCurrentUser";
-import { getFamilyBillingOverview } from "@/server/portal/getFamilyBillingOverview";
-import PortalBillingClient from "./PortalBillingClient";
-
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type PageProps = {
   searchParams?: SearchParams | Promise<SearchParams>;
 };
 
-export const dynamic = "force-dynamic";
+function firstString(value: string | string[] | undefined) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && value.length > 0) return value[0] ?? null;
+  return null;
+}
 
-export default async function PortalPaymentsPage({ searchParams }: PageProps) {
-  const access = await getFamilyForCurrentUser();
-
-  if (access.status === "SIGNED_OUT") {
-    redirect("/auth");
-  }
-
-  if (access.status !== "OK") {
-    redirect("/auth/error");
-  }
-
+export default async function PortalPaymentsAliasPage({ searchParams }: PageProps) {
   const sp = await Promise.resolve(searchParams ?? {});
-  const showCancelledNotice =
-    sp.cancelled === "1" ||
-    (Array.isArray(sp.cancelled) && sp.cancelled.includes("1"));
+  const query = new URLSearchParams();
 
-  const overview = await getFamilyBillingOverview(access.family.id);
+  const canceled = firstString(sp.canceled) ?? firstString(sp.cancelled);
+  if (canceled) {
+    query.set("canceled", canceled);
+  }
 
-  return (
-    <PortalBillingClient
-      outstandingCents={overview.outstandingCents}
-      recentPayments={overview.recentPayments}
-      showCancelledNotice={showCancelledNotice}
-    />
-  );
+  const queryString = query.toString();
+  redirect(queryString ? `/portal/billing?${queryString}` : "/portal/billing");
 }

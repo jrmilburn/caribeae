@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { prisma } from "@/lib/prisma";
+import { getStripeWebhookSecret, stripeClient } from "@/lib/stripeClient";
 import { createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
-import { getStripeClient, getStripeWebhookSecret } from "@/server/stripe/client";
+import { toConnectedAccountSnapshot } from "@/server/stripe/connectAccounts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ async function markCheckoutSessionPaid(
 ) {
   const appPaymentRef = session.metadata?.appPaymentRef ?? null;
   const familyIdFromMetadata = session.metadata?.familyId ?? null;
+  const clientIdFromMetadata = session.metadata?.clientId ?? null;
   const amountCents = session.amount_total ?? 0;
   const currency = (session.currency ?? "usd").toLowerCase();
   const paymentIntentId = resolvePaymentIntentId(session.payment_intent);
@@ -65,6 +67,7 @@ async function markCheckoutSessionPaid(
         metadata: {
           source: "webhook",
           stage: "recovered-session",
+          clientId: clientIdFromMetadata,
         },
       },
       select: {
@@ -94,6 +97,7 @@ async function markCheckoutSessionPaid(
           stage: "rejected",
           reason: "family-mismatch",
           eventType,
+          clientId: clientIdFromMetadata,
         },
       },
     });
@@ -112,6 +116,7 @@ async function markCheckoutSessionPaid(
           stage: "rejected",
           reason: "amount-or-currency-mismatch",
           eventType,
+          clientId: clientIdFromMetadata,
           expectedAmountCents: stripePayment.amountCents,
           receivedAmountCents: amountCents,
           expectedCurrency: stripePayment.currency,
@@ -156,6 +161,7 @@ async function markCheckoutSessionPaid(
         source: "webhook",
         stage: "settled",
         eventType,
+        clientId: clientIdFromMetadata,
         paymentStatus: session.payment_status ?? null,
       },
     },
@@ -169,6 +175,7 @@ async function markCheckoutSessionPending(
 ) {
   const appPaymentRef = session.metadata?.appPaymentRef ?? null;
   const familyIdFromMetadata = session.metadata?.familyId ?? null;
+  const clientIdFromMetadata = session.metadata?.clientId ?? null;
   const amountCents = session.amount_total ?? 0;
   const currency = (session.currency ?? "usd").toLowerCase();
   const paymentIntentId = resolvePaymentIntentId(session.payment_intent);
@@ -195,6 +202,7 @@ async function markCheckoutSessionPending(
           source: "webhook",
           stage: "awaiting-confirmation",
           eventType,
+          clientId: clientIdFromMetadata,
         },
       },
       select: { id: true, status: true },
@@ -215,6 +223,7 @@ async function markCheckoutSessionPending(
         source: "webhook",
         stage: "awaiting-confirmation",
         eventType,
+        clientId: clientIdFromMetadata,
         paymentStatus: session.payment_status ?? null,
       },
     },
@@ -312,17 +321,40 @@ async function markPaymentIntentFailed(tx: Prisma.TransactionClient, paymentInte
   });
 }
 
+async function markConnectedAccountUpdated(tx: Prisma.TransactionClient, account: Stripe.Account) {
+  const stripeAccountId = account.id;
+  const connected = await tx.connectedAccount.findFirst({
+    where: { stripeAccountId },
+    select: { clientId: true },
+  });
+
+  if (!connected) {
+    // Stripe can send account updates before/after local records exist; acknowledge to avoid retries.
+    console.warn("[stripe/webhook] account.updated received for unknown account", { stripeAccountId });
+    return;
+  }
+
+  const snapshot = toConnectedAccountSnapshot(account);
+  await tx.connectedAccount.update({
+    where: { clientId: connected.clientId },
+    data: snapshot,
+  });
+}
+
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
     return new NextResponse("Missing signature", { status: 400 });
   }
 
+  // Stripe signatures require the exact raw request body bytes.
+  // Local test command:
+  // stripe listen --forward-to localhost:3000/api/stripe/webhook
   const payload = await request.text();
 
   let event: Stripe.Event;
   try {
-    event = getStripeClient().webhooks.constructEvent(payload, signature, getStripeWebhookSecret());
+    event = stripeClient.webhooks.constructEvent(payload, signature, getStripeWebhookSecret());
   } catch {
     return new NextResponse("Invalid signature", { status: 400 });
   }
@@ -366,6 +398,10 @@ export async function POST(request: Request) {
 
       if (event.type === "payment_intent.payment_failed") {
         await markPaymentIntentFailed(tx, event.data.object as Stripe.PaymentIntent);
+      }
+
+      if (event.type === "account.updated") {
+        await markConnectedAccountUpdated(tx, event.data.object as Stripe.Account);
       }
     });
   } catch (error) {

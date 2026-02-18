@@ -22,5 +22,5 @@ export default async function ClientBillingSuccessAliasPage({ searchParams }: Pa
   }
 
   const queryString = query.toString();
-  redirect(queryString ? `/portal/payments/success?${queryString}` : "/portal/payments");
+  redirect(queryString ? `/portal/billing/success?${queryString}` : "/portal/billing");
 }

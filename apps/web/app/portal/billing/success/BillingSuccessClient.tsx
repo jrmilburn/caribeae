@@ -21,6 +21,12 @@ type BillingSuccessClientProps = {
   initialOutstandingCents: number;
   initialStatus: PortalPaymentStatus | null;
   initialRecentPayments: PortalPayment[];
+  stripeSession: {
+    id: string;
+    amountTotal: number | null;
+    currency: string | null;
+    paymentStatus: string | null;
+  };
 };
 
 const POLL_DELAYS_MS = [1200, 2000, 3200, 5000, 8000, 13000, 20000];
@@ -63,7 +69,13 @@ function statusCopy(status: PortalPaymentStatus | null) {
 }
 
 export default function BillingSuccessClient(props: BillingSuccessClientProps) {
-  const { checkoutSessionId, initialOutstandingCents, initialStatus, initialRecentPayments } = props;
+  const {
+    checkoutSessionId,
+    initialOutstandingCents,
+    initialStatus,
+    initialRecentPayments,
+    stripeSession,
+  } = props;
 
   const [outstandingCents, setOutstandingCents] = React.useState(initialOutstandingCents);
   const [status, setStatus] = React.useState<PortalPaymentStatus | null>(initialStatus);
@@ -129,6 +141,20 @@ export default function BillingSuccessClient(props: BillingSuccessClientProps) {
             </div>
           </div>
 
+          <div className="rounded-lg border border-slate-200 px-4 py-3 text-sm">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Stripe confirmation</div>
+            <div className="mt-1 text-slate-800">Session: {stripeSession.id}</div>
+            <div className="text-slate-600">
+              Amount:{" "}
+              {typeof stripeSession.amountTotal === "number"
+                ? `${formatCurrencyFromCents(stripeSession.amountTotal)} ${(
+                    stripeSession.currency ?? "aud"
+                  ).toUpperCase()}`
+                : "Unknown"}
+            </div>
+            <div className="text-slate-600">Status: {stripeSession.paymentStatus ?? "processing"}</div>
+          </div>
+
           {!isTerminal(status) && timedOut ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               If this takes longer than a minute, refresh.
@@ -137,7 +163,7 @@ export default function BillingSuccessClient(props: BillingSuccessClientProps) {
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button asChild className="h-11">
-              <Link href="/portal/payments">Back to portal</Link>
+              <Link href="/portal/billing">Back to billing</Link>
             </Button>
             {!isTerminal(status) ? (
               <Button
