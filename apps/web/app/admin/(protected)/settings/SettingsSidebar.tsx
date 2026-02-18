@@ -21,11 +21,11 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "teachers", label: "Teachers", href: "/admin/settings/teachers" },
   { id: "holidays", label: "Holidays", href: "/admin/settings/holidays" },
   { id: "products", label: "Products", href: "/admin/settings/products" },
+  { id: "payments", label: "Payments", href: "/admin/settings/payments" },
 ];
 
 const SETTINGS_LINKS = [
   { href: "/admin/billing", label: "Billing" },
-  { href: "/admin/payments", label: "Payments" },
 ];
 
 type SettingsSidebarProps = {

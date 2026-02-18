@@ -1,9 +1,9 @@
-import { Prisma, StripePaymentStatus } from "@prisma/client";
+import { Prisma, StripeAccountType, StripeOnboardingStatus, StripePaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { prisma } from "@/lib/prisma";
-import { getStripeWebhookSecret, stripeClient } from "@/lib/stripeClient";
+import { getStripeWebhookSecret, stripe } from "@/lib/stripe";
 import { createPaymentAndAllocate } from "@/server/billing/invoiceMutations";
 import { toConnectedAccountSnapshot } from "@/server/stripe/connectAccounts";
 
@@ -334,11 +334,36 @@ async function markConnectedAccountUpdated(tx: Prisma.TransactionClient, account
     return;
   }
 
-  const snapshot = toConnectedAccountSnapshot(account);
-  await tx.connectedAccount.update({
-    where: { clientId: connected.clientId },
-    data: snapshot,
-  });
+  try {
+    const snapshot = toConnectedAccountSnapshot(account);
+    await tx.connectedAccount.update({
+      where: { clientId: connected.clientId },
+      data: {
+        stripeAccountType: StripeAccountType.STANDARD,
+        ...snapshot,
+        stripeLastSyncedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("unsupported type")) {
+      // Legacy account type (for example Express) is no longer supported.
+      await tx.connectedAccount.update({
+        where: { clientId: connected.clientId },
+        data: {
+          stripeAccountType: null,
+          stripeChargesEnabled: false,
+          stripePayoutsEnabled: false,
+          stripeDetailsSubmitted: false,
+          stripeOnboardingStatus: StripeOnboardingStatus.NOT_CONNECTED,
+          stripeLastSyncedAt: new Date(),
+        },
+      });
+      console.warn("[stripe/webhook] legacy non-standard account ignored", { stripeAccountId });
+      return;
+    }
+
+    throw error;
+  }
 }
 
 export async function POST(request: Request) {
@@ -354,7 +379,7 @@ export async function POST(request: Request) {
 
   let event: Stripe.Event;
   try {
-    event = stripeClient.webhooks.constructEvent(payload, signature, getStripeWebhookSecret());
+    event = stripe.webhooks.constructEvent(payload, signature, getStripeWebhookSecret());
   } catch {
     return new NextResponse("Invalid signature", { status: 400 });
   }

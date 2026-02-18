@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
 
 import { currentUser } from "@clerk/nextjs/server";
-import { StripePaymentStatus } from "@prisma/client";
+import { StripeAccountType, StripeOnboardingStatus, StripePaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getAppBaseUrl, stripeClient } from "@/lib/stripeClient";
+import { getAppBaseUrl, stripe } from "@/lib/stripe";
 import { getFamilyBalanceCents } from "@/server/billing/getFamilyBalanceCents";
 import { getFamilyForCurrentUser } from "@/server/portal/getFamilyForCurrentUser";
 import { getDefaultClientId } from "@/server/stripe/connectAccounts";
@@ -92,18 +92,24 @@ export async function POST(request: Request) {
     where: { clientId: payload.clientId },
     select: {
       stripeAccountId: true,
+      stripeAccountType: true,
       stripeChargesEnabled: true,
       stripePayoutsEnabled: true,
+      stripeDetailsSubmitted: true,
+      stripeOnboardingStatus: true,
     },
   });
 
   if (
     !connectedAccount?.stripeAccountId ||
+    connectedAccount.stripeAccountType !== StripeAccountType.STANDARD ||
+    connectedAccount.stripeOnboardingStatus !== StripeOnboardingStatus.CONNECTED ||
     !connectedAccount.stripeChargesEnabled ||
-    !connectedAccount.stripePayoutsEnabled
+    !connectedAccount.stripePayoutsEnabled ||
+    !connectedAccount.stripeDetailsSubmitted
   ) {
     return NextResponse.json(
-      { error: "Payments are not yet enabled. Please contact support." },
+      { error: "Online payments not enabled. Please contact the swim school." },
       { status: 400 }
     );
   }
@@ -130,8 +136,10 @@ export async function POST(request: Request) {
     ]);
     const customerEmail = readPrimaryEmail(clerkUser);
 
+    // Platform-created checkout session with destination transfer to the connected
+    // Standard account. Keep charges on the platform account (not direct charges).
     const applicationFeeAmount = 0;
-    const session = await stripeClient.checkout.sessions.create(
+    const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
         line_items: [

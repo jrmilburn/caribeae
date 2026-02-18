@@ -373,6 +373,16 @@ enum StripePaymentStatus {
   CANCELLED
 }
 
+enum StripeAccountType {
+  STANDARD @map("standard")
+}
+
+enum StripeOnboardingStatus {
+  NOT_CONNECTED @map("not_connected")
+  PENDING       @map("pending")
+  CONNECTED     @map("connected")
+}
+
 enum EnrolmentAdjustmentType {
   CANCELLATION_CREDIT
 }
@@ -733,8 +743,8 @@ model Payment {
   reversedAt     DateTime?
   reversalReason String?
 
-  allocations PaymentAllocation[]
-  stripePayments StripePayment[] @relation("StripePaymentSettlement")
+  allocations    PaymentAllocation[]
+  stripePayments StripePayment[]     @relation("StripePaymentSettlement")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -770,8 +780,8 @@ model StripePayment {
   currency    String              @default("usd")
   status      StripePaymentStatus @default(PENDING)
 
-  idempotencyKey       String  @unique
-  stripeSessionId      String? @unique
+  idempotencyKey        String  @unique
+  stripeSessionId       String? @unique
   stripePaymentIntentId String? @unique
 
   settledPaymentId String?
@@ -782,8 +792,8 @@ model StripePayment {
   settledAt   DateTime?
   failedAt    DateTime?
   cancelledAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([familyId, createdAt])
   @@index([familyId, status, createdAt])
@@ -792,11 +802,13 @@ model StripePayment {
 model ConnectedAccount {
   clientId String @id
 
-  stripeAccountId        String? @unique
-  stripeChargesEnabled   Boolean @default(false)
-  stripePayoutsEnabled   Boolean @default(false)
-  stripeDetailsSubmitted Boolean @default(false)
-  stripeOnboardingStatus String?
+  stripeAccountId        String?                @unique
+  stripeAccountType      StripeAccountType?
+  stripeChargesEnabled   Boolean                @default(false)
+  stripePayoutsEnabled   Boolean                @default(false)
+  stripeDetailsSubmitted Boolean                @default(false)
+  stripeOnboardingStatus StripeOnboardingStatus @default(NOT_CONNECTED)
+  stripeLastSyncedAt     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

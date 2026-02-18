@@ -33,6 +33,7 @@ type PortalBillingClientProps = {
   outstandingCents: number;
   recentPayments: PortalPayment[];
   showCancelledNotice: boolean;
+  onlinePaymentsEnabled: boolean;
 };
 
 type CheckoutCreateResponse = {
@@ -65,7 +66,7 @@ function paymentSortTimestamp(payment: PortalPayment) {
 }
 
 export default function PortalBillingClient(props: PortalBillingClientProps) {
-  const { clientId, familyId, outstandingCents, recentPayments, showCancelledNotice } = props;
+  const { clientId, familyId, outstandingCents, recentPayments, showCancelledNotice, onlinePaymentsEnabled } = props;
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -164,10 +165,14 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
             </div>
           </div>
 
-          {hasOutstandingBalance ? (
+          {hasOutstandingBalance && onlinePaymentsEnabled ? (
             <Button className="hidden h-11 sm:inline-flex" onClick={() => setConfirmOpen(true)}>
               Pay now
             </Button>
+          ) : hasOutstandingBalance ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Online payments not enabled. Please contact the swim school.
+            </div>
           ) : (
             <div className="text-sm text-emerald-700">Your account is fully paid.</div>
           )}
@@ -226,7 +231,7 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
         </CardContent>
       </Card>
 
-      {hasOutstandingBalance && !isDesktop ? (
+      {hasOutstandingBalance && onlinePaymentsEnabled && !isDesktop ? (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:hidden">
           <Button className="h-12 w-full" onClick={() => setConfirmOpen(true)}>
             Pay now

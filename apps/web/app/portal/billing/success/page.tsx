@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { stripeClient } from "@/lib/stripeClient";
+import { stripe } from "@/lib/stripe";
 import { getFamilyForCurrentUser } from "@/server/portal/getFamilyForCurrentUser";
 import { getFamilyBillingOverview } from "@/server/portal/getFamilyBillingOverview";
 import BillingSuccessClient from "./BillingSuccessClient";
@@ -40,7 +40,7 @@ export default async function BillingSuccessPage({ searchParams }: PageProps) {
 
   // Server-side session retrieval gives the user immediate confirmation details
   // without trusting client-provided values.
-  const checkoutSession = await stripeClient.checkout.sessions
+  const checkoutSession = await stripe.checkout.sessions
     .retrieve(checkoutSessionId, { expand: ["payment_intent"] })
     .catch(() => null);
 

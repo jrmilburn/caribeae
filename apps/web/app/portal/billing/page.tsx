@@ -40,6 +40,7 @@ export default async function PortalBillingPage({ searchParams }: PageProps) {
       outstandingCents={overview.outstandingCents}
       recentPayments={overview.recentPayments}
       showCancelledNotice={showCancelledNotice}
+      onlinePaymentsEnabled={overview.onlinePaymentsEnabled}
     />
   );
 }

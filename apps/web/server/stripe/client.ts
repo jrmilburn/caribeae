@@ -1,9 +1,9 @@
 import "server-only";
 
-import { getAppBaseUrl, getStripeWebhookSecret, stripeClient } from "@/lib/stripeClient";
+import { getAppBaseUrl, getStripeWebhookSecret, stripe } from "@/lib/stripe";
 
 export function getStripeClient() {
-  return stripeClient;
+  return stripe;
 }
 
 export { getStripeWebhookSecret };

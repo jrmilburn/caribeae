@@ -1,11 +1,20 @@
-import "server-only";
-
+import { StripeOnboardingStatus } from "@prisma/client";
 import type Stripe from "stripe";
 
-export type StoredOnboardingStatus = "pending" | "complete" | "action_required";
-export type UiPaymentsStatus = "not_setup" | "pending" | "action_required" | "enabled";
-
 const FALLBACK_CLIENT_ID = "caribeae";
+
+export type StoredOnboardingStatus = "not_connected" | "pending" | "connected";
+export type UiPaymentsStatus = "not_connected" | "pending" | "connected";
+
+function getSupportedStripeConnectAccountType() {
+  const configured = process.env.STRIPE_CONNECT_ACCOUNT_TYPE?.trim().toLowerCase() ?? "standard";
+  if (configured !== "standard") {
+    throw new Error(
+      `Unsupported STRIPE_CONNECT_ACCOUNT_TYPE: ${configured}. This app only supports Stripe Connect Standard accounts.`
+    );
+  }
+  return "standard" as const;
+}
 
 export function getDefaultClientId() {
   const configured = process.env.STRIPE_CLIENT_ID_DEFAULT;
@@ -16,50 +25,91 @@ export function getDefaultClientId() {
 }
 
 export function deriveOnboardingStatus(input: {
+  stripeAccountId: string | null;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
-  currentlyDueCount: number;
+  detailsSubmitted: boolean;
 }): StoredOnboardingStatus {
-  if (input.chargesEnabled && input.payoutsEnabled) {
-    return "complete";
+  if (!input.stripeAccountId) {
+    return "not_connected";
   }
-  if (input.currentlyDueCount > 0) {
-    return "action_required";
+
+  if (input.chargesEnabled && input.payoutsEnabled && input.detailsSubmitted) {
+    return "connected";
   }
+
   return "pending";
+}
+
+export function toPrismaOnboardingStatus(status: StoredOnboardingStatus): StripeOnboardingStatus {
+  if (status === "connected") return StripeOnboardingStatus.CONNECTED;
+  if (status === "pending") return StripeOnboardingStatus.PENDING;
+  return StripeOnboardingStatus.NOT_CONNECTED;
+}
+
+export function fromPrismaOnboardingStatus(
+  status: StripeOnboardingStatus | null | undefined
+): StoredOnboardingStatus {
+  if (status === StripeOnboardingStatus.CONNECTED) return "connected";
+  if (status === StripeOnboardingStatus.PENDING) return "pending";
+  return "not_connected";
 }
 
 export function deriveUiPaymentsStatus(input: {
   stripeAccountId: string | null;
   stripeChargesEnabled: boolean;
   stripePayoutsEnabled: boolean;
-  stripeOnboardingStatus: string | null;
+  stripeDetailsSubmitted: boolean;
+  stripeOnboardingStatus: StripeOnboardingStatus | null;
 }): UiPaymentsStatus {
   if (!input.stripeAccountId) {
-    return "not_setup";
+    return "not_connected";
   }
-  if (input.stripeChargesEnabled && input.stripePayoutsEnabled) {
-    return "enabled";
+
+  if (
+    input.stripeOnboardingStatus === StripeOnboardingStatus.CONNECTED ||
+    (input.stripeChargesEnabled && input.stripePayoutsEnabled && input.stripeDetailsSubmitted)
+  ) {
+    return "connected";
   }
-  if (input.stripeOnboardingStatus === "action_required") {
-    return "action_required";
-  }
+
   return "pending";
 }
 
+export function assertStandardStripeAccount(account: Pick<Stripe.Account, "id" | "type">) {
+  const supportedType = getSupportedStripeConnectAccountType();
+  if (account.type && account.type !== supportedType) {
+    throw new Error(
+      `Connected account ${account.id} has unsupported type '${account.type}'. Only '${supportedType}' accounts are supported.`
+    );
+  }
+}
+
 export function toConnectedAccountSnapshot(account: Stripe.Account) {
-  const currentlyDueCount = account.requirements?.currently_due?.length ?? 0;
+  assertStandardStripeAccount(account);
+
   const chargesEnabled = account.charges_enabled ?? false;
   const payoutsEnabled = account.payouts_enabled ?? false;
+  const detailsSubmitted = account.details_submitted ?? false;
 
   return {
     stripeChargesEnabled: chargesEnabled,
     stripePayoutsEnabled: payoutsEnabled,
-    stripeDetailsSubmitted: account.details_submitted ?? false,
-    stripeOnboardingStatus: deriveOnboardingStatus({
-      chargesEnabled,
-      payoutsEnabled,
-      currentlyDueCount,
-    }),
+    stripeDetailsSubmitted: detailsSubmitted,
+    stripeOnboardingStatus: toPrismaOnboardingStatus(
+      deriveOnboardingStatus({
+        stripeAccountId: account.id,
+        chargesEnabled,
+        payoutsEnabled,
+        detailsSubmitted,
+      })
+    ),
   };
+}
+
+export function isConnectedForCheckout(input: {
+  stripeAccountId: string | null;
+  stripeOnboardingStatus: StripeOnboardingStatus | null;
+}) {
+  return Boolean(input.stripeAccountId) && input.stripeOnboardingStatus === StripeOnboardingStatus.CONNECTED;
 }
