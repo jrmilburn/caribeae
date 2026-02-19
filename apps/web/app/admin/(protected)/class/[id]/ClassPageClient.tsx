@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { ClassTemplateForm } from "./ClassTemplateForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
@@ -77,6 +78,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const [actionPending, startAction] = React.useTransition();
 
   const returnTo = parseReturnContext(searchParams);
+  const todayDateKey = React.useMemo(() => toBrisbaneDayKey(new Date()), []);
   const fallbackSchedule = React.useMemo(() => {
     const params = new URLSearchParams({
       view: "week",
@@ -84,16 +86,15 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
     });
     return `/admin/schedule?${params.toString()}`;
   }, []);
+  const scheduleHref = returnTo ?? fallbackSchedule;
   const handleBackToSchedule = React.useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.preventDefault();
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
       if (typeof window !== "undefined" && window.history.length > 1) {
+        event.preventDefault();
         router.back();
-        return;
       }
-      router.push(returnTo ?? fallbackSchedule);
     },
-    [fallbackSchedule, returnTo, router]
+    [router]
   );
 
   React.useEffect(() => {
@@ -217,98 +218,38 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
   const hasOccurrence = Boolean(selectedDateKey);
   const isCancelled = Boolean(cancellation);
+  const attendanceActionLabel = buildAttendanceActionLabel(selectedDateKey, todayDateKey);
 
   return (
     <div className="mx-auto w-full space-y-4">
-      <div className="flex flex-col gap-3 border-b bg-white px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold">{classHeading}</h1>
-            <Badge variant="secondary" className="text-xs">
-              {levelName}
-            </Badge>
-            {isCancelled ? (
-              <Badge variant="destructive" className="text-xs">
-                Cancelled
-              </Badge>
-            ) : null}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {[
-              scheduleSummary,
-              selectedDateKey ? formatBrisbaneDate(selectedDateKey) : "Select an occurrence date",
-              `Teacher: ${effectiveTeacher?.name ?? "Unassigned"}`,
-            ]
-              .filter(Boolean)
-              .join(" • ")}
-            {teacherSubstitution ? " • Substitution applied" : null}
-          </p>
-        </div>
+      <Tabs value={tab} onValueChange={handleTabChange} className="gap-0">
+        <ClassOccurrenceHeader
+          classHeading={classHeading}
+          levelName={levelName}
+          isCancelled={isCancelled}
+          scheduleSummary={scheduleSummary}
+          selectedDateKey={selectedDateKey}
+          teacherName={effectiveTeacher?.name ?? null}
+          teacherSubstitution={Boolean(teacherSubstitution)}
+          scheduleHref={scheduleHref}
+          onBackToSchedule={handleBackToSchedule}
+          availableDateKeys={data.availableDateKeys}
+          onDateChange={handleDateChange}
+          autoSelectDateKey={!data.requestedDateValid ? data.selectedDateKey : null}
+          hasOccurrence={hasOccurrence}
+          attendanceActionLabel={attendanceActionLabel}
+          onTakeAttendance={() => handleTabChange("attendance")}
+          onSubstituteTeacher={() => setSubDialogOpen(true)}
+          onCancelClass={() => setCancelDialogOpen(true)}
+          onReopenClass={() => setReopenDialogOpen(true)}
+          actionPending={actionPending}
+        />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" type="button" onClick={handleBackToSchedule}>
-            Back to Schedule
-          </Button>
-          <DateSelector
-            availableDateKeys={data.availableDateKeys}
-            selectedDateKey={selectedDateKey}
-            onChange={handleDateChange}
-            disabled={!data.availableDateKeys.length}
-            autoSelectKey={!data.requestedDateValid ? data.selectedDateKey : null}
-          />
-          <Button size="sm" onClick={() => handleTabChange("attendance")} disabled={!hasOccurrence}>
-            Take attendance
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setSubDialogOpen(true)}
-            disabled={!hasOccurrence}
-          >
-            Substitute teacher
-          </Button>
-          {isCancelled ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setReopenDialogOpen(true)}
-              disabled={!hasOccurrence || actionPending}
-            >
-              Reopen class
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setCancelDialogOpen(true)}
-              disabled={!hasOccurrence || actionPending}
-            >
-              Cancel class
-            </Button>
-          )}
-        </div>
-      </div>
+        {selectedDateKey && cancellation ? (
+          <CancellationBanner cancellation={cancellation} credits={cancellationCredits} />
+        ) : null}
 
-      {selectedDateKey && cancellation ? (
-        <CancellationBanner cancellation={cancellation} credits={cancellationCredits} />
-      ) : null}
-
-      <div className="px-2 sm:px-0">
-        <Tabs value={tab} onValueChange={handleTabChange}>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pr-4">
-            <TabsList className="w-fit">
-              <TabsTrigger value="enrolments">Enrolments</TabsTrigger>
-              <TabsTrigger value="attendance" disabled={!hasOccurrence}>
-                Attendance
-              </TabsTrigger>
-              <TabsTrigger value="template">Template</TabsTrigger>
-            </TabsList>
-            <div className="text-sm text-muted-foreground">
-              {hasOccurrence
-                ? `Occurrence date: ${formatBrisbaneDate(selectedDateKey)}`
-                : "No scheduled occurrences"}
-            </div>
-          </div>
+        <div className="px-2 sm:px-0">
           <Separator className="my-2" />
 
           <TabsContent value="enrolments">
@@ -350,8 +291,8 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+      </Tabs>
 
       <SubstituteTeacherDialog
         open={subDialogOpen}
@@ -400,6 +341,157 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
       />
     </div>
   );
+}
+
+type ClassOccurrenceHeaderProps = {
+  classHeading: string;
+  levelName: string;
+  isCancelled: boolean;
+  scheduleSummary: string;
+  selectedDateKey: string | null;
+  teacherName: string | null;
+  teacherSubstitution: boolean;
+  scheduleHref: string;
+  onBackToSchedule: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  availableDateKeys: string[];
+  onDateChange: (nextDateKey: string) => void;
+  autoSelectDateKey: string | null;
+  hasOccurrence: boolean;
+  attendanceActionLabel: string;
+  onTakeAttendance: () => void;
+  onSubstituteTeacher: () => void;
+  onCancelClass: () => void;
+  onReopenClass: () => void;
+  actionPending: boolean;
+};
+
+function ClassOccurrenceHeader({
+  classHeading,
+  levelName,
+  isCancelled,
+  scheduleSummary,
+  selectedDateKey,
+  teacherName,
+  teacherSubstitution,
+  scheduleHref,
+  onBackToSchedule,
+  availableDateKeys,
+  onDateChange,
+  autoSelectDateKey,
+  hasOccurrence,
+  attendanceActionLabel,
+  onTakeAttendance,
+  onSubstituteTeacher,
+  onCancelClass,
+  onReopenClass,
+  actionPending,
+}: ClassOccurrenceHeaderProps) {
+  return (
+    <header className="border-b bg-white px-4 py-4 sm:px-6">
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold">{classHeading}</h1>
+              <Badge variant="secondary" className="text-xs">
+                {levelName}
+              </Badge>
+              {isCancelled ? (
+                <Badge variant="destructive" className="text-xs">
+                  Cancelled
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {[
+                scheduleSummary,
+                selectedDateKey ? formatBrisbaneDate(selectedDateKey) : "Select an occurrence date",
+                `Teacher: ${teacherName ?? "Unassigned"}`,
+              ]
+                .filter(Boolean)
+                .join(" • ")}
+              {teacherSubstitution ? " • Substitution applied" : null}
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
+            <Link
+              href={scheduleHref}
+              onClick={onBackToSchedule}
+              className="inline-flex h-9 items-center text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              Back to Schedule
+            </Link>
+            <DateSelector
+              className="w-full sm:w-auto"
+              availableDateKeys={availableDateKeys}
+              selectedDateKey={selectedDateKey}
+              onChange={onDateChange}
+              disabled={!availableDateKeys.length}
+              autoSelectKey={autoSelectDateKey}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <TabsList className="h-11 w-full justify-start overflow-x-auto p-1 sm:w-fit">
+            <TabsTrigger value="enrolments" className="px-4">
+              Enrolments
+            </TabsTrigger>
+            <TabsTrigger value="attendance" disabled={!hasOccurrence} className="px-4">
+              Attendance
+            </TabsTrigger>
+            <TabsTrigger value="template" className="px-4">
+              Template
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+            <Button onClick={onTakeAttendance} disabled={!hasOccurrence} className="w-full lg:w-auto">
+              {attendanceActionLabel}
+            </Button>
+            <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onSubstituteTeacher}
+                disabled={!hasOccurrence}
+                className="w-full lg:w-auto"
+              >
+                Substitute teacher
+              </Button>
+              {isCancelled ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onReopenClass}
+                  disabled={!hasOccurrence || actionPending}
+                  className="w-full lg:w-auto"
+                >
+                  Reopen class
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onCancelClass}
+                  disabled={!hasOccurrence || actionPending}
+                  className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/20 lg:w-auto"
+                >
+                  Cancel class
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function buildAttendanceActionLabel(selectedDateKey: string | null, todayDateKey: string) {
+  if (!selectedDateKey || isSameDateKey(selectedDateKey, todayDateKey)) return "Take attendance";
+  return `Attendance - ${formatBrisbaneDate(selectedDateKey)}`;
 }
 
 function buildScheduleSummary(data: ClassPageData) {

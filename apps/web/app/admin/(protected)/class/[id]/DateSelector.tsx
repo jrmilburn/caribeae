@@ -13,6 +13,7 @@ type DateSelectorProps = {
   onChange: (dateKey: string) => void;
   disabled?: boolean;
   autoSelectKey?: string | null;
+  className?: string;
 };
 
 export function DateSelector({
@@ -21,6 +22,7 @@ export function DateSelector({
   onChange,
   disabled,
   autoSelectKey,
+  className,
 }: DateSelectorProps) {
   const sortedDates = React.useMemo(() => [...availableDateKeys].sort(), [availableDateKeys]);
 
@@ -31,15 +33,21 @@ export function DateSelector({
   }, [autoSelectKey, onChange, selectedDateKey]);
 
   return (
-    <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
+    <div className={cn("flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm", className)}>
       <CalendarIcon className="h-4 w-4 text-muted-foreground" />
       <Select
         value={selectedDateKey ?? undefined}
         onValueChange={onChange}
         disabled={disabled || !sortedDates.length}
       >
-        <SelectTrigger className={cn("h-8 w-[180px] bg-background px-2 text-sm", disabled && "cursor-not-allowed")}>
-          <SelectValue placeholder="Select date" />
+        <SelectTrigger
+          aria-label="Change occurrence date"
+          className={cn(
+            "h-8 w-full min-w-0 bg-background px-2 text-sm sm:w-[190px]",
+            disabled && "cursor-not-allowed"
+          )}
+        >
+          <SelectValue placeholder="Change date" />
         </SelectTrigger>
         <SelectContent>
           {sortedDates.map((dateKey) => (
