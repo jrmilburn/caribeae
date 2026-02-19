@@ -478,152 +478,146 @@ export default function FamilyForm({
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
-          <Card>
-            <CardHeader className="space-y-4">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <Link
-                      href="/admin/family"
-                      className="inline-flex items-center rounded-sm py-0.5 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      Families
-                    </Link>
-                    <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                    <span className="font-medium text-foreground" aria-current="page">
-                      {family.name}
+          <header className="space-y-4 border-b pb-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <Link
+                    href="/admin/family"
+                    className="inline-flex items-center rounded-sm py-0.5 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    Families
+                  </Link>
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                  <span className="font-medium text-foreground" aria-current="page">
+                    {family.name}
+                  </span>
+                </div>
+                <div className="text-2xl font-semibold leading-tight">{family.name}</div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  {family.primaryContactName ? (
+                    <span className="font-medium text-foreground">{family.primaryContactName}</span>
+                  ) : null}
+                  {family.primaryPhone ? (
+                    <span className="flex items-center gap-1.5">
+                      <Phone className="h-4 w-4" />
+                      {family.primaryPhone}
                     </span>
+                  ) : null}
+                  {family.primaryEmail ? (
+                    <span className="flex items-center gap-1.5">
+                      <Mail className="h-4 w-4" />
+                      {family.primaryEmail}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
+                <div className="rounded-lg border bg-muted/30 p-4 text-right">
+                  <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>Balance</span>
+                    {balanceBreakdown ? (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/70 transition hover:text-foreground"
+                            aria-label="View owing breakdown"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64">
+                          <div className="text-xs font-semibold text-foreground">Balance breakdown</div>
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            <div className="flex items-center justify-between gap-4">
+                              <span>Invoice outstanding</span>
+                              <span className="font-medium text-foreground">
+                                {formatCurrencyFromCents(balanceBreakdown.invoiceOutstandingCents)}
+                              </span>
+                            </div>
+                            {balanceBreakdown.overdueOwingCents > 0 ? (
+                              <div className="flex items-center justify-between gap-4">
+                                <span>Overdue (uninvoiced)</span>
+                                <span className="font-medium text-foreground">
+                                  {formatCurrencyFromCents(balanceBreakdown.overdueOwingCents)}
+                                </span>
+                              </div>
+                            ) : null}
+                            <div className="flex items-center justify-between gap-4">
+                              <span>Unallocated credit</span>
+                              <span className="font-medium text-foreground">
+                                {balanceBreakdown.unallocatedCreditCents > 0
+                                  ? `-${formatCurrencyFromCents(balanceBreakdown.unallocatedCreditCents)}`
+                                  : formatCurrencyFromCents(0)}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-foreground">
+                              <span className="font-semibold">Net balance</span>
+                              <span className="font-semibold">
+                                {formatCurrencyFromCents(balanceBreakdown.netOwingCents)}
+                              </span>
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    ) : null}
                   </div>
-                  <div className="text-2xl font-semibold leading-tight">{family.name}</div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    {family.primaryContactName ? (
-                      <span className="font-medium text-foreground">{family.primaryContactName}</span>
-                    ) : null}
-                    {family.primaryPhone ? (
-                      <span className="flex items-center gap-1.5">
-                        <Phone className="h-4 w-4" />
-                        {family.primaryPhone}
-                      </span>
-                    ) : null}
-                    {family.primaryEmail ? (
-                      <span className="flex items-center gap-1.5">
-                        <Mail className="h-4 w-4" />
-                        {family.primaryEmail}
-                      </span>
-                    ) : null}
+                  <div
+                    className={cn(
+                      "mt-1 text-2xl font-semibold",
+                      billingPosition.outstandingCents > 0 ? "text-destructive" : "text-emerald-700"
+                    )}
+                  >
+                    {formatCurrencyFromCents(billingPosition.outstandingCents)}
                   </div>
                 </div>
+                {billingPosition.unallocatedCents > 0 ? (
+                  <Badge variant="outline" className="text-xs">
+                    {formatCurrencyFromCents(billingPosition.unallocatedCents)} unallocated
+                  </Badge>
+                ) : null}
 
-                <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
-                  <div className="rounded-lg border bg-muted/30 p-4 text-right">
-                    <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Balance</span>
-                      {balanceBreakdown ? (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground/70 transition hover:text-foreground"
-                              aria-label="View owing breakdown"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent align="end" className="w-64">
-                            <div className="text-xs font-semibold text-foreground">Balance breakdown</div>
-                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                              <div className="flex items-center justify-between gap-4">
-                                <span>Invoice outstanding</span>
-                                <span className="font-medium text-foreground">
-                                  {formatCurrencyFromCents(balanceBreakdown.invoiceOutstandingCents)}
-                                </span>
-                              </div>
-                              {balanceBreakdown.overdueOwingCents > 0 ? (
-                                <div className="flex items-center justify-between gap-4">
-                                  <span>Overdue (uninvoiced)</span>
-                                  <span className="font-medium text-foreground">
-                                    {formatCurrencyFromCents(balanceBreakdown.overdueOwingCents)}
-                                  </span>
-                                </div>
-                              ) : null}
-                              <div className="flex items-center justify-between gap-4">
-                                <span>Unallocated credit</span>
-                                <span className="font-medium text-foreground">
-                                  {balanceBreakdown.unallocatedCreditCents > 0
-                                    ? `-${formatCurrencyFromCents(balanceBreakdown.unallocatedCreditCents)}`
-                                    : formatCurrencyFromCents(0)}
-                                </span>
-                              </div>
-                              <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-foreground">
-                                <span className="font-semibold">Net balance</span>
-                                <span className="font-semibold">
-                                  {formatCurrencyFromCents(balanceBreakdown.netOwingCents)}
-                                </span>
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      ) : null}
-                    </div>
-                    <div
-                      className={cn(
-                        "mt-1 text-2xl font-semibold",
-                        billingPosition.outstandingCents > 0 ? "text-destructive" : "text-emerald-700"
-                      )}
-                    >
-                      {formatCurrencyFromCents(billingPosition.outstandingCents)}
-                    </div>
-                  </div>
-                  {billingPosition.unallocatedCents > 0 ? (
-                    <Badge variant="outline" className="text-xs">
-                      {formatCurrencyFromCents(billingPosition.unallocatedCents)} unallocated
-                    </Badge>
-                  ) : null}
-
-                  <div className="flex w-full flex-col gap-2 sm:items-end">
-                    <Button size="sm" onClick={() => setPaymentSheetOpen(true)} className="w-full sm:w-auto">
-                      Take payment
+                <div className="flex w-full flex-col gap-2 sm:items-end">
+                  <Button size="sm" onClick={() => setPaymentSheetOpen(true)} className="w-full sm:w-auto">
+                    Take payment
+                  </Button>
+                  <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
+                      Edit family
                     </Button>
-                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-                      <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
-                        Edit family
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleAddStudent}>
-                        Add student
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)} className="col-span-2 sm:col-span-1">
-                        Pay ahead
-                      </Button>
-                    </div>
+                    <Button size="sm" variant="outline" onClick={handleAddStudent}>
+                      Add student
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)} className="col-span-2 sm:col-span-1">
+                      Pay ahead
+                    </Button>
                   </div>
                 </div>
               </div>
-            </CardHeader>
-          </Card>
+            </div>
+          </header>
 
-          <Card className="md:hidden">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Student</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Select
-                value={selectedStudentId || "__none"}
-                onValueChange={(value) => handleSelectStudent(value === "__none" ? "" : value)}
-              >
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Select student" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">No student selected</SelectItem>
-                  {studentRows.map((row) => (
-                    <SelectItem key={row.id} value={row.id}>
-                      {row.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
+          <div className="space-y-2 md:hidden">
+            <label className="text-sm font-medium">Student</label>
+            <Select
+              value={selectedStudentId || "__none"}
+              onValueChange={(value) => handleSelectStudent(value === "__none" ? "" : value)}
+            >
+              <SelectTrigger className="h-10">
+                <SelectValue placeholder="Select student" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">No student selected</SelectItem>
+                {studentRows.map((row) => (
+                  <SelectItem key={row.id} value={row.id}>
+                    {row.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="grid items-start gap-4 md:grid-cols-[340px_minmax(0,1fr)]">
             <div className="hidden space-y-4 md:block">
@@ -769,151 +763,148 @@ export default function FamilyForm({
 
             <div className="space-y-4">
               <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-                <Card>
-                  <CardHeader className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <CardTitle className="text-base">Action workspace</CardTitle>
-                      <TabsList className="h-11 w-full justify-start overflow-x-auto p-1 sm:w-auto">
-                        <TabsTrigger value="overview" className="px-4">
-                          Overview
-                        </TabsTrigger>
-                        <TabsTrigger value="billing" className="px-4">
-                          Billing
-                        </TabsTrigger>
-                        <TabsTrigger value="enrolments" className="px-4">
-                          Enrolments
-                        </TabsTrigger>
-                        <TabsTrigger value="contacts" className="px-4">
-                          Contacts
-                        </TabsTrigger>
-                        <TabsTrigger value="history" className="px-4">
-                          History
-                        </TabsTrigger>
-                      </TabsList>
+                <div className="space-y-3 rounded-lg border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-base font-semibold">Action workspace</h2>
+                    <TabsList className="h-11 w-full justify-start overflow-x-auto p-1 sm:w-auto">
+                      <TabsTrigger value="overview" className="px-4">
+                        Overview
+                      </TabsTrigger>
+                      <TabsTrigger value="billing" className="px-4">
+                        Billing
+                      </TabsTrigger>
+                      <TabsTrigger value="enrolments" className="px-4">
+                        Enrolments
+                      </TabsTrigger>
+                      <TabsTrigger value="contacts" className="px-4">
+                        Contacts
+                      </TabsTrigger>
+                      <TabsTrigger value="history" className="px-4">
+                        History
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+
+                  {selectedStudentRow ? (
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Selected student
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-lg font-semibold">{selectedStudentRow.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {selectedStudentRow.levelName ?? "Level not set"}
+                          </div>
+                        </div>
+                        <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
+                          {selectedStudentRow.status.label}
+                        </Badge>
+                      </div>
                     </div>
+                  ) : null}
+                </div>
 
-                    {selectedStudentRow ? (
-                      <div className="rounded-lg border bg-muted/20 p-3">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Selected student
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <div className="text-lg font-semibold">{selectedStudentRow.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {selectedStudentRow.levelName ?? "Level not set"}
-                            </div>
-                          </div>
-                          <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
-                            {selectedStudentRow.status.label}
-                          </Badge>
-                        </div>
+                <TabsContent value="overview" className="m-0 space-y-3">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <div className="text-xs text-muted-foreground">Last payment</div>
+                    {lastPayment ? (
+                      <div className="mt-1 text-sm font-semibold">
+                        {formatCurrencyFromCents(lastPayment.amountCents)}
+                        <span className="text-xs text-muted-foreground">
+                          {" "}
+                          · {formatBrisbaneDate(lastPayment.paidAt)}
+                        </span>
                       </div>
-                    ) : null}
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <TabsContent value="overview" className="m-0 space-y-3">
-                      <div className="rounded-lg border bg-muted/30 p-4">
-                        <div className="text-xs text-muted-foreground">Last payment</div>
-                        {lastPayment ? (
-                          <div className="mt-1 text-sm font-semibold">
-                            {formatCurrencyFromCents(lastPayment.amountCents)}
-                            <span className="text-xs text-muted-foreground">
-                              {" "}
-                              · {formatBrisbaneDate(lastPayment.paidAt)}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="mt-1 text-sm text-muted-foreground">No payments recorded yet.</div>
-                        )}
+                    ) : (
+                      <div className="mt-1 text-sm text-muted-foreground">No payments recorded yet.</div>
+                    )}
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <div className="text-xs text-muted-foreground">Account opening</div>
+                    <div className="mt-1 text-sm font-medium">
+                      {openingState ? (
+                        <>Opening balance recorded {formatBrisbaneDate(openingState.createdAt)}</>
+                      ) : (
+                        "No opening balance recorded yet."
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {visitedTabs.has("billing") ? (
+                  <TabsContent value="billing" className="m-0 space-y-3">
+                    <FamilyInvoices
+                      family={family}
+                      billing={billing}
+                      billingPosition={billingPosition}
+                      onOpenPayment={() => setPaymentSheetOpen(true)}
+                      onOpenPayAhead={() => setPayAheadOpen(true)}
+                      onUpdated={handleBillingUpdated}
+                    />
+                  </TabsContent>
+                ) : null}
+
+                {visitedTabs.has("enrolments") ? (
+                  <TabsContent value="enrolments" className="m-0 space-y-3">
+                    {!selectedStudentId ? (
+                      <StudentSelectionEmptyState />
+                    ) : isLoadingStudent && !studentDetails ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading student details...
                       </div>
-                      <div className="rounded-lg border bg-muted/20 p-4">
-                        <div className="text-xs text-muted-foreground">Account opening</div>
-                        <div className="mt-1 text-sm font-medium">
-                          {openingState ? (
-                            <>Opening balance recorded {formatBrisbaneDate(openingState.createdAt)}</>
-                          ) : (
-                            "No opening balance recorded yet."
-                          )}
-                        </div>
+                    ) : studentDetails ? (
+                      <StudentEnrolmentsSection
+                        student={studentDetails}
+                        levels={levels}
+                        enrolmentPlans={enrolmentPlans}
+                        onUpdated={() => refreshStudentDetails(selectedStudentId)}
+                      />
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        Unable to load student details.
                       </div>
-                    </TabsContent>
+                    )}
+                  </TabsContent>
+                ) : null}
 
-                    {visitedTabs.has("billing") ? (
-                      <TabsContent value="billing" className="m-0 space-y-3">
-                        <FamilyInvoices
-                          family={family}
-                          billing={billing}
-                          billingPosition={billingPosition}
-                          onOpenPayment={() => setPaymentSheetOpen(true)}
-                          onOpenPayAhead={() => setPayAheadOpen(true)}
-                          onUpdated={handleBillingUpdated}
-                        />
-                      </TabsContent>
-                    ) : null}
+                {visitedTabs.has("contacts") ? (
+                  <TabsContent value="contacts" className="m-0 space-y-3">
+                    <Card className="border-dashed">
+                      <CardHeader className="flex flex-row items-center justify-between gap-3">
+                        <CardTitle className="text-base">Contacts</CardTitle>
+                        <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
+                          Edit contacts
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 sm:grid-cols-2">
+                        <ContactRow label="Primary contact" value={family.primaryContactName ?? "—"} />
+                        <ContactRow label="Primary phone" value={family.primaryPhone ?? "—"} />
+                        <ContactRow label="Primary email" value={family.primaryEmail ?? "—"} className="sm:col-span-2" />
+                        <ContactRow label="Secondary contact" value={family.secondaryContactName ?? "—"} />
+                        <ContactRow label="Secondary phone" value={family.secondaryPhone ?? "—"} />
+                        <ContactRow label="Secondary email" value={family.secondaryEmail ?? "—"} className="sm:col-span-2" />
+                        <ContactRow label="Medical contact" value={family.medicalContactName ?? "—"} />
+                        <ContactRow label="Medical phone" value={family.medicalContactPhone ?? "—"} />
+                        <ContactRow label="Address" value={family.address ?? "—"} className="sm:col-span-2" />
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                ) : null}
 
-                    {visitedTabs.has("enrolments") ? (
-                      <TabsContent value="enrolments" className="m-0 space-y-3">
-                        {!selectedStudentId ? (
-                          <StudentSelectionEmptyState />
-                        ) : isLoadingStudent && !studentDetails ? (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading student details...
-                          </div>
-                        ) : studentDetails ? (
-                          <StudentEnrolmentsSection
-                            student={studentDetails}
-                            levels={levels}
-                            enrolmentPlans={enrolmentPlans}
-                            onUpdated={() => refreshStudentDetails(selectedStudentId)}
-                          />
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            Unable to load student details.
-                          </div>
-                        )}
-                      </TabsContent>
-                    ) : null}
-
-                    {visitedTabs.has("contacts") ? (
-                      <TabsContent value="contacts" className="m-0 space-y-3">
-                        <Card className="border-dashed">
-                          <CardHeader className="flex flex-row items-center justify-between gap-3">
-                            <CardTitle className="text-base">Contacts</CardTitle>
-                            <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
-                              Edit contacts
-                            </Button>
-                          </CardHeader>
-                          <CardContent className="grid gap-3 sm:grid-cols-2">
-                            <ContactRow label="Primary contact" value={family.primaryContactName ?? "—"} />
-                            <ContactRow label="Primary phone" value={family.primaryPhone ?? "—"} />
-                            <ContactRow label="Primary email" value={family.primaryEmail ?? "—"} className="sm:col-span-2" />
-                            <ContactRow label="Secondary contact" value={family.secondaryContactName ?? "—"} />
-                            <ContactRow label="Secondary phone" value={family.secondaryPhone ?? "—"} />
-                            <ContactRow label="Secondary email" value={family.secondaryEmail ?? "—"} className="sm:col-span-2" />
-                            <ContactRow label="Medical contact" value={family.medicalContactName ?? "—"} />
-                            <ContactRow label="Medical phone" value={family.medicalContactPhone ?? "—"} />
-                            <ContactRow label="Address" value={family.address ?? "—"} className="sm:col-span-2" />
-                          </CardContent>
-                        </Card>
-                      </TabsContent>
-                    ) : null}
-
-                    {visitedTabs.has("history") ? (
-                      <TabsContent value="history" className="m-0 space-y-4">
-                        <HistoryTab billing={billing} family={family} />
-                        <FamilyTransitionWizard
-                          family={family}
-                          enrolmentPlans={enrolmentPlans}
-                          classTemplates={classTemplates}
-                          levels={levels}
-                          openingState={openingState}
-                        />
-                      </TabsContent>
-                    ) : null}
-                  </CardContent>
-                </Card>
+                {visitedTabs.has("history") ? (
+                  <TabsContent value="history" className="m-0 space-y-4">
+                    <HistoryTab billing={billing} family={family} />
+                    <FamilyTransitionWizard
+                      family={family}
+                      enrolmentPlans={enrolmentPlans}
+                      classTemplates={classTemplates}
+                      levels={levels}
+                      openingState={openingState}
+                    />
+                  </TabsContent>
+                ) : null}
               </Tabs>
             </div>
           </div>

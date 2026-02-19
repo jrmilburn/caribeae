@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { ClassTemplateForm } from "./ClassTemplateForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Teacher } from "@prisma/client";
@@ -399,7 +400,7 @@ function ClassOccurrenceHeader({
               >
                 Schedule
               </Link>
-              <span aria-hidden="true">/</span>
+              <ChevronRight className="h-3 w-3" aria-hidden="true" />
               <span className="font-medium text-foreground" aria-current="page">
                 {classHeading}
               </span>
