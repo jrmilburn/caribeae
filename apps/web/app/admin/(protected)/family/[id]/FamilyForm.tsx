@@ -5,7 +5,7 @@ import type { Prisma, Student } from "@prisma/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Info, Loader2, Mail, MoreVertical, Phone } from "lucide-react";
+import { ChevronRight, Info, Loader2, Mail, MoreVertical, Phone } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +50,7 @@ import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student
 import { StudentEnrolmentsSection } from "@/app/admin/(protected)/student/[id]/StudentEnrolmentsSection";
 import { AddEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/AddEnrolmentDialog";
 import { ChangeEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/ChangeEnrolmentDialog";
-import { buildReturnUrl, parseReturnContext } from "@/lib/returnContext";
+import { buildReturnUrl } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 
@@ -165,7 +165,6 @@ export default function FamilyForm({
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = parseReturnContext(searchParams);
   const parseTabParam = React.useCallback((value: string | null) => {
     if (value === "billing") return "billing";
     if (value === "enrolments") return "enrolments";
@@ -204,13 +203,7 @@ export default function FamilyForm({
   const [isLoadingStudent, startLoadingStudent] = React.useTransition();
   const studentCache = React.useRef(new Map<string, ClientStudentWithRelations>());
 
-  if (!family) return null;
-
   const lastPayment = billing.payments?.[0] ?? null;
-  const backHref = returnTo ?? "/admin/family";
-  const backLabel = returnTo?.startsWith("/admin/reception") ? "Back to Reception" : "Back";
-  const showReceptionLink = !backHref.startsWith("/admin/reception");
-  const showFamiliesLink = !backHref.startsWith("/admin/family");
 
   React.useEffect(() => {
     setVisitedTabs((prev) => {
@@ -244,9 +237,9 @@ export default function FamilyForm({
 
   React.useEffect(() => {
     if (!selectedStudentId) return;
-    const exists = family.students.some((student) => student.id === selectedStudentId);
+    const exists = family?.students.some((student) => student.id === selectedStudentId) ?? false;
     if (!exists) setSelectedStudentId("");
-  }, [family.students, selectedStudentId, setSelectedStudentId]);
+  }, [family, selectedStudentId, setSelectedStudentId]);
 
   const refreshStudentDetails = React.useCallback(
     (id?: string | null) => {
@@ -306,7 +299,7 @@ export default function FamilyForm({
 
   const studentRows = React.useMemo(() => {
     const billingByStudentId = new Map(billingPosition.students.map((student) => [student.id, student]));
-    return family.students.map((student) => {
+    return (family?.students ?? []).map((student) => {
       const billingStudent = billingByStudentId.get(student.id);
       const enrolments = billingStudent?.enrolments ?? [];
       return {
@@ -319,7 +312,7 @@ export default function FamilyForm({
         student,
       };
     });
-  }, [billingPosition.students, family.students]);
+  }, [billingPosition.students, family?.students]);
 
   const selectedStudentRow = studentRows.find((row) => row.id === selectedStudentId) ?? null;
 
@@ -400,6 +393,7 @@ export default function FamilyForm({
   };
 
   const handleOpenStudent = (studentId: string) => {
+    if (!family) return;
     setSelectedStudentId(studentId);
     const returnUrl = `/admin/family/${family.id}?tab=enrolments&student=${studentId}`;
     router.push(buildReturnUrl(`/admin/student/${studentId}`, returnUrl));
@@ -476,6 +470,8 @@ export default function FamilyForm({
     }
   }, [isLoadingStudent, pendingStudentAction, selectedStudentId, studentDetails]);
 
+  if (!family) return null;
+
   const balanceBreakdown = billingPosition.balanceBreakdown;
 
   return (
@@ -486,20 +482,31 @@ export default function FamilyForm({
             <CardHeader className="space-y-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Family</div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <Link
+                      href="/admin/family"
+                      className="inline-flex items-center rounded-sm py-0.5 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      Families
+                    </Link>
+                    <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                    <span className="font-medium text-foreground" aria-current="page">
+                      {family.name}
+                    </span>
+                  </div>
                   <div className="text-2xl font-semibold leading-tight">{family.name}</div>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                     {family.primaryContactName ? (
                       <span className="font-medium text-foreground">{family.primaryContactName}</span>
                     ) : null}
                     {family.primaryPhone ? (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1.5">
                         <Phone className="h-4 w-4" />
                         {family.primaryPhone}
                       </span>
                     ) : null}
                     {family.primaryEmail ? (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1.5">
                         <Mail className="h-4 w-4" />
                         {family.primaryEmail}
                       </span>
@@ -507,7 +514,7 @@ export default function FamilyForm({
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:items-end">
+                <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
                   <div className="rounded-lg border bg-muted/30 p-4 text-right">
                     <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <span>Balance</span>
@@ -572,35 +579,54 @@ export default function FamilyForm({
                       {formatCurrencyFromCents(billingPosition.unallocatedCents)} unallocated
                     </Badge>
                   ) : null}
+
+                  <div className="flex w-full flex-col gap-2 sm:items-end">
+                    <Button size="sm" onClick={() => setPaymentSheetOpen(true)} className="w-full sm:w-auto">
+                      Take payment
+                    </Button>
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+                      <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
+                        Edit family
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleAddStudent}>
+                        Add student
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)} className="col-span-2 sm:col-span-1">
+                        Pay ahead
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="ghost" asChild>
-                <Link href={backHref}>{backLabel}</Link>
-              </Button>
-              {showFamiliesLink ? (
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/admin/family">Families</Link>
-                </Button>
-              ) : null}
-              <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
-                Edit family
-              </Button>
-              <Button size="sm" variant="secondary" onClick={handleAddStudent}>
-                Add student
-              </Button>
-              <Button size="sm" onClick={() => setPaymentSheetOpen(true)}>
-                Take payment
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)}>
-                Pay ahead
-              </Button>
+          </Card>
+
+          <Card className="md:hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Student</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={selectedStudentId || "__none"}
+                onValueChange={(value) => handleSelectStudent(value === "__none" ? "" : value)}
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select student" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">No student selected</SelectItem>
+                  {studentRows.map((row) => (
+                    <SelectItem key={row.id} value={row.id}>
+                      {row.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-            <div className="space-y-4">
+          <div className="grid items-start gap-4 md:grid-cols-[340px_minmax(0,1fr)]">
+            <div className="hidden space-y-4 md:block">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between gap-3">
                   <div>
@@ -747,12 +773,22 @@ export default function FamilyForm({
                   <CardHeader className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <CardTitle className="text-base">Action workspace</CardTitle>
-                      <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-                        <TabsTrigger value="overview">Overview</TabsTrigger>
-                        <TabsTrigger value="billing">Billing</TabsTrigger>
-                        <TabsTrigger value="enrolments">Enrolments</TabsTrigger>
-                        <TabsTrigger value="contacts">Contacts</TabsTrigger>
-                        <TabsTrigger value="history">History</TabsTrigger>
+                      <TabsList className="h-11 w-full justify-start overflow-x-auto p-1 sm:w-auto">
+                        <TabsTrigger value="overview" className="px-4">
+                          Overview
+                        </TabsTrigger>
+                        <TabsTrigger value="billing" className="px-4">
+                          Billing
+                        </TabsTrigger>
+                        <TabsTrigger value="enrolments" className="px-4">
+                          Enrolments
+                        </TabsTrigger>
+                        <TabsTrigger value="contacts" className="px-4">
+                          Contacts
+                        </TabsTrigger>
+                        <TabsTrigger value="history" className="px-4">
+                          History
+                        </TabsTrigger>
                       </TabsList>
                     </div>
 
@@ -773,11 +809,7 @@ export default function FamilyForm({
                           </Badge>
                         </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Select a student to manage enrolments and paid-through updates.
-                      </p>
-                    )}
+                    ) : null}
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <TabsContent value="overview" className="m-0 space-y-3">
@@ -823,9 +855,7 @@ export default function FamilyForm({
                     {visitedTabs.has("enrolments") ? (
                       <TabsContent value="enrolments" className="m-0 space-y-3">
                         {!selectedStudentId ? (
-                          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                            Select a student to manage enrolments.
-                          </div>
+                          <StudentSelectionEmptyState />
                         ) : isLoadingStudent && !studentDetails ? (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -999,6 +1029,17 @@ export default function FamilyForm({
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function StudentSelectionEmptyState() {
+  return (
+    <div className="rounded-lg border border-dashed p-5">
+      <h3 className="text-sm font-semibold">Select a student</h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Select a student to manage enrolments and paid-through updates.
+      </p>
     </div>
   );
 }
