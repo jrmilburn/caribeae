@@ -31,6 +31,7 @@ import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { MoveClassDialog } from "./MoveClassDialog";
+import { RemoveFromClassDialog } from "./RemoveFromClassDialog";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -52,18 +53,21 @@ export function EnrolmentsTable({
   enrolmentPlans,
   classTemplates,
   fromClassTemplate,
+  dateKey,
 }: {
   enrolments: EnrolmentWithStudent[];
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: Array<ClassTemplate & { level: Level | null }>;
   fromClassTemplate: Pick<ClassTemplate, "id" | "name" | "dayOfWeek" | "startTime" | "levelId">;
+  dateKey: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
   const [moving, setMoving] = React.useState<EnrolmentWithStudent | null>(null);
+  const [removing, setRemoving] = React.useState<EnrolmentWithStudent | null>(null);
 
   if (!enrolments.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
@@ -101,6 +105,12 @@ export function EnrolmentsTable({
           </TableHeader>
           <TableBody>
             {enrolments.map((e) => {
+              const linkedTemplateIds = new Set([
+                e.templateId,
+                ...(e.classAssignments?.map((assignment) => assignment.templateId) ?? []),
+              ]);
+              const canRemoveFromClass = linkedTemplateIds.size <= 1;
+
               return (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">
@@ -138,6 +148,20 @@ export function EnrolmentsTable({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setMoving(e)}>
                           Move class
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                          onClick={() => {
+                            if (!canRemoveFromClass) {
+                              toast.error(
+                                "This enrolment is linked to multiple classes. Use Change to adjust class selection."
+                              );
+                              return;
+                            }
+                            setRemoving(e);
+                          }}
+                        >
+                          Remove from class...
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -197,6 +221,20 @@ export function EnrolmentsTable({
           fromClassTemplate={fromClassTemplate}
           onMoved={() => {
             setMoving(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {removing ? (
+        <RemoveFromClassDialog
+          open={Boolean(removing)}
+          onOpenChange={(open) => !open && setRemoving(null)}
+          enrolment={removing}
+          classId={fromClassTemplate.id}
+          className={fromClassTemplate.name ?? null}
+          defaultDateKey={dateKey}
+          onRemoved={() => {
+            setRemoving(null);
             router.refresh();
           }}
         />

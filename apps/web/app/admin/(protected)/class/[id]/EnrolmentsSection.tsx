@@ -58,6 +58,7 @@ export function EnrolmentsSection({
           enrolmentPlans={enrolmentPlans}
           classTemplates={classTemplates}
           fromClassTemplate={classTemplate}
+          dateKey={dateKey}
         />
         <CreateEnrolmentDialog
           open={open}
