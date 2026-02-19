@@ -391,6 +391,19 @@ function ClassOccurrenceHeader({
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Link
+                href={scheduleHref}
+                onClick={onBackToSchedule}
+                className="inline-flex items-center rounded-sm py-0.5 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                Schedule
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span className="font-medium text-foreground" aria-current="page">
+                {classHeading}
+              </span>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold">{classHeading}</h1>
               <Badge variant="secondary" className="text-xs">
@@ -414,14 +427,7 @@ function ClassOccurrenceHeader({
             </p>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
-            <Link
-              href={scheduleHref}
-              onClick={onBackToSchedule}
-              className="inline-flex h-9 items-center text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              Back to Schedule
-            </Link>
+          <div className="w-full sm:w-auto">
             <DateSelector
               className="w-full sm:w-auto"
               availableDateKeys={availableDateKeys}
