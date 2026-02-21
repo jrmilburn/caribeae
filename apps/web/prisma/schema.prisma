@@ -26,6 +26,7 @@ model User {
   createdAt                  DateTime              @default(now())
   updatedAt                  DateTime              @updatedAt
   classCancellations         ClassCancellation[]   @relation("ClassCancellationCreator")
+  awayPeriodsCreated         AwayPeriod[]          @relation("AwayPeriodCreatedBy")
   enrolmentAdjustments       EnrolmentAdjustment[]
   studentLevelChanges        StudentLevelChange[]  @relation("StudentLevelChangeCreator")
   accountOpeningStates       AccountOpeningState[] @relation("AccountOpeningStateCreator")
@@ -58,6 +59,7 @@ model Family {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @default(now()) @updatedAt
   payments            Payment[]
+  awayPeriods         AwayPeriod[]
   stripePayments      StripePayment[]
   conversations       Conversation[]
   messages            Message[]
@@ -100,6 +102,7 @@ model Student {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @default(now()) @updatedAt
   enrolments       Enrolment[]
+  awayPeriods      AwayPeriod[]
   attendances      Attendance[]
   invoiceLineItems InvoiceLineItem[]
   levelChanges     StudentLevelChange[]
@@ -427,6 +430,7 @@ model Enrolment {
   creditsBalanceCached    Int?
 
   adjustments      EnrolmentAdjustment[]
+  awayPeriodImpacts AwayPeriodImpact[]
   classAssignments EnrolmentClassAssignment[]
   creditEvents     EnrolmentCreditEvent[]
   coverageAudits   EnrolmentCoverageAudit[]
@@ -460,6 +464,53 @@ model EnrolmentCoverageAudit {
   @@index([enrolmentId])
   @@index([reason])
   @@index([createdAt])
+}
+
+model AwayPeriod {
+  id String @id @default(cuid())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  startDate DateTime
+  endDate   DateTime
+  note      String?
+
+  createdByUserId String?
+  createdBy       User? @relation("AwayPeriodCreatedBy", fields: [createdByUserId], references: [id])
+
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  impacts AwayPeriodImpact[]
+
+  @@index([familyId, startDate])
+  @@index([familyId, endDate])
+  @@index([studentId, startDate])
+  @@index([deletedAt])
+}
+
+model AwayPeriodImpact {
+  id String @id @default(cuid())
+
+  awayPeriodId String
+  awayPeriod   AwayPeriod @relation(fields: [awayPeriodId], references: [id], onDelete: Cascade)
+
+  enrolmentId String
+  enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  missedOccurrences  Int
+  paidThroughDeltaDays Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([awayPeriodId, enrolmentId])
+  @@index([enrolmentId])
 }
 
 model EnrolmentClassAssignment {

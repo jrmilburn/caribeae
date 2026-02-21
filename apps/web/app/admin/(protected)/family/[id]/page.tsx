@@ -8,6 +8,7 @@ import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosit
 import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
 import getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import { getFamilyAwayPeriods } from "@/server/away/getFamilyAwayPeriods";
 
 type PageProps = {
   params: { id: string };
@@ -21,7 +22,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const search = await searchParams;
 
-  const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition, classTemplates, openingState] =
+  const [family, levels, enrolmentPlans, unpaidSummary, billing, billingPosition, classTemplates, openingState, awayPeriods] =
     await Promise.all([
       getFamily(id),
       getLevels(),
@@ -31,6 +32,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       getFamilyBillingPosition(id),
       getClassTemplates(),
       getAccountOpeningState(id),
+      getFamilyAwayPeriods(id),
     ]);
 
   const enrolContext =
@@ -54,6 +56,7 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       enrolmentPlans={enrolmentPlans}
       classTemplates={classTemplates}
       openingState={openingState}
+      awayPeriods={awayPeriods}
     />
   );
 }

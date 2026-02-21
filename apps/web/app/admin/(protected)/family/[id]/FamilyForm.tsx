@@ -41,6 +41,7 @@ import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import type getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import type { getFamilyAwayPeriods } from "@/server/away/getFamilyAwayPeriods";
 import { createStudent } from "@/server/student/createStudent";
 import { deleteStudent } from "@/server/student/deleteStudent";
 import { getStudent } from "@/server/student/getStudent";
@@ -53,6 +54,7 @@ import { ChangeEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/Chan
 import { buildReturnUrl } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
+import { AwaySection } from "./AwaySection";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -117,6 +119,7 @@ type FamilyFormProps = {
   enrolmentPlans: EnrolmentPlan[];
   classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
+  awayPeriods: Awaited<ReturnType<typeof getFamilyAwayPeriods>>;
 };
 
 type StudentStatus = {
@@ -162,6 +165,7 @@ export default function FamilyForm({
   enrolmentPlans,
   classTemplates,
   openingState,
+  awayPeriods,
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -830,6 +834,11 @@ export default function FamilyForm({
                       )}
                     </div>
                   </div>
+                  <AwaySection
+                    familyId={family.id}
+                    students={family.students.map((student) => ({ id: student.id, name: student.name }))}
+                    awayPeriods={awayPeriods}
+                  />
                 </TabsContent>
 
                 {visitedTabs.has("billing") ? (
