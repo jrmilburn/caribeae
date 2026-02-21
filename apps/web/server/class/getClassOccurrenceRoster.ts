@@ -24,13 +24,14 @@ export async function getClassOccurrenceRoster(
     return {
       enrolments,
       attendance: [],
+      awayStudentIds: [],
       makeupBookings: [],
       makeupCreditStudentIds: [],
       makeupSpotsAvailable: 0,
     };
   }
 
-  await syncAwayExcusedAttendanceForOccurrence({
+  const awayStudentIds = await syncAwayExcusedAttendanceForOccurrence({
     templateId,
     date,
     students: enrolments.map((enrolment) => ({
@@ -96,6 +97,7 @@ export async function getClassOccurrenceRoster(
   return {
     enrolments,
     attendance,
+    awayStudentIds: Array.from(awayStudentIds),
     makeupBookings,
     makeupCreditStudentIds: Array.from(new Set(makeupCredits.map((credit) => credit.studentId))),
     makeupSpotsAvailable,

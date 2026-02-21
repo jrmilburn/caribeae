@@ -40,10 +40,22 @@ export function EnrolmentsSection({
         isAwayAutoExcused: boolean;
       }
     >();
+    const awayStudentIds = new Set(roster?.awayStudentIds ?? []);
     roster?.attendance.forEach((entry) => {
       next.set(entry.studentId, {
         isExcused: entry.status === "EXCUSED",
-        isAwayAutoExcused: entry.excusedReason === "AWAY_PERIOD" || Boolean(entry.sourceAwayPeriodId),
+        isAwayAutoExcused:
+          awayStudentIds.has(entry.studentId) ||
+          entry.excusedReason === "AWAY_PERIOD" ||
+          Boolean(entry.sourceAwayPeriodId),
+      });
+    });
+    // Ensure away students are flagged even if attendance rows are not present yet.
+    awayStudentIds.forEach((studentId) => {
+      const existing = next.get(studentId);
+      next.set(studentId, {
+        isExcused: existing?.isExcused ?? true,
+        isAwayAutoExcused: true,
       });
     });
     return next;

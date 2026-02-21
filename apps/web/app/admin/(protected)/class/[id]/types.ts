@@ -39,6 +39,7 @@ export type ClassOccurrenceRoster = {
     include: { student: true; plan: true; classAssignments: { include: { template: true } } };
   }>[];
   attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
+  awayStudentIds: string[];
   makeupBookings: Prisma.MakeupBookingGetPayload<{
     include: { student: true; makeupCredit: { select: { id: true; reason: true; status: true } } };
   }>[];

@@ -158,6 +158,7 @@ function buildRows(roster: ClassOccurrenceRoster | null): AttendanceRowState[] {
     ])
   );
   const scheduledStudentIds = new Set(roster.enrolments.map((enrolment) => enrolment.studentId));
+  const awayStudentIds = new Set(roster.awayStudentIds);
   const makeupCreditStudentIds = new Set(roster.makeupCreditStudentIds);
 
   const scheduledRows = roster.enrolments
@@ -166,7 +167,10 @@ function buildRows(roster: ClassOccurrenceRoster | null): AttendanceRowState[] {
       const status = current?.status ?? null;
       const note = current?.note ?? null;
       const excusedReason = current?.excusedReason ?? null;
-      const awayAutoExcused = excusedReason === "AWAY_PERIOD" || Boolean(current?.sourceAwayPeriodId);
+      const awayAutoExcused =
+        awayStudentIds.has(enrolment.studentId) ||
+        excusedReason === "AWAY_PERIOD" ||
+        Boolean(current?.sourceAwayPeriodId);
       return {
         studentId: enrolment.student.id,
         studentName: enrolment.student.name ?? "Unnamed student",
