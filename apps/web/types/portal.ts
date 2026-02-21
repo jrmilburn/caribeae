@@ -20,6 +20,7 @@ export type FamilyPortalDashboard = {
   family: { id: string; name: string };
   outstandingCents: number;
   nextPaymentDueDayKey: string | null;
+  availableMakeupCredits: number;
   students: PortalStudentSummary[];
 };
 

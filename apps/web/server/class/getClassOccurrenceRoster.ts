@@ -1,13 +1,13 @@
-import { BillingType, EnrolmentStatus } from "@prisma/client";
-import { isAfter } from "date-fns";
+import { AttendanceStatus, MakeupCreditStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import type { PrismaClient, Prisma } from "@prisma/client";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { parseDateKey } from "@/lib/dateKey";
 import type { ClassOccurrenceRoster } from "@/app/admin/(protected)/class/[id]/types";
-import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
+import { syncAwayExcusedAttendanceForOccurrence } from "@/server/attendance/syncAwayExcusedAttendance";
+import { calculateMakeupSessionAvailability } from "@/server/makeup/availability";
+import { getEligibleEnrolmentsForOccurrence } from "@/server/class/eligibleEnrolments";
 
 type ContextOptions = { skipAuth?: boolean; includeAttendance?: boolean };
 
@@ -18,18 +18,88 @@ export async function getClassOccurrenceRoster(
 ): Promise<ClassOccurrenceRoster> {
   const { date, template } = await resolveContext(templateId, dateKey, options);
 
-  const [enrolments, attendance] = await Promise.all([
-    getEligibleEnrolmentsForOccurrence(template.id, template.levelId, date),
-    options?.includeAttendance === false
-      ? []
-      : prisma.attendance.findMany({
-          where: { templateId, date },
-          include: { student: true },
-          orderBy: [{ student: { name: "asc" } }],
-        }),
+  const enrolments = await getEligibleEnrolmentsForOccurrence(template.id, template.levelId, date);
+
+  if (options?.includeAttendance === false) {
+    return {
+      enrolments,
+      attendance: [],
+      makeupBookings: [],
+      makeupCreditStudentIds: [],
+      makeupSpotsAvailable: 0,
+    };
+  }
+
+  await syncAwayExcusedAttendanceForOccurrence({
+    templateId,
+    date,
+    students: enrolments.map((enrolment) => ({
+      studentId: enrolment.studentId,
+      familyId: enrolment.student.familyId,
+    })),
+  });
+
+  const [attendance, makeupBookings, makeupCredits] = await Promise.all([
+    prisma.attendance.findMany({
+      where: { templateId, date },
+      include: { student: true },
+      orderBy: [{ student: { name: "asc" } }],
+    }),
+    prisma.makeupBooking.findMany({
+      where: {
+        targetClassId: templateId,
+        targetSessionDate: date,
+        status: "BOOKED",
+      },
+      include: {
+        student: true,
+        makeupCredit: {
+          select: {
+            id: true,
+            reason: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: [{ student: { name: "asc" } }],
+    }),
+    prisma.makeupCredit.findMany({
+      where: {
+        earnedFromClassId: templateId,
+        earnedFromSessionDate: date,
+        status: { not: MakeupCreditStatus.CANCELLED },
+      },
+      select: {
+        studentId: true,
+      },
+    }),
   ]);
 
-  return { enrolments, attendance };
+  const scheduledStudentIds = new Set(enrolments.map((enrolment) => enrolment.studentId));
+  const excusedScheduledCount = attendance.reduce((count, entry) => {
+    if (!scheduledStudentIds.has(entry.studentId)) return count;
+    if (entry.status !== AttendanceStatus.EXCUSED) return count;
+    return count + 1;
+  }, 0);
+
+  const capacity = template.capacity ?? template.level?.defaultCapacity ?? enrolments.length;
+  const makeupSpotsAvailable = Math.max(
+    0,
+    calculateMakeupSessionAvailability({
+      capacity,
+      scheduledCount: enrolments.length,
+      excusedScheduledCount,
+      bookedMakeupsCount: makeupBookings.length,
+    })
+  );
+
+  return {
+    enrolments,
+    attendance,
+    makeupBookings,
+    makeupCreditStudentIds: Array.from(new Set(makeupCredits.map((credit) => credit.studentId))),
+    makeupSpotsAvailable,
+  };
 }
 
 export async function getEligibleStudentsForOccurrence(
@@ -55,7 +125,7 @@ async function resolveContext(templateId: string, dateKey: string, options?: Con
 
   const template = await prisma.classTemplate.findUnique({
     where: { id: templateId },
-    select: { id: true, levelId: true },
+    select: { id: true, levelId: true, capacity: true, level: { select: { defaultCapacity: true } } },
   });
 
   if (!template) {
@@ -65,82 +135,8 @@ async function resolveContext(templateId: string, dateKey: string, options?: Con
   return { date, template };
 }
 
-export type EligibleEnrolmentCandidate = Awaited<ReturnType<typeof fetchEnrolmentCandidates>>[number];
-
-export function filterEligibleEnrolmentsForOccurrence(
-  candidates: EligibleEnrolmentCandidate[],
-  templateId: string,
-  levelId: string,
-  date: Date
-) {
-  const roster = new Map<string, EligibleEnrolmentCandidate>();
-
-  for (const enrolment of candidates) {
-    if (!enrolmentIsVisibleOnClass(enrolment, date)) continue;
-    const isWeekly = enrolment.plan?.billingType === BillingType.PER_WEEK;
-    const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
-    const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
-    if (!hasAssignment) continue;
-    if (isWeekly && enrolment.student.levelId !== levelId) continue;
-
-    if (isWeekly) {
-      const paidThrough = enrolment.paidThroughDate ?? null;
-      if (paidThrough && isAfter(date, paidThrough)) continue;
-    }
-
-    const existing = roster.get(enrolment.studentId);
-    const isDirect = enrolment.templateId === templateId;
-    const existingDirect = existing?.templateId === templateId;
-
-    if (!existing || (isDirect && !existingDirect)) {
-      roster.set(enrolment.studentId, enrolment);
-    }
-  }
-
-  return Array.from(roster.values()).sort((a, b) =>
-    (a.student.name ?? "").localeCompare(b.student.name ?? "")
-  );
-}
-
-async function fetchEnrolmentCandidates(
-  templateId: string,
-  date: Date,
-  client: PrismaClient | Prisma.TransactionClient = prisma
-) {
-  return client.enrolment.findMany({
-    where: {
-      status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
-      startDate: { lte: date },
-      OR: [{ endDate: null }, { endDate: { gte: date } }],
-      AND: [
-        {
-          OR: [
-            { templateId },
-            { classAssignments: { some: { templateId } } },
-          ],
-        },
-      ],
-    },
-    include: {
-      student: true,
-      plan: true,
-      template: true,
-      classAssignments: {
-        include: {
-          template: true,
-        },
-      },
-    },
-    orderBy: [{ student: { name: "asc" } }],
-  });
-}
-
-export async function getEligibleEnrolmentsForOccurrence(
-  templateId: string,
-  levelId: string,
-  date: Date,
-  options?: { client?: PrismaClient | Prisma.TransactionClient }
-) {
-  const candidates = await fetchEnrolmentCandidates(templateId, date, options?.client ?? prisma);
-  return filterEligibleEnrolmentsForOccurrence(candidates, templateId, levelId, date);
-}
+export {
+  filterEligibleEnrolmentsForOccurrence,
+  getEligibleEnrolmentsForOccurrence,
+  type EligibleEnrolmentCandidate,
+} from "@/server/class/eligibleEnrolments";

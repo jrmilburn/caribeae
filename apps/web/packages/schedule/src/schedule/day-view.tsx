@@ -314,6 +314,11 @@ export default function DayView(props: DayViewProps) {
                   ) : c.teacher ? (
                     <div className={cn("text-[11px] truncate", colors.text)}>{c.teacher.name}</div>
                   ) : null}
+                  {!isCancelled && (c.makeupSpotsAvailable ?? 0) > 0 ? (
+                    <div className={cn("text-[11px] truncate font-medium", colors.text)}>
+                      Makeup spots: {c.makeupSpotsAvailable}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

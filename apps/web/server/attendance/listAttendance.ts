@@ -30,5 +30,7 @@ export async function listAttendance({
     studentId: row.studentId,
     status: row.status,
     note: row.note ?? null,
+    excusedReason: row.excusedReason ?? null,
+    sourceAwayPeriodId: row.sourceAwayPeriodId ?? null,
   }));
 }

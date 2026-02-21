@@ -7,11 +7,13 @@ import {
   normalizeDateRange,
   type TemplateOccurrence,
 } from "@/server/schedule/rangeUtils";
+import { computeMakeupAvailabilitiesForOccurrences, makeupSessionKey } from "@/server/makeup/availability";
 
 export async function getTemplateOccurrences(params: {
   from: Date | string;
   to: Date | string;
   levelId?: string | null;
+  makeupOnly?: boolean;
 }): Promise<TemplateOccurrence[]> {
   const range = normalizeDateRange(params);
 
@@ -83,12 +85,35 @@ export async function getTemplateOccurrences(params: {
     };
   });
 
+  const availabilityMap = await computeMakeupAvailabilitiesForOccurrences({
+    occurrences: result
+      .filter((occurrence) => !occurrence.cancelled)
+      .map((occurrence) => ({
+        templateId: occurrence.templateId,
+        levelId: occurrence.levelId ?? null,
+        sessionDate: occurrence.startTime,
+        capacity: occurrence.capacity ?? null,
+      })),
+  });
+
+  const withMakeupSpots = result.map((occurrence) => ({
+    ...occurrence,
+    makeupSpotsAvailable: Math.max(
+      0,
+      availabilityMap.get(makeupSessionKey(occurrence.templateId, occurrence.startTime))?.available ?? 0
+    ),
+  }));
+
+  const filtered = params.makeupOnly
+    ? withMakeupSpots.filter((occurrence) => (occurrence.makeupSpotsAvailable ?? 0) > 0)
+    : withMakeupSpots;
+
   console.log("[schedule] occurrences generated", {
     templateCount: templates.length,
     substitutionCount: substitutions.length,
     cancellationCount: cancellations.length,
-    occurrenceCount: result.length,
+    occurrenceCount: filtered.length,
   });
 
-  return result;
+  return filtered;
 }

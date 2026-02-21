@@ -33,6 +33,7 @@ model User {
   reviewedOnboardingRequests OnboardingRequest[]   @relation("OnboardingReview")
   posSales                   PosSale[]
   waitlistRequests           WaitlistRequest[]
+  makeupCreditsCreated       MakeupCredit[]        @relation("MakeupCreditCreatedBy")
 }
 
 model Family {
@@ -66,6 +67,8 @@ model Family {
   accountOpeningState AccountOpeningState?
   onboardingRequests  OnboardingRequest[]  @relation("OnboardingFamily")
   waitlistRequests    WaitlistRequest[]
+  makeupCredits       MakeupCredit[]
+  makeupBookings      MakeupBooking[]
 }
 
 model AccountOpeningState {
@@ -107,6 +110,8 @@ model Student {
   invoiceLineItems InvoiceLineItem[]
   levelChanges     StudentLevelChange[]
   waitlistRequests WaitlistRequest[]
+  makeupCredits    MakeupCredit[]
+  makeupBookings   MakeupBooking[]
 }
 
 model ClassTemplate {
@@ -139,6 +144,8 @@ model ClassTemplate {
   enrolmentAdjustments EnrolmentAdjustment[]
   holidays             Holiday[]
   waitlistRequests     WaitlistRequest[]
+  makeupCreditsEarned  MakeupCredit[]             @relation("MakeupCreditEarnedFromClass")
+  makeupBookingsTarget MakeupBooking[]            @relation("MakeupBookingTargetClass")
 }
 
 model TeacherSubstitution {
@@ -279,8 +286,11 @@ model Attendance {
   studentId String
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  status AttendanceStatus @default(PRESENT)
-  note   String?
+  status             AttendanceStatus         @default(PRESENT)
+  note               String?
+  excusedReason      AttendanceExcusedReason?
+  sourceAwayPeriodId String?
+  sourceAwayPeriod   AwayPeriod?              @relation("AttendanceAwayPeriod", fields: [sourceAwayPeriodId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -291,6 +301,8 @@ model Attendance {
   @@index([date])
   @@index([studentId, date])
   @@index([templateId, date])
+  @@index([templateId, date, status])
+  @@index([templateId, date, excusedReason])
 }
 
 model EnrolmentAdjustment {
@@ -327,6 +339,12 @@ enum AttendanceStatus {
   ABSENT
   LATE
   EXCUSED
+}
+
+enum AttendanceExcusedReason {
+  AWAY_PERIOD
+  SICK
+  OTHER
 }
 
 enum EnrolmentStatus {
@@ -429,11 +447,11 @@ model Enrolment {
   creditsRemaining        Int?
   creditsBalanceCached    Int?
 
-  adjustments      EnrolmentAdjustment[]
+  adjustments       EnrolmentAdjustment[]
   awayPeriodImpacts AwayPeriodImpact[]
-  classAssignments EnrolmentClassAssignment[]
-  creditEvents     EnrolmentCreditEvent[]
-  coverageAudits   EnrolmentCoverageAudit[]
+  classAssignments  EnrolmentClassAssignment[]
+  creditEvents      EnrolmentCreditEvent[]
+  coverageAudits    EnrolmentCoverageAudit[]
 
   invoices Invoice[]
 
@@ -480,13 +498,14 @@ model AwayPeriod {
   note      String?
 
   createdByUserId String?
-  createdBy       User? @relation("AwayPeriodCreatedBy", fields: [createdByUserId], references: [id])
+  createdBy       User?   @relation("AwayPeriodCreatedBy", fields: [createdByUserId], references: [id])
 
   deletedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  impacts AwayPeriodImpact[]
+  impacts           AwayPeriodImpact[]
+  attendanceEntries Attendance[]       @relation("AttendanceAwayPeriod")
 
   @@index([familyId, startDate])
   @@index([familyId, endDate])
@@ -503,7 +522,7 @@ model AwayPeriodImpact {
   enrolmentId String
   enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
 
-  missedOccurrences  Int
+  missedOccurrences    Int
   paidThroughDeltaDays Int
 
   createdAt DateTime @default(now())
@@ -601,16 +620,91 @@ model Level {
   levelChangesFrom StudentLevelChange[] @relation("StudentLevelChangeFrom")
   holidays         Holiday[]
   waitlistRequests WaitlistRequest[]
+  makeupCredits    MakeupCredit[]
 }
 
-model Makeup {
+enum MakeupCreditReason {
+  SICK
+  OTHER
+}
+
+enum MakeupCreditStatus {
+  AVAILABLE
+  RESERVED
+  USED
+  CANCELLED
+  EXPIRED
+}
+
+enum MakeupBookingStatus {
+  BOOKED
+  CANCELLED
+}
+
+model MakeupCredit {
   id String @id @default(cuid())
 
-  originalClassId String?
-  newClassId      String?
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  earnedFromClassId String?
+  earnedFromClass   ClassTemplate? @relation("MakeupCreditEarnedFromClass", fields: [earnedFromClassId], references: [id], onDelete: SetNull)
+
+  earnedFromSessionDate DateTime?
+
+  reason MakeupCreditReason
+
+  issuedAt  DateTime           @default(now())
+  expiresAt DateTime
+  status    MakeupCreditStatus @default(AVAILABLE)
+
+  notes String?
+
+  createdByUserId String?
+  createdBy       User?   @relation("MakeupCreditCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  levelId String?
+  level   Level?  @relation(fields: [levelId], references: [id], onDelete: SetNull)
+
+  booking MakeupBooking?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([studentId, status])
+  @@index([familyId, status])
+  @@index([expiresAt])
+}
+
+model MakeupBooking {
+  id String @id @default(cuid())
+
+  makeupCreditId String       @unique
+  makeupCredit   MakeupCredit @relation(fields: [makeupCreditId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  targetClassId String
+  targetClass   ClassTemplate @relation("MakeupBookingTargetClass", fields: [targetClassId], references: [id], onDelete: Cascade)
+
+  targetSessionDate DateTime
+
+  status MakeupBookingStatus @default(BOOKED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([targetClassId, targetSessionDate, studentId])
+  @@index([targetClassId, targetSessionDate, status])
+  @@index([studentId, status])
+  @@index([familyId, status])
 }
 
 model Teacher {

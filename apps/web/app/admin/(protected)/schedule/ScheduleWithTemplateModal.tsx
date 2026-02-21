@@ -168,6 +168,11 @@ export default function ScheduleWithTemplateModal({
     parse: (value) => value ?? null,
     serialize: (value) => value ?? null,
   });
+  const [makeupOnly, setMakeupOnly] = useSyncedQueryState<boolean>("makeupOnly", {
+    defaultValue: false,
+    parse: (value) => value === "1",
+    serialize: (value) => (value ? "1" : null),
+  });
   const selectedDate = useMemo(() => {
     try {
       return scheduleDateFromKey(selectedDateKey);
@@ -198,9 +203,10 @@ export default function ScheduleWithTemplateModal({
     params.set("date", selectedDateKey);
     if (levelId) params.set("levelId", levelId);
     if (teacherId) params.set("teacherId", teacherId);
+    if (makeupOnly) params.set("makeupOnly", "1");
     const qs = params.toString();
     return qs ? `/admin/schedule?${qs}` : "/admin/schedule";
-  }, [levelId, selectedDateKey, teacherId, viewMode]);
+  }, [levelId, makeupOnly, selectedDateKey, teacherId, viewMode]);
   const scheduleStateKey = useMemo(() => `admin-schedule:${scheduleStateUrl}`, [scheduleStateUrl]);
 
   const handleClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
@@ -253,17 +259,26 @@ export default function ScheduleWithTemplateModal({
           if (nextKey === selectedDateKey) return;
           setSelectedDateKey(nextKey);
         }}
-        filters={{ teacherId, levelId } satisfies ScheduleFilters}
+        filters={{ teacherId, levelId, makeupOnly } satisfies ScheduleFilters}
         headerActions={
-          <FiltersPopover
-            levels={levels}
-            teachers={teachers}
-            value={{ teacherId, levelId } satisfies ScheduleFilters}
-            onApply={(next) => {
-              setTeacherId(next.teacherId ?? null);
-              setLevelId(next.levelId ?? null);
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={makeupOnly ? "default" : "outline"}
+              onClick={() => setMakeupOnly(!makeupOnly)}
+            >
+              {makeupOnly ? "Showing makeup spots" : "Show makeup spots"}
+            </Button>
+            <FiltersPopover
+              levels={levels}
+              teachers={teachers}
+              value={{ teacherId, levelId } satisfies ScheduleFilters}
+              onApply={(next) => {
+                setTeacherId(next.teacherId ?? null);
+                setLevelId(next.levelId ?? null);
+              }}
+            />
+          </div>
         }
       />
 

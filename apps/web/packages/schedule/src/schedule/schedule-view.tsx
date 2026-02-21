@@ -35,6 +35,7 @@ export type ScheduleViewHandle = {
 export type ScheduleFilters = {
   levelId?: string | null;
   teacherId?: string | null;
+  makeupOnly?: boolean;
 };
 
 export type ScheduleViewProps = {
@@ -117,6 +118,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     const displayWeekEnd = useMemo(() => scheduleAddDays(weekStart, 6), [weekStart]);
     const levelFilter = filters?.levelId ?? null;
     const teacherFilter = filters?.teacherId ?? null;
+    const makeupOnly = filters?.makeupOnly ?? false;
     const cacheKey = useMemo(() => {
       if (!persistKey) return null;
       return `${persistKey}|week:${scheduleDateKey(weekStart)}|level:${levelFilter ?? "all"}`;
@@ -209,6 +211,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             from: weekStart,
             to: displayWeekEnd,
             levelId: levelFilter ?? undefined,
+            makeupOnly,
           });
           if (cancelled) return;
           setClasses(data.map(normalizeScheduleClass));
@@ -223,7 +226,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       return () => {
         cancelled = true;
       };
-    }, [adapter, weekStart, displayWeekEnd, levelFilter]);
+    }, [adapter, weekStart, displayWeekEnd, levelFilter, makeupOnly]);
 
     React.useEffect(() => {
       let cancelled = false;
@@ -285,6 +288,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
             from: weekStart,
             to: displayWeekEnd,
             levelId: levelFilter ?? undefined,
+            makeupOnly,
           });
           setClasses(data.map(normalizeScheduleClass));
         } catch (err) {
@@ -292,7 +296,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
           setError(err instanceof Error ? err.message : "Unable to refresh schedule");
         }
       })();
-    }, [adapter, weekStart, displayWeekEnd, levelFilter]);
+    }, [adapter, weekStart, displayWeekEnd, levelFilter, makeupOnly]);
 
     React.useImperativeHandle(ref, () => ({ softRefresh }), [softRefresh]);
 

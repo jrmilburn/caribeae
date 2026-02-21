@@ -41,6 +41,7 @@ export function AttendanceSection({
   const dirtyRows = rows.filter((row) => row.status !== row.initialStatus);
   const hasChanges = dirtyRows.length > 0;
   const creditsCount = cancellationCredits?.length ?? 0;
+  const makeupSpotsAvailable = roster?.makeupSpotsAvailable ?? 0;
 
   const handleStatusChange = (studentId: string, status: AttendanceRowState["status"]) => {
     setRows((prev) =>
@@ -100,9 +101,14 @@ export function AttendanceSection({
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="text-base">Attendance</CardTitle>
-          <p className="text-xs text-muted-foreground">Mark attendance for the selected date.</p>
+          <p className="text-xs text-muted-foreground">
+            Mark attendance for scheduled students and makeup attendees.
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant={makeupSpotsAvailable > 0 ? "secondary" : "outline"} className="text-xs">
+            Makeup spots: {makeupSpotsAvailable}
+          </Badge>
           {hasChanges ? (
             <Badge variant="secondary" className="text-xs">
               Unsaved changes
@@ -141,22 +147,61 @@ function buildRows(roster: ClassOccurrenceRoster | null): AttendanceRowState[] {
   if (!roster) return [];
 
   const attendanceByStudent = new Map(
-    roster.attendance.map((entry) => [entry.studentId, { status: entry.status, note: entry.note ?? null }])
+    roster.attendance.map((entry) => [
+      entry.studentId,
+      {
+        status: entry.status,
+        note: entry.note ?? null,
+        excusedReason: entry.excusedReason ?? null,
+        sourceAwayPeriodId: entry.sourceAwayPeriodId ?? null,
+      },
+    ])
   );
+  const scheduledStudentIds = new Set(roster.enrolments.map((enrolment) => enrolment.studentId));
+  const makeupCreditStudentIds = new Set(roster.makeupCreditStudentIds);
 
-  return roster.enrolments
+  const scheduledRows = roster.enrolments
     .map((enrolment) => {
       const current = attendanceByStudent.get(enrolment.studentId);
       const status = current?.status ?? null;
       const note = current?.note ?? null;
+      const excusedReason = current?.excusedReason ?? null;
+      const awayAutoExcused = excusedReason === "AWAY_PERIOD" || Boolean(current?.sourceAwayPeriodId);
       return {
         studentId: enrolment.student.id,
         studentName: enrolment.student.name ?? "Unnamed student",
         planName: enrolment.plan?.name ?? null,
+        rowKind: "SCHEDULED" as const,
         status,
         initialStatus: status,
+        excusedReason,
+        awayAutoExcused,
+        hasSessionMakeupCredit: makeupCreditStudentIds.has(enrolment.student.id),
         note,
       };
     })
     .sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+  const makeupRows = roster.makeupBookings
+    .filter((booking) => !scheduledStudentIds.has(booking.studentId))
+    .map((booking) => {
+      const current = attendanceByStudent.get(booking.studentId);
+      const status = current?.status ?? null;
+      const note = current?.note ?? null;
+      return {
+        studentId: booking.student.id,
+        studentName: booking.student.name ?? "Unnamed student",
+        planName: "Makeup",
+        rowKind: "MAKEUP" as const,
+        status,
+        initialStatus: status,
+        excusedReason: current?.excusedReason ?? null,
+        awayAutoExcused: false,
+        hasSessionMakeupCredit: false,
+        note,
+      };
+    })
+    .sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+  return [...scheduledRows, ...makeupRows];
 }

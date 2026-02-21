@@ -1,5 +1,5 @@
 // /app/admin/class/[id]/types.ts
-import type { AttendanceStatus, Prisma } from "@prisma/client";
+import type { AttendanceExcusedReason, AttendanceStatus, Prisma } from "@prisma/client";
 
 export type ClientTemplateWithInclusions =
   Prisma.ClassTemplateGetPayload<{
@@ -24,6 +24,8 @@ export type AttendanceEntryDTO = {
   studentId: string;
   status: AttendanceStatus;
   note: string | null;
+  excusedReason: AttendanceExcusedReason | null;
+  sourceAwayPeriodId: string | null;
 };
 
 export type AttendanceChangeDTO = {
@@ -37,6 +39,11 @@ export type ClassOccurrenceRoster = {
     include: { student: true; plan: true; classAssignments: { include: { template: true } } };
   }>[];
   attendance: Prisma.AttendanceGetPayload<{ include: { student: true } }>[];
+  makeupBookings: Prisma.MakeupBookingGetPayload<{
+    include: { student: true; makeupCredit: { select: { id: true; reason: true; status: true } } };
+  }>[];
+  makeupCreditStudentIds: string[];
+  makeupSpotsAvailable: number;
 };
 
 export type ClassPageData = {

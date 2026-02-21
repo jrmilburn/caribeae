@@ -1,6 +1,6 @@
 "use server";
 
-import { AttendanceStatus } from "@prisma/client";
+import { AttendanceExcusedReason, AttendanceStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -48,6 +48,16 @@ export async function saveAttendance({
     includeAttendance: false,
     skipAuth: true,
   });
+  const makeupStudents = await prisma.makeupBooking.findMany({
+    where: {
+      targetClassId: templateId,
+      targetSessionDate: date,
+      status: "BOOKED",
+    },
+    select: { studentId: true },
+  });
+  makeupStudents.forEach((booking) => allowedStudents.add(booking.studentId));
+
   uniqueChanges.forEach((entry) => {
     if (!allowedStudents.has(entry.studentId)) {
       throw new Error("Student is not enrolled on this date.");
@@ -57,6 +67,32 @@ export async function saveAttendance({
   if (uniqueChanges.length === 0) {
     return loadAttendance(templateId, date);
   }
+
+  const existingRows = await prisma.attendance.findMany({
+    where: {
+      templateId,
+      date,
+      studentId: { in: uniqueChanges.map((entry) => entry.studentId) },
+    },
+    select: {
+      studentId: true,
+      excusedReason: true,
+      sourceAwayPeriodId: true,
+    },
+  });
+  const awayLockedStudents = new Set(
+    existingRows
+      .filter(
+        (row) =>
+          row.excusedReason === AttendanceExcusedReason.AWAY_PERIOD || Boolean(row.sourceAwayPeriodId)
+      )
+      .map((row) => row.studentId)
+  );
+
+  uniqueChanges.forEach((entry) => {
+    if (!awayLockedStudents.has(entry.studentId)) return;
+    throw new Error("Away attendance is managed automatically and cannot be edited.");
+  });
 
   const operations = uniqueChanges.map((entry) =>
     entry.status === null
@@ -71,13 +107,20 @@ export async function saveAttendance({
               studentId: entry.studentId,
             },
           },
-          update: { status: entry.status, note: entry.note ?? null },
+          update: {
+            status: entry.status,
+            note: entry.note ?? null,
+            excusedReason: entry.status === AttendanceStatus.EXCUSED ? AttendanceExcusedReason.OTHER : null,
+            sourceAwayPeriodId: null,
+          },
           create: {
             templateId,
             date,
             studentId: entry.studentId,
             status: entry.status,
             note: entry.note ?? null,
+            excusedReason: entry.status === AttendanceStatus.EXCUSED ? AttendanceExcusedReason.OTHER : null,
+            sourceAwayPeriodId: null,
           },
         })
   );
@@ -115,5 +158,7 @@ async function loadAttendance(templateId: string, date: Date): Promise<Attendanc
     studentId: row.studentId,
     status: row.status,
     note: row.note ?? null,
+    excusedReason: row.excusedReason ?? null,
+    sourceAwayPeriodId: row.sourceAwayPeriodId ?? null,
   }));
 }

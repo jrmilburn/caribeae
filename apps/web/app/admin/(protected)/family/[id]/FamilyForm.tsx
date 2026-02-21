@@ -55,6 +55,8 @@ import { buildReturnUrl } from "@/lib/returnContext";
 import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { AwaySection } from "./AwaySection";
+import { MakeupsSection } from "./MakeupsSection";
+import type { FamilyMakeupSummary } from "@/server/makeup/getFamilyMakeups";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -120,6 +122,7 @@ type FamilyFormProps = {
   classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
   awayPeriods: Awaited<ReturnType<typeof getFamilyAwayPeriods>>;
+  makeups: FamilyMakeupSummary;
 };
 
 type StudentStatus = {
@@ -166,6 +169,7 @@ export default function FamilyForm({
   classTemplates,
   openingState,
   awayPeriods,
+  makeups,
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -838,6 +842,11 @@ export default function FamilyForm({
                     familyId={family.id}
                     students={family.students.map((student) => ({ id: student.id, name: student.name }))}
                     awayPeriods={awayPeriods}
+                  />
+                  <MakeupsSection
+                    familyId={family.id}
+                    students={family.students}
+                    summary={makeups}
                   />
                 </TabsContent>
 

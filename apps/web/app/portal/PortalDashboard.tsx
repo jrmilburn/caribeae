@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 
 import type { FamilyPortalDashboard } from "@/types/portal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,13 @@ export default function PortalDashboard({ data }: { data: FamilyPortalDashboard 
               <div className="text-base font-semibold">
                 {formatCurrencyFromCents(data.outstandingCents)}
               </div>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs text-muted-foreground">Available makeup credits</div>
+              <div className="text-base font-semibold">{data.availableMakeupCredits}</div>
+              <Link href="/portal/makeups" className="text-xs text-muted-foreground underline">
+                Manage makeups
+              </Link>
             </div>
             {data.nextPaymentDueDayKey ? (
               <div className="rounded-md border px-3 py-2">

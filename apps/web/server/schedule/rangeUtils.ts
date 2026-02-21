@@ -31,6 +31,7 @@ export type TemplateOccurrence = {
   template: TemplateWithRelations;
   cancelled?: boolean;
   cancellationReason?: string | null;
+  makeupSpotsAvailable?: number;
 };
 
 export const SCHEDULE_TIME_ZONE = "Australia/Brisbane";

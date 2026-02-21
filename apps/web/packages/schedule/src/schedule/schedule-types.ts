@@ -58,6 +58,7 @@ export type ScheduleClass = {
   template?: ClassTemplate | null;
   cancelled?: boolean;
   cancellationReason?: string | null;
+  makeupSpotsAvailable?: number;
 };
 
 export type Holiday = {

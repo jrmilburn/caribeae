@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { MakeupCreditStatus } from "@prisma/client";
 import { enrolmentIsPayable } from "@/lib/enrolment/enrolmentVisibility";
 import { computeFamilyBillingSummary } from "@/server/billing/familyBillingSummary";
 import { computeFamilyNetOwing } from "@/server/billing/netOwing";
@@ -95,7 +96,7 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
     today: new Date(),
   });
 
-  const [openInvoices] = await Promise.all([
+  const [openInvoices, availableMakeupCredits] = await Promise.all([
     prisma.invoice.findMany({
       where: { familyId, status: { in: [...OPEN_INVOICE_STATUSES] } },
       select: {
@@ -104,6 +105,13 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
         amountPaidCents: true,
         status: true,
         enrolmentId: true,
+      },
+    }),
+    prisma.makeupCredit.count({
+      where: {
+        familyId,
+        status: MakeupCreditStatus.AVAILABLE,
+        expiresAt: { gte: today },
       },
     }),
   ]);
@@ -167,6 +175,7 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
     family: { id: family.id, name: family.name },
     outstandingCents: netOwing.netOwingCents,
     nextPaymentDueDayKey: summary.nextPaymentDueDayKey,
+    availableMakeupCredits,
     students,
   };
 }

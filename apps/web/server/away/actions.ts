@@ -20,6 +20,7 @@ import {
   listAwayOccurrences,
   resolveSessionsPerWeek,
 } from "@/server/away/awayMath";
+import { assertNoMakeupCreditsInAwayRange } from "@/server/makeup/guards";
 
 const awayScopeSchema = z.enum(["FAMILY", "STUDENT"]);
 
@@ -467,6 +468,7 @@ export async function createAwayPeriod(input: z.input<typeof createAwayPeriodSch
     async (tx) => {
       await ensureScopeReferences(tx, normalized);
       await assertNoOverlappingAwayPeriod(tx, normalized);
+      await assertNoMakeupCreditsInAwayRange(tx, normalized);
 
       const awayPeriod = await tx.awayPeriod.create({
         data: {
@@ -528,6 +530,7 @@ export async function updateAwayPeriod(input: z.input<typeof updateAwayPeriodSch
 
       await ensureScopeReferences(tx, normalized);
       await assertNoOverlappingAwayPeriod(tx, { ...normalized, excludeId: parsed.id });
+      await assertNoMakeupCreditsInAwayRange(tx, normalized);
 
       await revertAwayPeriodImpacts(tx, {
         awayPeriodId: parsed.id,

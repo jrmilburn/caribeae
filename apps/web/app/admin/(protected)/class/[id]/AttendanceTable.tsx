@@ -1,6 +1,6 @@
 "use client";
 
-import { AttendanceStatus } from "@prisma/client";
+import { AttendanceExcusedReason, AttendanceStatus } from "@prisma/client";
 
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -10,8 +10,12 @@ export type AttendanceRowState = {
   studentId: string;
   studentName: string;
   planName: string | null;
+  rowKind: "SCHEDULED" | "MAKEUP";
   status: AttendanceStatus | null;
   initialStatus: AttendanceStatus | null;
+  excusedReason: AttendanceExcusedReason | null;
+  awayAutoExcused: boolean;
+  hasSessionMakeupCredit: boolean;
   note: string | null;
 };
 

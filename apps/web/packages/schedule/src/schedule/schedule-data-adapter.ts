@@ -11,6 +11,7 @@ export type FetchClassesParams = {
   from: Date;
   to: Date;
   levelId?: string | null;
+  makeupOnly?: boolean;
 };
 
 export type ScheduleDataAdapter = {
@@ -43,13 +44,16 @@ export function createApiScheduleDataAdapter(
   endpoint: string = "/api/admin/class-templates"
 ): ScheduleDataAdapter {
   return {
-    async fetchClasses({ from, to, levelId }) {
+    async fetchClasses({ from, to, levelId, makeupOnly }) {
       const params = new URLSearchParams({
         from: scheduleDateKey(from),
         to: scheduleDateKey(to),
       });
       if (levelId) {
         params.set("levelId", levelId);
+      }
+      if (makeupOnly) {
+        params.set("makeupOnly", "1");
       }
 
       const response = await fetch(`${endpoint}?${params.toString()}`, {

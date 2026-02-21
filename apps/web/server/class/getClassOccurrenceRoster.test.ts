@@ -2,7 +2,7 @@ import assert from "node:assert";
 
 import { BillingType, EnrolmentStatus, EnrolmentType } from "@prisma/client";
 
-import { filterEligibleEnrolmentsForOccurrence, type EligibleEnrolmentCandidate } from "./getClassOccurrenceRoster";
+import { filterEligibleEnrolmentsForOccurrence, type EligibleEnrolmentCandidate } from "./eligibleEnrolments";
 
 function test(name: string, fn: () => void) {
   try {
