@@ -19,6 +19,7 @@ export function EnrolmentsSection({
   enrolmentPlans,
   dateKey,
   levels,
+  roster,
   isCancelled,
 }: {
   classTemplate: ClientTemplateWithInclusions;
@@ -27,9 +28,26 @@ export function EnrolmentsSection({
   enrolmentPlans: EnrolmentPlan[];
   dateKey: string | null;
   levels: Level[];
+  roster: ClassPageData["roster"];
   isCancelled?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
+  const sessionAttendanceByStudentId = React.useMemo(() => {
+    const next = new Map<
+      string,
+      {
+        isExcused: boolean;
+        isAwayAutoExcused: boolean;
+      }
+    >();
+    roster?.attendance.forEach((entry) => {
+      next.set(entry.studentId, {
+        isExcused: entry.status === "EXCUSED",
+        isAwayAutoExcused: entry.excusedReason === "AWAY_PERIOD" || Boolean(entry.sourceAwayPeriodId),
+      });
+    });
+    return next;
+  }, [roster]);
 
   return (
     <Card className="border-none shadow-none">
@@ -59,6 +77,7 @@ export function EnrolmentsSection({
           classTemplates={classTemplates}
           fromClassTemplate={classTemplate}
           dateKey={dateKey}
+          sessionAttendanceByStudentId={sessionAttendanceByStudentId}
         />
         <CreateEnrolmentDialog
           open={open}

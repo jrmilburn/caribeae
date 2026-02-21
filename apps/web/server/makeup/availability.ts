@@ -121,6 +121,41 @@ export async function computeMakeupAvailabilitiesForOccurrences(
     }),
   ]);
 
+  const candidateFamilyIds = Array.from(
+    new Set(candidates.map((candidate) => candidate.student.familyId).filter(Boolean))
+  );
+  const candidateStudentIds = Array.from(
+    new Set(candidates.map((candidate) => candidate.studentId).filter(Boolean))
+  );
+
+  const awayPeriods = candidateFamilyIds.length
+    ? await tx.awayPeriod.findMany({
+        where: {
+          deletedAt: null,
+          familyId: { in: candidateFamilyIds },
+          startDate: { lte: rangeEnd },
+          endDate: { gte: rangeStart },
+          OR: [{ studentId: null }, { studentId: { in: candidateStudentIds } }],
+        },
+        select: {
+          familyId: true,
+          studentId: true,
+          startDate: true,
+          endDate: true,
+        },
+      })
+    : [];
+
+  const awayByFamily = new Map<
+    string,
+    Array<{ studentId: string | null; startDate: Date; endDate: Date }>
+  >();
+  awayPeriods.forEach((awayPeriod) => {
+    const existing = awayByFamily.get(awayPeriod.familyId) ?? [];
+    existing.push(awayPeriod);
+    awayByFamily.set(awayPeriod.familyId, existing);
+  });
+
   const excusedBySession = new Map<string, Set<string>>();
   excusedAttendanceRows.forEach((row) => {
     const key = makeupSessionKey(row.templateId, row.date);
@@ -161,7 +196,23 @@ export async function computeMakeupAvailabilitiesForOccurrences(
 
     const scheduledStudentIds = scheduled.map((enrolment) => enrolment.studentId);
     const scheduledStudentSet = new Set(scheduledStudentIds);
-    const excusedSet = excusedBySession.get(key) ?? new Set<string>();
+    const excusedSet = new Set(excusedBySession.get(key) ?? []);
+
+    // Away periods should free seats for makeups even before attendance has been synced.
+    const sessionDay = brisbaneStartOfDay(occurrence.sessionDate).getTime();
+    scheduled.forEach((enrolment) => {
+      const awayCandidates = awayByFamily.get(enrolment.student.familyId) ?? [];
+      const isAway = awayCandidates.some((awayPeriod) => {
+        if (awayPeriod.studentId && awayPeriod.studentId !== enrolment.studentId) return false;
+        const awayStart = brisbaneStartOfDay(awayPeriod.startDate).getTime();
+        const awayEnd = brisbaneStartOfDay(awayPeriod.endDate).getTime();
+        return awayStart <= sessionDay && awayEnd >= sessionDay;
+      });
+      if (isAway) {
+        excusedSet.add(enrolment.studentId);
+      }
+    });
+
     let excusedScheduledCount = 0;
     scheduledStudentSet.forEach((studentId) => {
       if (excusedSet.has(studentId)) excusedScheduledCount += 1;

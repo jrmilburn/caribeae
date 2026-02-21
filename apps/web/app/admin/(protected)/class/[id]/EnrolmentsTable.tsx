@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
@@ -54,6 +55,7 @@ export function EnrolmentsTable({
   classTemplates,
   fromClassTemplate,
   dateKey,
+  sessionAttendanceByStudentId,
 }: {
   enrolments: EnrolmentWithStudent[];
   levels: Level[];
@@ -61,6 +63,13 @@ export function EnrolmentsTable({
   classTemplates: Array<ClassTemplate & { level: Level | null }>;
   fromClassTemplate: Pick<ClassTemplate, "id" | "name" | "dayOfWeek" | "startTime" | "levelId">;
   dateKey: string | null;
+  sessionAttendanceByStudentId: Map<
+    string,
+    {
+      isExcused: boolean;
+      isAwayAutoExcused: boolean;
+    }
+  >;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
@@ -110,13 +119,32 @@ export function EnrolmentsTable({
                 ...(e.classAssignments?.map((assignment) => assignment.templateId) ?? []),
               ]);
               const canRemoveFromClass = linkedTemplateIds.size <= 1;
+              const attendance = sessionAttendanceByStudentId.get(e.studentId);
+              const showAway = attendance?.isAwayAutoExcused ?? false;
+              const showExcused = Boolean(attendance?.isExcused) && !showAway;
 
               return (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">
-                    <Link href={`/admin/student/${e.student.id}`} className="w-full underline">
-                      {e.student.name ?? "Unnamed student"}
-                    </Link>
+                    <div className="space-y-1">
+                      <Link href={`/admin/student/${e.student.id}`} className="w-full underline">
+                        {e.student.name ?? "Unnamed student"}
+                      </Link>
+                      {showAway || showExcused ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {showAway ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Away
+                            </Badge>
+                          ) : null}
+                          {showExcused ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              Excused
+                            </Badge>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>{e.status}</TableCell>
                   <TableCell>{fmtDate(e.startDate)}</TableCell>
