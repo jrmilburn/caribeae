@@ -3,7 +3,7 @@ import { getLevels } from "@/server/level/getLevels";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getTeachers } from "@/server/teacher/getTeachers";
-import TemplateList, { type TemplateWithLevel } from "./templates/TemplateList";
+import TemplateList from "./templates/TemplateList";
 import { parsePaginationSearchParams } from "@/server/pagination";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -29,22 +29,10 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
     getTeachers(),
   ]);
 
-  /**
-   * TS FIX:
-   * TemplateList expects TemplateWithLevel[] (includes createdAt/updatedAt via TemplateModalTemplate),
-   * but listClassTemplates currently returns items without createdAt/updatedAt.
-   *
-   * Correct “root” fix is to update listClassTemplates (and its exported type) to SELECT createdAt/updatedAt.
-   * Until then, we can pass through with a narrow assertion here to unblock the build.
-   *
-   * NOTE: If TemplateModal actually *uses* createdAt/updatedAt at runtime, you should implement the root fix.
-   */
-  const items = templates.items as unknown as TemplateWithLevel[];
-
   return (
     <div className="max-h-screen overflow-y-auto">
       <TemplateList
-        templates={items}
+        templates={templates.items}
         levels={levels}
         teachers={teachers}
         totalCount={templates.totalCount}

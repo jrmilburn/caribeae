@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Level, Teacher } from "@prisma/client";
 
@@ -28,16 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-/**
- * Fix:
- * Your list type (ClassTemplateListItem) is missing createdAt/updatedAt in its TS shape,
- * but your modal state expects TemplateModalTemplate which includes those fields.
- *
- * This type asserts that list items ALSO include createdAt/updatedAt, matching what the modal expects.
- * (If your DB query already returns them, this is purely a typing fix.)
- */
-export type TemplateWithLevel = ClassTemplateListItem &
-  Pick<TemplateModalTemplate, "createdAt" | "updatedAt">;
+export type TemplateWithLevel = ClassTemplateListItem;
 
 export default function TemplateList({
   templates,
@@ -74,11 +65,12 @@ export default function TemplateList({
     [currentLevelId, currentTeacherId, currentStatus]
   );
 
-  useEffect(() => {
+  const openFiltersDialog = () => {
     setLevelFilter(currentLevelId);
     setTeacherFilter(currentTeacherId);
     setStatusFilter(currentStatus);
-  }, [currentLevelId, currentTeacherId, currentStatus]);
+    setFiltersOpen(true);
+  };
 
   const openEdit = (template: TemplateWithLevel) => {
     setSelectedTemplate(template);
@@ -189,7 +181,7 @@ export default function TemplateList({
           setNewTemplateModal(true);
         }}
         showFilters
-        onFiltersClick={() => setFiltersOpen(true)}
+        onFiltersClick={openFiltersDialog}
         sticky
       />
 
@@ -278,22 +270,14 @@ export default function TemplateList({
         onSave={handleSave}
       />
 
-      <div>
-        <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
-          <div className="truncate flex-[1.2]">Template</div>
-          <div className="truncate flex-1">Schedule</div>
-          <div className="truncate flex-1">Level</div>
-          <div className="truncate flex-1">Capacity</div>
-          <div className="w-12 text-right">Actions</div>
-        </div>
+      <div className="mt-6">
+        <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {templates.map((template) => (
+            <TemplateListItem key={template.id} template={template} onEdit={openEdit} onDelete={handleDelete} />
+          ))}
+        </ul>
 
-        {templates.map((t) => (
-          <TemplateListItem key={t.id} template={t} onEdit={openEdit} onDelete={handleDelete} />
-        ))}
-
-        {templates.length === 0 && (
-          <div className="p-4 text-sm text-muted-foreground">No templates found.</div>
-        )}
+        {templates.length === 0 ? <div className="p-4 text-sm text-muted-foreground">No templates found.</div> : null}
       </div>
 
       <AdminPagination

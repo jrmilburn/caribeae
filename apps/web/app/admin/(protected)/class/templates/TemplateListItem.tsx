@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreVertical, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { ExternalLink, MoreVertical, Pencil, Trash2, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +31,8 @@ export default function TemplateListItem({
 
   const schedule = formatSchedule(template.dayOfWeek, template.startTime, template.endTime);
   const level = template.level?.name ?? "—";
+  const teacherName = template.teacher?.name?.trim() || "Teacher TBD";
+  const studentLabel = `${template.studentCount} ${template.studentCount === 1 ? "student" : "students"}`;
 
   const capacity =
     template.capacity !== null && template.capacity !== undefined
@@ -40,34 +42,57 @@ export default function TemplateListItem({
       : "—";
 
   return (
-    <button
-      type="button"
-      onClick={() => onEdit(template)}
-      className="w-full border-b px-4 py-3 text-left transition hover:bg-muted/40"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="truncate text-sm font-medium flex-[1.2]">
+    <li className="col-span-1 divide-y divide-border rounded-lg bg-card shadow-sm">
+      <button
+        type="button"
+        onClick={() => onEdit(template)}
+        className="flex w-full items-center justify-between gap-4 rounded-t-lg p-6 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+      >
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate">{name}</span>
+            <h3 className="truncate text-sm font-semibold text-foreground">{name}</h3>
             {!template.active ? (
-              <span className="rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground">
+              <span className="inline-flex shrink-0 items-center rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground">
                 Inactive
               </span>
             ) : null}
           </div>
+
+          <p className="mt-1 truncate text-sm text-muted-foreground">{schedule}</p>
+
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Level</dt>
+              <dd className="truncate text-sm font-medium text-foreground">{level}</dd>
+            </div>
+
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Capacity</dt>
+              <dd className="truncate text-sm font-medium text-foreground">{capacity}</dd>
+            </div>
+
+            <div className="col-span-2 min-w-0">
+              <dt className="text-xs text-muted-foreground">Students</dt>
+              <dd className="truncate text-sm font-medium text-foreground">{studentLabel}</dd>
+            </div>
+          </dl>
         </div>
 
-        <div className="truncate text-sm text-muted-foreground flex-1">{schedule}</div>
-        <div className="truncate text-sm text-muted-foreground flex-1">{level}</div>
-        <div className="truncate text-sm text-muted-foreground flex-1">{capacity}</div>
+        <div className="flex shrink-0 flex-col items-center gap-2">
+          <div className="flex size-12 items-center justify-center rounded-full bg-muted ring-1 ring-border">
+            <UserRound className="size-6 text-muted-foreground" />
+          </div>
+          <span className="max-w-24 truncate text-[11px] font-medium text-muted-foreground">{teacherName}</span>
+        </div>
+      </button>
 
+      <div className="flex items-center justify-end px-2 py-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               className="shrink-0"
-              onClick={(e) => e.stopPropagation()}
               aria-label="Template actions"
             >
               <MoreVertical className="h-4 w-4" />
@@ -76,17 +101,15 @@ export default function TemplateListItem({
 
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem
-              onClick={(e) => {
-                router.push(`/admin/class/${template.id}`)
-                e.stopPropagation();
+              onClick={() => {
+                router.push(`/admin/class/${template.id}`);
               }}
             >
               <ExternalLink className="mr-2 h-4 w-4" />
               View
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 onEdit(template);
               }}
             >
@@ -97,19 +120,18 @@ export default function TemplateListItem({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 onDelete(template);
               }}
               className="text-destructive focus:text-destructive"
             >
-              <Trash2 className="mr-2 h-4 w-4 text-red" />
+              <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </button>
+    </li>
   );
 }
 

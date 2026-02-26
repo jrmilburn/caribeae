@@ -1,6 +1,6 @@
 import { listClassTemplates } from "@/server/classTemplate/listClassTemplates";
 
-import TemplateList, { type TemplateWithLevel } from "./TemplateList";
+import TemplateList from "./TemplateList";
 import { getLevels } from "@/server/level/getLevels";
 import { getTeachers } from "@/server/teacher/getTeachers";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -26,14 +26,10 @@ export default async function ClassTemplates({ searchParams }: PageProps) {
     getTeachers(),
   ]);
 
-  // Same TS-unblock fix: TemplateList expects createdAt/updatedAt (via TemplateWithLevel),
-  // but listClassTemplates currently returns items without them.
-  const items = templates.items as unknown as TemplateWithLevel[];
-
   return (
     <div>
       <TemplateList
-        templates={items}
+        templates={templates.items}
         levels={levels}
         teachers={teachers}
         totalCount={templates.totalCount}

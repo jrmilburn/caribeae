@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/requireAdmin";
+import { EnrolmentStatus } from "@prisma/client";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
@@ -15,7 +17,7 @@ const DAY_LOOKUP: Record<string, number> = {
   sun: 6,
 };
 
-export type ClassTemplateListItem = Prisma.ClassTemplateGetPayload<{
+type ClassTemplateListRecord = Prisma.ClassTemplateGetPayload<{
   select: {
     id: true;
     name: true;
@@ -28,6 +30,8 @@ export type ClassTemplateListItem = Prisma.ClassTemplateGetPayload<{
     endTime: true;
     capacity: true;
     active: true;
+    createdAt: true;
+    updatedAt: true;
     level: {
       select: {
         id: true;
@@ -35,8 +39,18 @@ export type ClassTemplateListItem = Prisma.ClassTemplateGetPayload<{
         defaultCapacity: true;
       };
     };
+    teacher: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
   };
 }>;
+
+export type ClassTemplateListItem = ClassTemplateListRecord & {
+  studentCount: number;
+};
 
 export async function listClassTemplates(params: {
   q?: string | null;
@@ -105,6 +119,8 @@ export async function listClassTemplates(params: {
         endTime: true,
         capacity: true,
         active: true,
+        createdAt: true,
+        updatedAt: true,
         level: {
           select: {
             id: true,
@@ -112,13 +128,64 @@ export async function listClassTemplates(params: {
             defaultCapacity: true,
           },
         },
+        teacher: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     }),
   ]);
 
   const hasNext = templates.length > parsed.pageSize;
-  const items = hasNext ? templates.slice(0, parsed.pageSize) : templates;
-  const nextCursor = hasNext ? items[items.length - 1]?.id ?? null : null;
+  const baseItems = hasNext ? templates.slice(0, parsed.pageSize) : templates;
+  const nextCursor = hasNext ? baseItems[baseItems.length - 1]?.id ?? null : null;
+
+  const templateIds = baseItems.map((template) => template.id);
+  const studentCountMap = new Map<string, Set<string>>();
+  templateIds.forEach((id) => studentCountMap.set(id, new Set()));
+
+  if (templateIds.length > 0) {
+    const asOf = brisbaneStartOfDay(new Date());
+    const enrolments = await prisma.enrolment.findMany({
+      where: {
+        status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
+        startDate: { lte: asOf },
+        OR: [{ endDate: null }, { endDate: { gte: asOf } }],
+        AND: [
+          {
+            OR: [
+              { templateId: { in: templateIds } },
+              { classAssignments: { some: { templateId: { in: templateIds } } } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        templateId: true,
+        classAssignments: {
+          where: { templateId: { in: templateIds } },
+          select: { templateId: true },
+        },
+      },
+    });
+
+    enrolments.forEach((enrolment) => {
+      if (studentCountMap.has(enrolment.templateId)) {
+        studentCountMap.get(enrolment.templateId)?.add(enrolment.id);
+      }
+      enrolment.classAssignments.forEach((assignment) => {
+        studentCountMap.get(assignment.templateId)?.add(enrolment.id);
+      });
+    });
+  }
+
+  const items: ClassTemplateListItem[] = baseItems.map((template) => ({
+    ...template,
+    studentCount: studentCountMap.get(template.id)?.size ?? 0,
+  }));
 
   return {
     items,
