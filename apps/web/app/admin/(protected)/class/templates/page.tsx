@@ -27,7 +27,7 @@ export default async function ClassTemplates({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div>
+    <div className="h-full min-h-0 overflow-hidden">
       <TemplateList
         templates={templates.items}
         levels={levels}

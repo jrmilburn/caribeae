@@ -171,7 +171,7 @@ export default function TemplateList({
   };
 
   return (
-    <div className="w-full">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <AdminListHeader
         title="Templates"
         totalCount={totalCount}
@@ -270,22 +270,31 @@ export default function TemplateList({
         onSave={handleSave}
       />
 
-      <div className="mt-6">
-        <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {templates.map((template) => (
-            <TemplateListItem key={template.id} template={template} onEdit={openEdit} onDelete={handleDelete} />
-          ))}
-        </ul>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        tabIndex={0}
+        aria-label="Class template list"
+      >
+        <div className="py-6">
+          <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {templates.map((template) => (
+              <TemplateListItem key={template.id} template={template} onEdit={openEdit} onDelete={handleDelete} />
+            ))}
+          </ul>
 
-        {templates.length === 0 ? <div className="p-4 text-sm text-muted-foreground">No templates found.</div> : null}
+          {templates.length === 0 ? <div className="p-4 text-sm text-muted-foreground">No templates found.</div> : null}
+        </div>
       </div>
 
-      <AdminPagination
-        totalCount={totalCount}
-        pageSize={pageSize}
-        currentCount={templates.length}
-        nextCursor={nextCursor}
-      />
+      <div className="shrink-0 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <AdminPagination
+          totalCount={totalCount}
+          pageSize={pageSize}
+          currentCount={templates.length}
+          nextCursor={nextCursor}
+          className="border-t-0 bg-transparent"
+        />
+      </div>
     </div>
   );
 }

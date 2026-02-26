@@ -272,15 +272,15 @@ export default function FamilyList({
       ) : null}
 
       <div className="mt-6 flow-root">
-        <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:mx-0 lg:overflow-x-visible">
-          <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-0">
+        <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
+          <div className="inline-block min-w-full py-2 align-middle sm:px-0">
             <table className="relative min-w-full table-fixed divide-y divide-border">
               <thead>
                 {isStudentView ? (
                   <tr>
                     <th
                       scope="col"
-                      className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                      className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Student
                     </th>
@@ -307,7 +307,7 @@ export default function FamilyList({
                   <tr>
                     <th
                       scope="col"
-                      className="w-[26%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                      className="w-[26%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Family name
                     </th>
@@ -343,7 +343,7 @@ export default function FamilyList({
                       const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
                       return (
                         <tr key={student.id} className="transition-colors hover:bg-accent/40">
-                          <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground sm:pl-0">
+                          <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
                             <Link href={studentUrl} className="block truncate hover:underline" title={student.name}>
                               {student.name}
                             </Link>
@@ -367,7 +367,7 @@ export default function FamilyList({
 
                     {students.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground sm:pl-0">
+                        <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
                           No students found.
                         </td>
                       </tr>
@@ -387,7 +387,7 @@ export default function FamilyList({
 
                     {families.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground sm:pl-0">
+                        <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
                           No families found.
                         </td>
                       </tr>

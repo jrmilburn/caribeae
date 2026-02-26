@@ -30,7 +30,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <div className="max-h-screen overflow-y-auto">
+    <div className="h-full min-h-0 overflow-hidden">
       <TemplateList
         templates={templates.items}
         levels={levels}

@@ -40,7 +40,7 @@ export default function FamilyListItem({
       }}
       className="group cursor-pointer transition-colors hover:bg-accent/40"
     >
-      <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground sm:pl-0">
+      <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
         <span className="block truncate" title={family.name}>
           {family.name}
         </span>
