@@ -28,7 +28,6 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -215,78 +214,89 @@ export default function WaitlistPageClient({
         </Select>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {requests.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              No waitlist requests.
-            </div>
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No waitlist requests.
+              </CardContent>
+            </Card>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Family</TableHead>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Current class</TableHead>
-                  <TableHead>Requested class</TableHead>
-                  <TableHead>Effective</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell>{formatBrisbaneDate(request.createdAt)}</TableCell>
-                    <TableCell className="font-medium">{request.family.name}</TableCell>
-                    <TableCell>{request.student.name}</TableCell>
-                    <TableCell>
-                      {request.student.currentClass
-                        ? formatTemplateLabel(request.student.currentClass)
-                        : "—"}
-                    </TableCell>
-                    <TableCell>{formatTemplateLabel(request.requestedClass)}</TableCell>
-                    <TableCell>{formatBrisbaneDate(request.effectiveDate)}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadge(request.status)}>{request.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedId(request.id);
-                            setSheetOpen(true);
-                          }}
-                        >
-                          View/Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprove(request)}
-                          disabled={request.status !== "PENDING"}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDecline(request)}
-                          disabled={request.status !== "PENDING"}
-                        >
-                          Decline
-                        </Button>
+            <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {requests.map((request) => (
+                <li key={request.id} className="col-span-1 divide-y divide-border rounded-lg bg-card shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(request.id);
+                      setSheetOpen(true);
+                    }}
+                    className="w-full p-6 text-left transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold text-foreground">{request.family.name}</h3>
+                        <p className="text-xs text-muted-foreground">{request.student.name}</p>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <Badge variant={statusBadge(request.status)}>{request.status}</Badge>
+                    </div>
+
+                    <dl className="mt-4 space-y-2 text-sm">
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-muted-foreground">Created</dt>
+                        <dd className="min-w-0 truncate text-foreground">{formatBrisbaneDate(request.createdAt)}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-muted-foreground">Current</dt>
+                        <dd className="min-w-0 truncate text-foreground">
+                          {request.student.currentClass ? formatTemplateLabel(request.student.currentClass) : "—"}
+                        </dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-muted-foreground">Requested</dt>
+                        <dd className="min-w-0 truncate text-foreground">{formatTemplateLabel(request.requestedClass)}</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-muted-foreground">Effective</dt>
+                        <dd className="min-w-0 truncate text-foreground">{formatBrisbaneDate(request.effectiveDate)}</dd>
+                      </div>
+                    </dl>
+                  </button>
+
+                  <div className="flex flex-wrap justify-end gap-2 px-3 py-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedId(request.id);
+                        setSheetOpen(true);
+                      }}
+                    >
+                      View/Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprove(request)}
+                      disabled={request.status !== "PENDING"}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDecline(request)}
+                      disabled={request.status !== "PENDING"}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="sm:max-w-lg">

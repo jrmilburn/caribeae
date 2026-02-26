@@ -803,39 +803,55 @@ export function OnboardingReviewClient({
         sticky
       />
 
-      <div className="space-y-3 px-4 pb-4">
-        {parsedRequests.length === 0 ? (
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              No onboarding requests yet.
-            </CardContent>
-          </Card>
-        ) : (
-          parsedRequests.map((request) => (
-            <Card key={request.id} className="cursor-pointer" onClick={() => setSelectedId(request.id)}>
-              <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{request.guardianName}</p>
-                    <Badge variant={statusBadge(request.status)}>{request.status}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {format(request.createdAt, "d MMM yyyy, h:mm a")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatPhone(request.phone)} · {request.email ?? "—"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <div>{request.students.length} student{request.students.length === 1 ? "" : "s"}</div>
-                  <Button variant="ghost" size="sm">
-                    Review
-                  </Button>
-                </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          {parsedRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                No onboarding requests yet.
               </CardContent>
             </Card>
-          ))
-        )}
+          ) : (
+            <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {parsedRequests.map((request) => (
+                <li
+                  key={request.id}
+                  className="col-span-1 divide-y divide-border rounded-lg bg-card shadow-sm transition-colors hover:bg-accent/30"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(request.id)}
+                    className="flex w-full items-start justify-between gap-4 p-6 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-foreground">{request.guardianName}</h3>
+                        <Badge variant={statusBadge(request.status)}>{request.status}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{format(request.createdAt, "d MMM yyyy, h:mm a")}</p>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                        {formatPhone(request.phone)} · {request.email ?? "—"}
+                      </p>
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        {request.students.length} student{request.students.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="flex justify-end px-3 py-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedId(request.id)}
+                    >
+                      Review
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <AdminPagination
