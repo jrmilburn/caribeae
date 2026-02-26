@@ -40,10 +40,26 @@ export default function FamilyListItem({
       }}
       className="group cursor-pointer transition-colors hover:bg-accent/40"
     >
-      <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-foreground sm:pl-0">{family.name}</td>
-      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryContactName}</td>
-      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryEmail}</td>
-      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryPhone}</td>
+      <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground sm:pl-0">
+        <span className="block truncate" title={family.name}>
+          {family.name}
+        </span>
+      </td>
+      <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+        <span className="block truncate" title={family.primaryContactName ?? "—"}>
+          {family.primaryContactName ?? "—"}
+        </span>
+      </td>
+      <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+        <span className="block truncate" title={family.primaryEmail ?? "—"}>
+          {family.primaryEmail ?? "—"}
+        </span>
+      </td>
+      <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+        <span className="block truncate" title={family.primaryPhone ?? "—"}>
+          {family.primaryPhone ?? "—"}
+        </span>
+      </td>
 
       <td className="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
         <DropdownMenu>

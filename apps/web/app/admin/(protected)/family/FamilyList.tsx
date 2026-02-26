@@ -272,33 +272,33 @@ export default function FamilyList({
       ) : null}
 
       <div className="mt-6 flow-root">
-        <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-          <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
-            <table className="relative min-w-full divide-y divide-border">
+        <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:mx-0 lg:overflow-x-visible">
+          <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-0">
+            <table className="relative min-w-full table-fixed divide-y divide-border">
               <thead>
                 {isStudentView ? (
                   <tr>
                     <th
                       scope="col"
-                      className="py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                      className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
                     >
                       Student
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[30%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Family
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[22%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Level
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[18%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Created
                     </th>
@@ -307,29 +307,29 @@ export default function FamilyList({
                   <tr>
                     <th
                       scope="col"
-                      className="py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                      className="w-[26%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
                     >
                       Family name
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Primary contact
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Email
                     </th>
                     <th
                       scope="col"
-                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      className="w-[20%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                     >
                       Phone
                     </th>
-                    <th scope="col" className="py-3 pr-4 pl-3 text-right sm:pr-0">
+                    <th scope="col" className="w-[8%] py-3 pr-4 pl-3 text-right sm:pr-0">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
@@ -343,13 +343,21 @@ export default function FamilyList({
                       const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
                       return (
                         <tr key={student.id} className="transition-colors hover:bg-accent/40">
-                          <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-foreground sm:pl-0">
-                            <Link href={studentUrl} className="hover:underline">
+                          <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground sm:pl-0">
+                            <Link href={studentUrl} className="block truncate hover:underline" title={student.name}>
                               {student.name}
                             </Link>
                           </td>
-                          <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{student.family.name ?? "—"}</td>
-                          <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{student.level?.name ?? "—"}</td>
+                          <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+                            <span className="block truncate" title={student.family.name ?? "—"}>
+                              {student.family.name ?? "—"}
+                            </span>
+                          </td>
+                          <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+                            <span className="block truncate" title={student.level?.name ?? "—"}>
+                              {student.level?.name ?? "—"}
+                            </span>
+                          </td>
                           <td className="px-3 py-4 text-sm whitespace-nowrap text-muted-foreground">
                             {format(student.createdAt, "dd MMM yyyy")}
                           </td>
