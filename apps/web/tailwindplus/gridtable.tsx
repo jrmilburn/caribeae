@@ -1,4 +1,5 @@
 import { EnvelopeIcon, PhoneIcon } from '@heroicons/react/20/solid'
+import Image from 'next/image'
 
 const people = [
   {
@@ -75,7 +76,7 @@ export default function Example() {
               </div>
               <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">{person.title}</p>
             </div>
-            <img
+            <Image
               alt=""
               src={person.imageUrl}
               className="size-10 shrink-0 rounded-full bg-gray-300 outline -outline-offset-1 outline-black/5 dark:bg-gray-700 dark:outline-white/10"

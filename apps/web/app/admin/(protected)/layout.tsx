@@ -13,7 +13,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     <Suspense fallback={null}>
     <AppNavbar>
       <div className="max-h-screen h-screen flex flex-col">
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <SettingsShell>{children}</SettingsShell>
         </main>
         <AppFooter />
