@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import type { EnrolmentPlan, Level } from "@prisma/client";
@@ -806,11 +807,17 @@ export function OnboardingReviewClient({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {parsedRequests.length === 0 ? (
-            <Card>
-              <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                No onboarding requests yet.
-              </CardContent>
-            </Card>
+            <div className="rounded-2xl border border-dashed border-border/70 bg-gradient-to-b from-card to-muted/20 px-6 py-14">
+              <div className="mx-auto flex max-w-md flex-col items-center text-center">
+                <div className="mb-4 flex size-12 items-center justify-center rounded-full border bg-background shadow-sm">
+                  <ClipboardList className="size-5 text-muted-foreground" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No onboarding requests yet</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  New family applications will appear here once submitted.
+                </p>
+              </div>
+            </div>
           ) : (
             <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {parsedRequests.map((request) => (

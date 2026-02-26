@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { ClassTemplate, Level, WaitlistRequestStatus } from "@prisma/client";
+import { Clock3 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import type { WaitlistRequestSummary } from "@/server/waitlist/listWaitlistRequests";
@@ -25,7 +26,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -217,11 +217,17 @@ export default function WaitlistPageClient({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {requests.length === 0 ? (
-            <Card>
-              <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                No waitlist requests.
-              </CardContent>
-            </Card>
+            <div className="rounded-2xl border border-dashed border-border/70 bg-gradient-to-b from-card to-muted/20 px-6 py-14">
+              <div className="mx-auto flex max-w-md flex-col items-center text-center">
+                <div className="mb-4 flex size-12 items-center justify-center rounded-full border bg-background shadow-sm">
+                  <Clock3 className="size-5 text-muted-foreground" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">No waitlist requests</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  When families request class changes, they will appear here.
+                </p>
+              </div>
+            </div>
           ) : (
             <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {requests.map((request) => (

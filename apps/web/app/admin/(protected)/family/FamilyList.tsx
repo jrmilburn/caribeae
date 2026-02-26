@@ -189,8 +189,10 @@ export default function FamilyList({
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   };
 
+  const currentCount = isStudentView ? students.length : families.length;
+
   return (
-    <div className="w-full">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <AdminListHeader
         title={isStudentView ? "Students" : "Families"}
         totalCount={totalCount}
@@ -271,143 +273,146 @@ export default function FamilyList({
         </>
       ) : null}
 
-      <div className="mx-auto mt-6 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flow-root">
-          <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
-            <div className="inline-block min-w-full py-2 align-middle sm:px-0">
-              <table className="relative min-w-full table-fixed divide-y divide-border">
-                <thead>
-                  {isStudentView ? (
-                    <tr>
-                      <th
-                        scope="col"
-                        className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Student
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[30%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Family
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[22%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Level
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[18%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Created
-                      </th>
-                    </tr>
-                  ) : (
-                    <tr>
-                      <th
-                        scope="col"
-                        className="w-[26%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Family name
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Primary contact
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Email
-                      </th>
-                      <th
-                        scope="col"
-                        className="w-[20%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                      >
-                        Phone
-                      </th>
-                      <th scope="col" className="w-[8%] py-3 pr-4 pl-3 text-right sm:pr-0">
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    </tr>
-                  )}
-                </thead>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto mt-6 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flow-root">
+            <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
+              <div className="inline-block min-w-full py-2 align-middle sm:px-0">
+                <table className="relative min-w-full table-fixed divide-y divide-border">
+                  <thead>
+                    {isStudentView ? (
+                      <tr>
+                        <th
+                          scope="col"
+                          className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Student
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[30%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Family
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[22%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Level
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[18%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Created
+                        </th>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <th
+                          scope="col"
+                          className="w-[26%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Family name
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Primary contact
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[23%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Email
+                        </th>
+                        <th
+                          scope="col"
+                          className="w-[20%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Phone
+                        </th>
+                        <th scope="col" className="w-[8%] py-3 pr-4 pl-3 text-right sm:pr-0">
+                          <span className="sr-only">Actions</span>
+                        </th>
+                      </tr>
+                    )}
+                  </thead>
 
-                <tbody className="divide-y divide-border bg-card">
-                  {isStudentView ? (
-                    <>
-                      {students.map((student) => {
-                        const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
-                        return (
-                          <tr key={student.id} className="transition-colors hover:bg-accent/40">
-                            <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
-                              <Link href={studentUrl} className="block truncate hover:underline" title={student.name}>
-                                {student.name}
-                              </Link>
-                            </td>
-                            <td className="max-w-0 px-3 py-4 text-sm text-foreground">
-                              <span className="block truncate" title={student.family.name ?? "—"}>
-                                {student.family.name ?? "—"}
-                              </span>
-                            </td>
-                            <td className="max-w-0 px-3 py-4 text-sm text-foreground">
-                              <span className="block truncate" title={student.level?.name ?? "—"}>
-                                {student.level?.name ?? "—"}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4 text-sm whitespace-nowrap text-muted-foreground">
-                              {format(student.createdAt, "dd MMM yyyy")}
+                  <tbody className="divide-y divide-border bg-card">
+                    {isStudentView ? (
+                      <>
+                        {students.map((student) => {
+                          const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
+                          return (
+                            <tr key={student.id} className="transition-colors hover:bg-accent/40">
+                              <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
+                                <Link href={studentUrl} className="block truncate hover:underline" title={student.name}>
+                                  {student.name}
+                                </Link>
+                              </td>
+                              <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+                                <span className="block truncate" title={student.family.name ?? "—"}>
+                                  {student.family.name ?? "—"}
+                                </span>
+                              </td>
+                              <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+                                <span className="block truncate" title={student.level?.name ?? "—"}>
+                                  {student.level?.name ?? "—"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-4 text-sm whitespace-nowrap text-muted-foreground">
+                                {format(student.createdAt, "dd MMM yyyy")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        {students.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
+                              No students found.
                             </td>
                           </tr>
-                        );
-                      })}
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        {families.map((family) => (
+                          <FamilyListItem
+                            key={family.id}
+                            family={family}
+                            onEdit={openEdit}
+                            onDelete={handleDelete}
+                            returnTo={listUrl}
+                          />
+                        ))}
 
-                      {students.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
-                            No students found.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      {families.map((family) => (
-                        <FamilyListItem
-                          key={family.id}
-                          family={family}
-                          onEdit={openEdit}
-                          onDelete={handleDelete}
-                          returnTo={listUrl}
-                        />
-                      ))}
-
-                      {families.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
-                            No families found.
-                          </td>
-                        </tr>
-                      ) : null}
-                    </>
-                  )}
-                </tbody>
-              </table>
+                        {families.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
+                              No families found.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="shrink-0 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <AdminPagination
           totalCount={totalCount}
           pageSize={pageSize}
-          currentCount={families.length}
+          currentCount={currentCount}
           nextCursor={nextCursor}
+          className="border-t-0 bg-transparent"
         />
       </div>
     </div>

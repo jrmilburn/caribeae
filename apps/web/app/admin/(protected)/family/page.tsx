@@ -37,7 +37,7 @@ export default async function FamilyPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="">
+    <div className="h-full min-h-0 overflow-hidden">
       <FamilyList
         view={view}
         families={families}
