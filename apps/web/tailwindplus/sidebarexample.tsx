@@ -23,7 +23,7 @@ const teams = [
   { id: 3, name: 'Workcation', href: '#', initial: 'W', current: false },
 ]
 
-function classNames(...classes) {
+function classNames(...classes: Array<string | undefined | null | false>) {
   return classes.filter(Boolean).join(' ')
 }
 
