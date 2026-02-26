@@ -35,7 +35,7 @@ const secondaryNavigation = [
   { name: 'Integrations', href: '#', current: false },
 ]
 
-function classNames(...classes) {
+function classNames(...classes: Array<string | undefined | null | false>) {
   return classes.filter(Boolean).join(' ')
 }
 
