@@ -2,7 +2,6 @@
 
 import type { Level } from "@prisma/client";
 import { useEffect, useMemo, useState } from "react";
-import { MoreVerticalIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import FamilyListItem from "./FamilyListItem";
@@ -272,74 +271,125 @@ export default function FamilyList({
         </>
       ) : null}
 
-      <div className="">
-        {isStudentView ? (
-          <>
-            <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
-              <div className="truncate flex-1">Student</div>
-              <div className="truncate flex-1">Family</div>
-              <div className="truncate flex-1">Level</div>
-              <div className="truncate flex-1">Created</div>
-            </div>
+      <div className="mt-6 flow-root">
+        <div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+          <div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+            <table className="relative min-w-full divide-y divide-border">
+              <thead>
+                {isStudentView ? (
+                  <tr>
+                    <th
+                      scope="col"
+                      className="py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                    >
+                      Student
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Family
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Level
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Created
+                    </th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th
+                      scope="col"
+                      className="py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pl-0"
+                    >
+                      Family name
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Primary contact
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Email
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Phone
+                    </th>
+                    <th scope="col" className="py-3 pr-4 pl-3 text-right sm:pr-0">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                )}
+              </thead>
 
-            {students.map((student) => {
-              const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
-              return (
-                <div
-                  key={student.id}
-                  className="group flex h-14 w-full items-center justify-between border-b border-border bg-card px-4 text-sm transition-colors hover:bg-accent/40"
-                >
-                  <div className="truncate font-medium flex-1">
-                    <Link href={studentUrl} className="hover:underline">
-                      {student.name}
-                    </Link>
-                  </div>
-                  <div className="truncate flex-1">{student.family.name ?? "—"}</div>
-                  <div className="truncate flex-1">{student.level?.name ?? "—"}</div>
-                  <div className="truncate flex-1 text-muted-foreground">
-                    {format(student.createdAt, "dd MMM yyyy")}
-                  </div>
-                </div>
-              );
-            })}
+              <tbody className="divide-y divide-border bg-card">
+                {isStudentView ? (
+                  <>
+                    {students.map((student) => {
+                      const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
+                      return (
+                        <tr key={student.id} className="transition-colors hover:bg-accent/40">
+                          <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-foreground sm:pl-0">
+                            <Link href={studentUrl} className="hover:underline">
+                              {student.name}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{student.family.name ?? "—"}</td>
+                          <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{student.level?.name ?? "—"}</td>
+                          <td className="px-3 py-4 text-sm whitespace-nowrap text-muted-foreground">
+                            {format(student.createdAt, "dd MMM yyyy")}
+                          </td>
+                        </tr>
+                      );
+                    })}
 
-            {students.length === 0 && (
-              <div className="p-4 text-sm text-muted-foreground">
-                No students found.
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="flex h-14 w-full items-center justify-between border-t border-b border-border bg-card px-4 text-sm font-medium text-muted-foreground">
-              <div className="truncate flex-1">Family Name</div>
-              <div className="truncate flex-1">Primary Contact</div>
-              <div className="truncate flex-1">Email</div>
-              <div className="truncate flex-1">Phone</div>
-              <div className="w-10 text-right">
-                <Button variant="ghost" size="icon" aria-label="Family actions" disabled>
-                  <MoreVerticalIcon className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </div>
-            </div>
+                    {students.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground sm:pl-0">
+                          No students found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    {families.map((family) => (
+                      <FamilyListItem
+                        key={family.id}
+                        family={family}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                        returnTo={listUrl}
+                      />
+                    ))}
 
-            {families.map((family) => (
-              <FamilyListItem
-                key={family.id}
-                family={family}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                returnTo={listUrl}
-              />
-            ))}
-
-            {families.length === 0 && (
-              <div className="p-4 text-sm text-muted-foreground">
-                No families found.
-              </div>
-            )}
-          </>
-        )}
+                    {families.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground sm:pl-0">
+                          No families found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <AdminPagination

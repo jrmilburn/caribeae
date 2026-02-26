@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import type { FamilyListEntry } from "@/server/family/listFamilies";
 import { MoreVerticalIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { buildReturnUrl } from "@/lib/returnContext";
 import {
@@ -29,7 +28,7 @@ export default function FamilyListItem({
   const targetUrl = buildReturnUrl(`/admin/family/${family.id}`, returnTo);
 
   return (
-    <div
+    <tr
       role="link"
       tabIndex={0}
       onClick={() => router.push(targetUrl)}
@@ -39,17 +38,14 @@ export default function FamilyListItem({
           router.push(targetUrl);
         }
       }}
-      className={cn(
-        "group flex h-14 w-full items-center justify-between",
-        " border-b border-border bg-card px-4",
-        "cursor-pointer transition-colors hover:bg-accent/40"
-      )}
+      className="group cursor-pointer transition-colors hover:bg-accent/40"
     >
-      <div className="truncate text-sm font-medium flex-1">{family.name}</div>
-      <div className="truncate text-sm font-medium flex-1">{family.primaryContactName}</div>
-      <div className="truncate text-sm font-medium flex-1">{family.primaryEmail}</div>
-      <div className="truncate text-sm font-medium flex-1">{family.primaryPhone}</div>
+      <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-foreground sm:pl-0">{family.name}</td>
+      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryContactName}</td>
+      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryEmail}</td>
+      <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">{family.primaryPhone}</td>
 
+      <td className="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -96,7 +92,7 @@ export default function FamilyListItem({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-    </div>
+      </td>
+    </tr>
   );
 }
