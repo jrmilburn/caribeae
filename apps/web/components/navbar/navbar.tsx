@@ -111,7 +111,7 @@ export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) 
         </header>
 
         <main className="min-w-0 flex-1 overflow-hidden">
-          <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 sm:px-6 lg:px-8">
+          <div className="flex h-full min-h-0 w-full flex-col">
             {children}
           </div>
         </main>

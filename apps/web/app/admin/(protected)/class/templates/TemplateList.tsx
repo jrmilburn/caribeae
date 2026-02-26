@@ -275,7 +275,7 @@ export default function TemplateList({
         tabIndex={0}
         aria-label="Class template list"
       >
-        <div className="py-6">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <ul role="list" className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {templates.map((template) => (
               <TemplateListItem key={template.id} template={template} onEdit={openEdit} onDelete={handleDelete} />
