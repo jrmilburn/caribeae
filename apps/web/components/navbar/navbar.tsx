@@ -76,7 +76,6 @@ export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) 
       <aside className="hidden w-72 shrink-0 border-r border-border bg-card md:flex md:flex-col">
         <div className="relative flex grow flex-col gap-y-5 overflow-y-auto px-6 py-4">
           <div className="relative flex h-16 shrink-0 items-center gap-3">
-            <BackButton aria-label="Back" />
             <div className="grid h-9 w-9 place-items-center">
               <Image alt="Caribeae logo" src="/logo.png" width={36} height={36} className="h-9 w-9 object-contain" />
             </div>
