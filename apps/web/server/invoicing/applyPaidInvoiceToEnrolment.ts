@@ -170,6 +170,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
               paidThroughDate: paidThrough ?? null,
               durationWeeks: plan.durationWeeks,
               sessionsPerWeek: plan.sessionsPerWeek ?? null,
+              alternatingWeeks: plan.alternatingWeeks,
               assignedTemplates,
               holidays,
             },
@@ -219,6 +220,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
               enrolmentStartDate: enrolment.startDate,
               enrolmentEndDate: enrolment.endDate ?? null,
               paidThroughDate: enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null,
+              alternatingWeeks: plan.alternatingWeeks,
               classTemplate: {
                 dayOfWeek: anchorTemplate.dayOfWeek,
                 startTime: anchorTemplate.startTime ?? null,

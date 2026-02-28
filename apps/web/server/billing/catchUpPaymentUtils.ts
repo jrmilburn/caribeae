@@ -46,6 +46,7 @@ function resolveStartDayKey(params: {
   assignedTemplates: { dayOfWeek: number | null }[];
   holidays: HolidayRange[];
   enrolmentEndDayKey: string | null;
+  alternatingWeeks?: boolean | null;
 }) {
   const baseDayKey = params.paidThroughDate
     ? brisbaneAddDays(toBrisbaneDayKey(params.paidThroughDate), 1)

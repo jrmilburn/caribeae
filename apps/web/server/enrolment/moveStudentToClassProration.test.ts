@@ -25,8 +25,20 @@ test("old plan more expensive extends paid-through", () => {
   const result = computeProratedPaidThrough({
     effectiveDate: d("2026-01-01"),
     oldPaidThroughDate: d("2026-01-15"),
-    oldPlan: { billingType: BillingType.PER_WEEK, priceCents: 200, sessionsPerWeek: 1, blockClassCount: null },
-    newPlan: { billingType: BillingType.PER_WEEK, priceCents: 100, sessionsPerWeek: 1, blockClassCount: null },
+    oldPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 200,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
+    newPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 100,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
     destinationTemplates: [{ dayOfWeek: 0 }],
   });
 
@@ -38,8 +50,20 @@ test("new plan more expensive shortens paid-through", () => {
   const result = computeProratedPaidThrough({
     effectiveDate: d("2026-01-01"),
     oldPaidThroughDate: d("2026-01-15"),
-    oldPlan: { billingType: BillingType.PER_WEEK, priceCents: 100, sessionsPerWeek: 1, blockClassCount: null },
-    newPlan: { billingType: BillingType.PER_WEEK, priceCents: 200, sessionsPerWeek: 1, blockClassCount: null },
+    oldPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 100,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
+    newPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 200,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
     destinationTemplates: [{ dayOfWeek: 0 }],
   });
 
@@ -51,8 +75,20 @@ test("per-class rounding uses next scheduled occurrence", () => {
   const result = computeProratedPaidThrough({
     effectiveDate: d("2026-01-01"),
     oldPaidThroughDate: d("2026-01-15"),
-    oldPlan: { billingType: BillingType.PER_CLASS, priceCents: 200, sessionsPerWeek: 1, blockClassCount: 4 },
-    newPlan: { billingType: BillingType.PER_CLASS, priceCents: 100, sessionsPerWeek: 1, blockClassCount: 4 },
+    oldPlan: {
+      billingType: BillingType.PER_CLASS,
+      priceCents: 200,
+      sessionsPerWeek: 1,
+      blockClassCount: 4,
+      alternatingWeeks: false,
+    },
+    newPlan: {
+      billingType: BillingType.PER_CLASS,
+      priceCents: 100,
+      sessionsPerWeek: 1,
+      blockClassCount: 4,
+      alternatingWeeks: false,
+    },
     destinationTemplates: [{ dayOfWeek: 0 }],
   });
 
@@ -64,8 +100,20 @@ test("per-week proration does not round to class occurrences", () => {
   const result = computeProratedPaidThrough({
     effectiveDate: d("2026-01-01"),
     oldPaidThroughDate: d("2026-01-15"),
-    oldPlan: { billingType: BillingType.PER_WEEK, priceCents: 200, sessionsPerWeek: 1, blockClassCount: null },
-    newPlan: { billingType: BillingType.PER_WEEK, priceCents: 100, sessionsPerWeek: 1, blockClassCount: null },
+    oldPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 200,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
+    newPlan: {
+      billingType: BillingType.PER_WEEK,
+      priceCents: 100,
+      sessionsPerWeek: 1,
+      blockClassCount: null,
+      alternatingWeeks: false,
+    },
     destinationTemplates: [{ dayOfWeek: 0 }],
   });
 

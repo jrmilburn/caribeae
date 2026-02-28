@@ -120,6 +120,9 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
                               Saturday
                             </Badge>
                           ) : null}
+                          {plan.alternatingWeeks ? (
+                            <Badge variant="outline">Alt weeks</Badge>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell>{plan.level.name}</TableCell>

@@ -19,6 +19,7 @@ const weeklyPlan: EnrolmentPlan = {
   name: "2x Weekly",
   priceCents: 5000,
   isSaturdayOnly: false,
+  alternatingWeeks: false,
   enrolmentType: "CLASS",
   billingType: BillingType.PER_WEEK,
   durationWeeks: 4,

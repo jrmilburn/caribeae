@@ -195,6 +195,7 @@ function seedWeeklyEnrolment(db: FakeDb, options?: { paidThroughDate?: Date | nu
       priceCents: 2500,
       blockClassCount: null,
       isSaturdayOnly: false,
+      alternatingWeeks: false,
       levelId: "level-1",
     },
     student: { familyId: "family-1" },
@@ -225,6 +226,7 @@ function seedCreditEnrolment(db: FakeDb, options?: { creditsRemaining?: number }
       priceCents: 4000,
       blockClassCount: 4,
       isSaturdayOnly: false,
+      alternatingWeeks: false,
       levelId: "level-1",
     },
     student: { familyId: "family-1" },
@@ -315,6 +317,7 @@ test("weekly plan switch uses selected plan price and coverage window", async ()
     priceCents: 18000,
     blockClassCount: null,
     isSaturdayOnly: false,
+    alternatingWeeks: false,
     levelId: "level-1",
   });
 

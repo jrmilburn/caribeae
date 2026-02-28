@@ -38,6 +38,7 @@ import { addDays, isAfter } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { normalizeToLocalMidnight } from "@/lib/dateUtils";
 import { brisbaneAddDays, brisbaneCompare, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { isAlternatingWeekActiveOnDay } from "@/server/enrolment/occurrenceCadence";
 import { buildOccurrenceSchedule, consumeOccurrencesForCredits, resolveOccurrenceHorizon } from "./occurrenceWalker";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { buildMissedOccurrencePredicate } from "./missedOccurrence";
@@ -156,6 +157,40 @@ function buildCoverageTemplates(enrolment: EnrolmentWithPlanTemplate): CoverageT
       levelId: template.levelId ?? null,
     }))
   );
+}
+
+function buildTemplateDayOfWeekMap(templates: CoverageTemplate[]) {
+  return new Map(templates.map((template) => [template.id, template.dayOfWeek ?? null]));
+}
+
+function isOccurrenceAllowedByCadence(params: {
+  enrolment: Pick<EnrolmentWithPlanTemplate, "startDate" | "plan">;
+  date: Date;
+  classDayOfWeek?: number | null;
+}) {
+  if (!params.enrolment.plan?.alternatingWeeks) return true;
+  return isAlternatingWeekActiveOnDay({
+    enrolmentStartDate: params.enrolment.startDate,
+    classDate: params.date,
+    classDayOfWeek: params.classDayOfWeek,
+  });
+}
+
+function shouldSkipScheduledOccurrence(params: {
+  enrolment: Pick<EnrolmentWithPlanTemplate, "startDate" | "plan">;
+  coverageData: CoverageData;
+  templateDayOfWeekById: Map<string, number | null>;
+  templateId: string;
+  date: Date;
+}) {
+  if (params.coverageData.missedOccurrencePredicate(params.templateId, toBrisbaneDayKey(params.date))) {
+    return true;
+  }
+  return !isOccurrenceAllowedByCadence({
+    enrolment: params.enrolment,
+    date: params.date,
+    classDayOfWeek: params.templateDayOfWeekById.get(params.templateId) ?? null,
+  });
 }
 
 async function loadCoverageData(
@@ -306,6 +341,7 @@ async function computeCreditsRequiredForPaidThroughDate(
     endDate: effectiveTarget,
     enrolmentId: enrolment.id,
   });
+  const templateDayOfWeekById = buildTemplateDayOfWeekMap(assignedTemplates);
 
   const occurrences = buildOccurrenceSchedule({
     startDate: startWindow,
@@ -321,7 +357,13 @@ async function computeCreditsRequiredForPaidThroughDate(
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
     horizon: effectiveTarget,
     shouldSkipOccurrence: ({ templateId, date }) =>
-      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+      shouldSkipScheduledOccurrence({
+        enrolment,
+        coverageData,
+        templateDayOfWeekById,
+        templateId,
+        date,
+      }),
   });
 
   return occurrences.length;
@@ -380,6 +422,7 @@ export async function resolveNextPaidThroughForCredit(
     endDate: horizon,
     enrolmentId: enrolment.id,
   });
+  const templateDayOfWeekById = buildTemplateDayOfWeekMap(assignedTemplates);
 
   const occurrences = buildOccurrenceSchedule({
     startDate,
@@ -395,7 +438,13 @@ export async function resolveNextPaidThroughForCredit(
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
     horizon,
     shouldSkipOccurrence: ({ templateId, date }) =>
-      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+      shouldSkipScheduledOccurrence({
+        enrolment,
+        coverageData,
+        templateDayOfWeekById,
+        templateId,
+        date,
+      }),
   });
 
   return occurrences[0] ? brisbaneStartOfDay(occurrences[0]) : null;
@@ -429,6 +478,7 @@ async function ensureConsumptionEvents(
       endDate: windowEnd,
       enrolmentId: enrolment.id,
     }));
+  const templateDayOfWeekById = buildTemplateDayOfWeekMap(assignedTemplates);
 
   const existing = await tx.enrolmentCreditEvent.findMany({
     where: {
@@ -460,7 +510,13 @@ async function ensureConsumptionEvents(
     sessionsPerWeek: sessionsPerWeek(enrolment.plan),
     horizon: windowEnd,
     shouldSkipOccurrence: ({ templateId, date }) =>
-      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+      shouldSkipScheduledOccurrence({
+        enrolment,
+        coverageData,
+        templateDayOfWeekById,
+        templateId,
+        date,
+      }),
   });
 
   const occurrenceCounts = new Map<string, number>();
@@ -524,7 +580,17 @@ export function getWeeklyPaidThrough(
 function resolveNextWeeklyDueDate(enrolment: EnrolmentWithPlanTemplate, paidThrough: Date | null) {
   if (!enrolment.template || !paidThrough) return null;
   const start = addDaysUtc(paidThrough, 1);
-  const next = nextOccurrenceOnOrAfter(start, enrolment.template.dayOfWeek);
+  let next = nextOccurrenceOnOrAfter(start, enrolment.template.dayOfWeek);
+  while (
+    next &&
+    !isOccurrenceAllowedByCadence({
+      enrolment,
+      date: next,
+      classDayOfWeek: enrolment.template.dayOfWeek,
+    })
+  ) {
+    next = addDaysUtc(next, 7);
+  }
   if (!next) return null;
   if (enrolment.endDate && isAfter(next, enrolment.endDate)) return null;
   return next;
@@ -533,7 +599,17 @@ function resolveNextWeeklyDueDate(enrolment: EnrolmentWithPlanTemplate, paidThro
 function resolveNextWeeklyDueDateLocal(enrolment: EnrolmentWithPlanTemplate, paidThrough: Date | null) {
   if (!enrolment.template || !paidThrough) return null;
   const start = addDays(normalizeToLocalMidnight(paidThrough), 1);
-  const next = nextOccurrenceOnOrAfterLocal(start, enrolment.template.dayOfWeek);
+  let next = nextOccurrenceOnOrAfterLocal(start, enrolment.template.dayOfWeek);
+  while (
+    next &&
+    !isOccurrenceAllowedByCadence({
+      enrolment,
+      date: next,
+      classDayOfWeek: enrolment.template.dayOfWeek,
+    })
+  ) {
+    next = addDays(next, 7);
+  }
   if (!next) return null;
   if (enrolment.endDate && isAfter(next, normalizeToLocalMidnight(enrolment.endDate))) return null;
   return next;
@@ -601,6 +677,7 @@ async function computeCreditPaidThroughInternal(
           endDate: horizon,
           enrolmentId: enrolment.id,
         });
+  const templateDayOfWeekById = buildTemplateDayOfWeekMap(assignedTemplates);
 
   const occurrences = buildOccurrenceSchedule({
     startDate: startWindow,
@@ -616,7 +693,13 @@ async function computeCreditPaidThroughInternal(
     sessionsPerWeek: cadence,
     horizon,
     shouldSkipOccurrence: ({ templateId, date }) =>
-      coverageData.missedOccurrencePredicate(templateId, toBrisbaneDayKey(date)),
+      shouldSkipScheduledOccurrence({
+        enrolment,
+        coverageData,
+        templateDayOfWeekById,
+        templateId,
+        date,
+      }),
   });
 
   const walk = consumeOccurrencesForCredits({ occurrences, credits: balance });
@@ -847,6 +930,18 @@ export async function registerCreditConsumptionForDate(
       include: { plan: true, template: true, classAssignments: { include: { template: true } } },
     });
     if (!enrolment?.plan || enrolment.plan.billingType !== BillingType.PER_CLASS) {
+      return;
+    }
+    const matchingTemplate =
+      enrolment.classAssignments.find((assignment) => assignment.templateId === templateId)?.template ??
+      (enrolment.templateId === templateId ? enrolment.template : null);
+    if (
+      !isOccurrenceAllowedByCadence({
+        enrolment,
+        date: when,
+        classDayOfWeek: matchingTemplate?.dayOfWeek ?? null,
+      })
+    ) {
       return;
     }
 

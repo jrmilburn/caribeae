@@ -37,6 +37,7 @@ function buildCandidate(overrides: Partial<EligibleEnrolmentCandidate> = {}) {
       updatedAt: new Date(),
       priceCents: 0,
       isSaturdayOnly: false,
+      alternatingWeeks: false,
       enrolmentType: EnrolmentType.BLOCK,
       billingType: BillingType.PER_WEEK,
       durationWeeks: 1,
@@ -101,4 +102,35 @@ test("excludes weekly enrolments past paid-through date", () => {
     date
   );
   assert.strictEqual(roster.length, 0);
+});
+
+test("alternating-week enrolments are excluded on off weeks", () => {
+  const basePlan = buildCandidate().plan as NonNullable<EligibleEnrolmentCandidate["plan"]>;
+  const alternating = buildCandidate({
+    startDate: new Date("2025-01-22T00:00:00Z"),
+    plan: {
+      ...basePlan,
+      alternatingWeeks: true,
+    },
+    template: {
+      ...buildCandidate().template,
+      dayOfWeek: 2,
+    },
+  });
+
+  const onWeek = filterEligibleEnrolmentsForOccurrence(
+    [alternating],
+    templateId,
+    levelId,
+    new Date("2025-02-05T00:00:00Z")
+  );
+  assert.strictEqual(onWeek.length, 1);
+
+  const offWeek = filterEligibleEnrolmentsForOccurrence(
+    [alternating],
+    templateId,
+    levelId,
+    new Date("2025-02-12T00:00:00Z")
+  );
+  assert.strictEqual(offWeek.length, 0);
 });

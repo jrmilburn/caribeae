@@ -168,6 +168,7 @@ export async function getFamilyBillingPosition(familyId: string, options?: { cli
             priceCents: true,
             durationWeeks: true,
             sessionsPerWeek: true,
+            alternatingWeeks: true,
             isSaturdayOnly: true,
             billingType: true,
             levelId: true,

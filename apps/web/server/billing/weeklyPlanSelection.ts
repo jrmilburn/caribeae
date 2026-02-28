@@ -4,7 +4,15 @@ import { assertPlanMatchesTemplates } from "@/server/enrolment/planCompatibility
 
 export type WeeklyPlanOption = Pick<
   EnrolmentPlan,
-  "id" | "name" | "priceCents" | "durationWeeks" | "sessionsPerWeek" | "isSaturdayOnly" | "billingType" | "levelId"
+  | "id"
+  | "name"
+  | "priceCents"
+  | "durationWeeks"
+  | "sessionsPerWeek"
+  | "alternatingWeeks"
+  | "isSaturdayOnly"
+  | "billingType"
+  | "levelId"
 >;
 
 type TemplateInfo = Pick<ClassTemplate, "dayOfWeek" | "levelId"> & { name?: string | null };
