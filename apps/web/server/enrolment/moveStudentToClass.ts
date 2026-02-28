@@ -15,6 +15,7 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
 import { adjustCreditsForManualPaidThroughDate } from "@/server/billing/enrolmentBilling";
+import { resolveMoveStudentPaidThroughDate } from "@/server/enrolment/moveStudentToClassPaidThrough";
 import {
   applyClassChangeSettlement,
   buildClassChangeSettlementKey,
@@ -179,7 +180,16 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
       const oldPaidThrough = resolveChangeOverPaidThroughDate(
         enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null
       );
-      const newPaidThrough = oldPaidThrough;
+      const newPaidThrough = await resolveMoveStudentPaidThroughDate({
+        tx,
+        enrolmentId: enrolment.id,
+        enrolmentEndDate: enrolment.endDate ? startOfDay(enrolment.endDate) : null,
+        oldPaidThroughDate: oldPaidThrough,
+        changeOverDate: alignedStart,
+        fromTemplate,
+        toTemplate,
+      });
+
       const today = brisbaneStartOfDay(new Date());
       if (
         isBefore(alignedStart, today) &&
@@ -256,7 +266,7 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
       }
 
       let adjustmentInvoiceId: string | null = null;
-      let creditInvoiceId: string | null = null;
+      const creditInvoiceId: string | null = null;
       let paymentId: string | null = null;
       let settlementSummary: ClassChangeSettlementSummary | null = null;
       const familyId = student.familyId ?? enrolment.student.familyId ?? null;

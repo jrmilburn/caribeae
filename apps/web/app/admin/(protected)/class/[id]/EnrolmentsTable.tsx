@@ -246,6 +246,7 @@ export function EnrolmentsTable({
           enrolment={moving}
           enrolmentPlans={enrolmentPlans}
           classTemplates={classTemplates}
+          levels={levels}
           fromClassTemplate={fromClassTemplate}
           onMoved={() => {
             setMoving(null);
