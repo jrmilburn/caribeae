@@ -6,7 +6,7 @@ import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -58,26 +58,26 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
 
   return (
     <div className="">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center p-4">
-        <div className="space-y-1">
+      <div className="p-4 sm:flex sm:items-start sm:justify-between">
+        <div className="sm:flex-auto">
           <h2 className="text-lg font-semibold">Enrolment plans</h2>
-
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          New plan
-        </Button>
+        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New plan
+          </Button>
+        </div>
       </div>
 
       <Card className="border-l-0! pb-0 shadow-none">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4">
-          <CardTitle className="text-base">Plans</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-end gap-3 space-y-0 px-4 pt-0">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}

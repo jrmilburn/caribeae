@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,29 +71,28 @@ export function HolidaysSection({
 
   return (
     <div className="">
-      <div className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
-        <div className="space-y-1">
+      <div className="p-4 sm:flex sm:items-start sm:justify-between">
+        <div className="sm:flex-auto">
           <h2 className="text-lg font-semibold">Holidays</h2>
           <p className="text-sm text-muted-foreground">
             Manage days off that extend enrolment paid-through dates.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          New holiday
-        </Button>
+        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New holiday
+          </Button>
+        </div>
       </div>
 
       <Card className="border-l-0! pb-0 shadow-none">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 px-4">
-          <CardTitle className="text-base">Holiday list</CardTitle>
-        </CardHeader>
         <CardContent className="px-2 py-0">
           <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
