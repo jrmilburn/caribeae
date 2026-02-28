@@ -58,7 +58,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Messages", href: "/admin/messages", icon: Inbox },
   { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
   { label: "Waitlist", href: "/admin/waitlist", icon: Clock },
-  { label: "Payments", href: "/admin/settings/payments", icon: CreditCard },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
