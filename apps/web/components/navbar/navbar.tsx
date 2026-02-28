@@ -12,7 +12,6 @@ import {
   BookOpen,
   Inbox,
   Settings,
-  CreditCard,
   Menu,
   ChevronDown,
   LogIn,
