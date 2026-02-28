@@ -208,8 +208,9 @@ export default function FamilyForm({
   const [payAheadOpen, setPayAheadOpen] = React.useState(false);
 
   const [studentDetails, setStudentDetails] = React.useState<ClientStudentWithRelations | null>(null);
-  const [isLoadingStudent, startLoadingStudent] = React.useTransition();
+  const [isLoadingStudent, setIsLoadingStudent] = React.useState(false);
   const studentCache = React.useRef(new Map<string, ClientStudentWithRelations>());
+  const studentRequestToken = React.useRef(0);
 
   const lastPayment = billing.payments?.[0] ?? null;
 
@@ -235,6 +236,35 @@ export default function FamilyForm({
     window.history.replaceState(null, "", next);
   }, []);
 
+  const loadStudentDetails = React.useCallback(
+    async (studentId: string, options?: { silent?: boolean }) => {
+      const token = ++studentRequestToken.current;
+      if (!options?.silent) {
+        setIsLoadingStudent(true);
+      }
+
+      try {
+        const student = await getStudent(studentId);
+        if (studentRequestToken.current !== token) return;
+        if (!student) throw new Error("Student not found.");
+        const typed = student as ClientStudentWithRelations;
+        studentCache.current.set(studentId, typed);
+        setStudentDetails(typed);
+      } catch (error) {
+        if (studentRequestToken.current !== token) return;
+        const message = error instanceof Error ? error.message : "Unable to load student.";
+        console.error(error);
+        toast.error(message);
+        setStudentDetails(null);
+      } finally {
+        if (studentRequestToken.current === token && !options?.silent) {
+          setIsLoadingStudent(false);
+        }
+      }
+    },
+    []
+  );
+
   React.useEffect(() => {
     syncQueryParam("student", selectedStudentId || null);
   }, [selectedStudentId, syncQueryParam]);
@@ -253,25 +283,15 @@ export default function FamilyForm({
     (id?: string | null) => {
       const studentId = id ?? selectedStudentId;
       if (!studentId) return;
-      startLoadingStudent(async () => {
-        try {
-          const student = await getStudent(studentId);
-          if (!student) throw new Error("Student not found.");
-          const typed = student as ClientStudentWithRelations;
-          studentCache.current.set(studentId, typed);
-          setStudentDetails(typed);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Unable to load student.";
-          console.error(error);
-          toast.error(message);
-        }
-      });
+      void loadStudentDetails(studentId);
     },
-    [selectedStudentId, startLoadingStudent]
+    [loadStudentDetails, selectedStudentId]
   );
 
   React.useEffect(() => {
     if (!selectedStudentId) {
+      studentRequestToken.current += 1;
+      setIsLoadingStudent(false);
       setStudentDetails(null);
       return;
     }
@@ -279,31 +299,12 @@ export default function FamilyForm({
     const cached = studentCache.current.get(selectedStudentId);
     if (cached) {
       setStudentDetails(cached);
+      setIsLoadingStudent(false);
       return;
     }
 
-    let active = true;
-    startLoadingStudent(async () => {
-      try {
-        const student = await getStudent(selectedStudentId);
-        if (!active) return;
-        if (!student) throw new Error("Student not found.");
-        const typed = student as ClientStudentWithRelations;
-        studentCache.current.set(selectedStudentId, typed);
-        setStudentDetails(typed);
-      } catch (error) {
-        if (!active) return;
-        const message = error instanceof Error ? error.message : "Unable to load student.";
-        console.error(error);
-        toast.error(message);
-        setStudentDetails(null);
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [selectedStudentId, startLoadingStudent]);
+    void loadStudentDetails(selectedStudentId);
+  }, [loadStudentDetails, selectedStudentId]);
 
   const studentRows = React.useMemo(() => {
     const billingByStudentId = new Map(billingPosition.students.map((student) => [student.id, student]));
@@ -680,6 +681,7 @@ export default function FamilyForm({
                             {row.status.label}
                           </Badge>
                           <DropdownMenu
+                            modal={false}
                             onOpenChange={(open) => {
                               if (open) setSelectedStudentId(row.id);
                             }}
