@@ -4,18 +4,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 function StatCardSkeleton() {
   return (
-    <Card className="p-0">
-      <div className="h-full p-4">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-4 w-4 rounded-sm" />
-          </div>
-          <Skeleton className="h-8 w-16" />
-          <Skeleton className="h-3 w-20" />
-        </div>
+    <div className="relative overflow-hidden rounded-lg border bg-card px-4 pb-12 pt-5 shadow-sm sm:px-6 sm:pt-6">
+      <div className="absolute rounded-md bg-muted p-3">
+        <Skeleton className="h-6 w-6" />
       </div>
-    </Card>
+      <div className="ml-16 space-y-3">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-8 w-20" />
+      </div>
+      <div className="absolute inset-x-0 bottom-0 border-t bg-muted/30 px-4 py-4 sm:px-6">
+        <Skeleton className="h-4 w-24" />
+      </div>
+    </div>
   );
 }
 

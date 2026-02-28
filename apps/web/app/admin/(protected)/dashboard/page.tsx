@@ -2,8 +2,18 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDashboardSummary } from "@/server/dashboard/getDashboardSummary";
 import { listCommunications } from "@/server/communication/listCommunications";
-import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ChevronRight,
+  ClipboardCheck,
+  LayoutGrid,
+  Mail,
+  MessageSquare,
+  type LucideIcon,
+  UserRound,
+  Users,
+} from "lucide-react";
 
 function buildHref(base: string, next: Record<string, string | null | undefined>) {
   const sp = new URLSearchParams();
@@ -18,38 +28,39 @@ function StatCard({
   title,
   value,
   href,
+  icon: Icon,
 }: {
   title: string;
   value: number;
   href: string;
+  icon: LucideIcon;
 }) {
   return (
-    <Card className="group p-0">
-      <Link
-        href={href}
-        className={cn(
-          "block outline-none transition h-full p-4",
-          "cursor-pointer",
-          "hover:bg-muted/40 hover:shadow-md hover:-translate-y-[1px]",
-          "active:translate-y-0 active:shadow-sm",
-          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        )}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 transition group-hover:opacity-100 group-hover:translate-x-0.5" />
-          </div>
-        </CardHeader>
+    <Link
+      href={href}
+      className="group relative block overflow-hidden rounded-lg border bg-card px-4 pb-12 pt-5 shadow-sm outline-none transition hover:-translate-y-[1px] hover:bg-muted/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-6 sm:pt-6"
+    >
+      <div>
+        <div className="absolute rounded-md bg-primary/10 p-3 text-primary">
+          <Icon aria-hidden="true" className="size-6" />
+        </div>
+        <p className="ml-16 truncate text-sm font-medium text-muted-foreground">{title}</p>
+      </div>
 
-        <CardContent>
-          <div className="text-3xl font-semibold">{value}</div>
-          <div className="mt-1 text-xs text-muted-foreground opacity-0 transition group-hover:opacity-100">
+      <div className="ml-16 flex items-baseline pb-6 sm:pb-7">
+        <p className="text-2xl font-semibold tracking-tight">{value.toLocaleString()}</p>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 border-t bg-muted/30 px-4 py-4 sm:px-6">
+        <div className="text-sm">
+          <span className="inline-flex items-center gap-1 font-medium text-primary transition group-hover:gap-1.5">
             View details
-          </div>
-        </CardContent>
-      </Link>
-    </Card>
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </span>
+          <span className="sr-only"> for {title}</span>
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -64,14 +75,14 @@ export default async function DashboardPage() {
   const emailHref = buildHref(commsBase, { channel: "EMAIL" });
 
   const stats = [
-    { title: "Families", value: summary.families, href: "/admin/family" },
-    { title: "Students", value: summary.students, href: "/admin/student" },
-    { title: "Classes today", value: summary.classesToday, href: "/admin/schedule" },
-    { title: "Active enrolments", value: summary.activeEnrolments, href: "/admin/enrolment" },
-    { title: "Active class templates", value: summary.activeClassTemplates, href: "/admin/class" },
-    { title: "Overdue enrolments", value: summary.overdueEnrolments, href: "/admin/billing" },
-    { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: smsHref },
-    { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: emailHref },
+    { title: "Families", value: summary.families, href: "/admin/family", icon: Users },
+    { title: "Students", value: summary.students, href: "/admin/student", icon: UserRound },
+    { title: "Classes today", value: summary.classesToday, href: "/admin/schedule", icon: CalendarDays },
+    { title: "Active enrolments", value: summary.activeEnrolments, href: "/admin/enrolment", icon: ClipboardCheck },
+    { title: "Active class templates", value: summary.activeClassTemplates, href: "/admin/class", icon: LayoutGrid },
+    { title: "Overdue enrolments", value: summary.overdueEnrolments, href: "/admin/billing", icon: AlertTriangle },
+    { title: "SMS (last 7 days)", value: summary.smsLast7Days, href: smsHref, icon: MessageSquare },
+    { title: "Emails (last 7 days)", value: summary.emailLast7Days, href: emailHref, icon: Mail },
   ];
 
   return (
@@ -92,7 +103,13 @@ export default async function DashboardPage() {
 
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
         {stats.map((stat) => (
-          <StatCard key={stat.title} title={stat.title} value={stat.value} href={stat.href} />
+          <StatCard
+            key={stat.title}
+            title={stat.title}
+            value={stat.value}
+            href={stat.href}
+            icon={stat.icon}
+          />
         ))}
       </div>
 
