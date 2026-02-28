@@ -14,14 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 import { deleteTeacher } from "@/server/teacher/deleteTeacher";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
@@ -97,74 +89,115 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
         </CardHeader>
 
         <CardContent className="px-2 py-0">
-          {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No teachers found.</p>
-          ) : (
-            <div className="">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-1/5 text-left">Name</TableHead>
-                    <TableHead className="w-1/5 text-center">Position</TableHead>
-                    <TableHead className="w-1/5 text-center">Phone</TableHead>
-                    <TableHead className="w-1/5 text-center">Email</TableHead>
-                    <TableHead className="w-1/5 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
+          <div className="flow-root">
+            <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
+              <div className="inline-block min-w-full py-2 align-middle sm:px-0">
+                <table className="relative min-w-full table-fixed divide-y divide-border">
+                  <thead>
+                    <tr>
+                      <th
+                        scope="col"
+                        className="w-[20%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Name
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[20%] px-3 py-3 text-center text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Position
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[20%] px-3 py-3 text-center text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Phone
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[20%] px-3 py-3 text-center text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Email
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[20%] py-3 pr-4 pl-3 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pr-0"
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
 
-                <TableBody>
-                  {filtered.map((teacher) => (
-                    <TableRow key={teacher.id}>
-                      <TableCell className="w-1/5 text-left font-medium">
-                        {teacher.name}
-                      </TableCell>
+                  <tbody className="divide-y divide-border bg-card">
+                    {filtered.map((teacher) => (
+                      <tr key={teacher.id} className="transition-colors hover:bg-accent/40">
+                        <td className="max-w-0 py-4 pr-3 pl-4 text-left text-sm font-medium text-foreground">
+                          <span className="block truncate" title={teacher.name}>
+                            {teacher.name}
+                          </span>
+                        </td>
 
-                      <TableCell className="w-1/5 text-center">
-                        {teacher.position ?? "—"}
-                      </TableCell>
+                        <td className="max-w-0 px-3 py-4 text-center text-sm text-foreground">
+                          <span className="block truncate" title={teacher.position ?? "—"}>
+                            {teacher.position ?? "—"}
+                          </span>
+                        </td>
 
-                      <TableCell className="w-1/5 text-center">
-                        {teacher.phone ?? "—"}
-                      </TableCell>
+                        <td className="max-w-0 px-3 py-4 text-center text-sm text-foreground">
+                          <span className="block truncate" title={teacher.phone ?? "—"}>
+                            {teacher.phone ?? "—"}
+                          </span>
+                        </td>
 
-                      <TableCell className="w-1/5 text-center">
-                        {teacher.email ?? "—"}
-                      </TableCell>
+                        <td className="max-w-0 px-3 py-4 text-center text-sm text-foreground">
+                          <span className="block truncate" title={teacher.email ?? "—"}>
+                            {teacher.email ?? "—"}
+                          </span>
+                        </td>
 
-                      <TableCell className="w-1/5 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
+                        <td className="py-4 pr-4 pl-3 text-right text-sm font-medium sm:pr-0">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
 
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(teacher);
-                                setOpen(true);
-                              }}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(teacher)}
-                              disabled={deletingId === teacher.id}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditing(teacher);
+                                  setOpen(true);
+                                }}
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(teacher)}
+                                disabled={deletingId === teacher.id}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
+                          No teachers found.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 

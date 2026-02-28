@@ -15,14 +15,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 import { HolidayForm } from "../holidays/HolidayForm";
 import { deleteHoliday } from "@/server/holiday/deleteHoliday";
@@ -103,64 +95,117 @@ export function HolidaysSection({
           <CardTitle className="text-base">Holiday list</CardTitle>
         </CardHeader>
         <CardContent className="px-2 py-0">
-          {holidays.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No holidays yet.</p>
-          ) : (
-            <div className="">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Scope</TableHead>
-                    <TableHead>Start date</TableHead>
-                    <TableHead>End date</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {holidays.map((holiday) => (
-                    <TableRow key={holiday.id}>
-                      <TableCell className="font-medium">{holiday.name}</TableCell>
-                      <TableCell>{scopeLabel(holiday)}</TableCell>
-                      <TableCell>{fmtDate(holiday.startDate)}</TableCell>
-                      <TableCell>{fmtDate(holiday.endDate)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {holiday.note ? holiday.note : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setEditing(holiday);
-                                setOpen(true);
-                              }}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(holiday)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <div className="flow-root">
+            <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
+              <div className="inline-block min-w-full py-2 align-middle sm:px-0">
+                <table className="relative min-w-full table-fixed divide-y divide-border">
+                  <thead>
+                    <tr>
+                      <th
+                        scope="col"
+                        className="w-[18%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Name
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[20%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Scope
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[14%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Start date
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[14%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        End date
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[24%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                      >
+                        Note
+                      </th>
+                      <th
+                        scope="col"
+                        className="w-[10%] py-3 pr-4 pl-3 text-right text-xs font-medium tracking-wide text-muted-foreground uppercase sm:pr-0"
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-border bg-card">
+                    {holidays.map((holiday) => (
+                      <tr key={holiday.id} className="transition-colors hover:bg-accent/40">
+                        <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
+                          <span className="block truncate" title={holiday.name}>
+                            {holiday.name}
+                          </span>
+                        </td>
+                        <td className="max-w-0 px-3 py-4 text-sm text-foreground">
+                          <span className="block truncate" title={scopeLabel(holiday)}>
+                            {scopeLabel(holiday)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">
+                          {fmtDate(holiday.startDate)}
+                        </td>
+                        <td className="px-3 py-4 text-sm whitespace-nowrap text-foreground">
+                          {fmtDate(holiday.endDate)}
+                        </td>
+                        <td className="max-w-0 px-3 py-4 text-sm text-muted-foreground">
+                          <span className="block truncate" title={holiday.note ? holiday.note : "—"}>
+                            {holiday.note ? holiday.note : "—"}
+                          </span>
+                        </td>
+                        <td className="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditing(holiday);
+                                  setOpen(true);
+                                }}
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDelete(holiday)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {holidays.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
+                          No holidays yet.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 

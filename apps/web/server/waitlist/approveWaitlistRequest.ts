@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { addDays, isBefore } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
@@ -86,6 +87,8 @@ export async function approveWaitlistRequest(input: z.input<typeof payloadSchema
       id: true,
       templateId: true,
       planId: true,
+      paidThroughDate: true,
+      paidThroughDateComputed: true,
     },
   });
 
@@ -96,12 +99,20 @@ export async function approveWaitlistRequest(input: z.input<typeof payloadSchema
     throw new Error("Current enrolment is missing a plan.");
   }
 
+  const startDate = effectiveDate;
+  const endDate = addDays(startDate, -1);
+  const existingPaidThrough = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+  const newPaidThroughDate =
+    !existingPaidThrough || isBefore(existingPaidThrough, startDate) ? startDate : existingPaidThrough;
+
   const result = await moveStudentToClass({
     studentId: request.student.id,
     fromClassId: enrolment.templateId,
     toClassId: requestedClassId,
     toEnrolmentPlanId: enrolment.planId,
-    effectiveDate: toDateTimeInputValue(effectiveDate),
+    startDate: toDateTimeInputValue(startDate),
+    endDate: toDateTimeInputValue(endDate),
+    newPaidThroughDate: toDateTimeInputValue(newPaidThroughDate),
   });
 
   if (!result.ok) {

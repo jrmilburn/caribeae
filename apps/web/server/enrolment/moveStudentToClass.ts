@@ -15,7 +15,7 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
 import { adjustCreditsForManualPaidThroughDate } from "@/server/billing/enrolmentBilling";
-import { resolveMoveStudentPaidThroughDate } from "@/server/enrolment/moveStudentToClassPaidThrough";
+import { resolveMoveStudentTransitionDates } from "@/server/enrolment/moveStudentToClassTransition";
 import {
   applyClassChangeSettlement,
   buildClassChangeSettlementKey,
@@ -29,7 +29,10 @@ const payloadSchema = z.object({
   fromClassId: z.string().min(1),
   toClassId: z.string().min(1),
   toEnrolmentPlanId: z.string().min(1),
-  effectiveDate: z.string().min(1),
+  effectiveDate: z.string().min(1).optional(),
+  startDate: z.string().min(1).optional(),
+  endDate: z.string().min(1).optional(),
+  newPaidThroughDate: z.string().min(1).optional(),
   allowOverload: z.boolean().optional(),
 });
 
@@ -66,7 +69,18 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
     await requireAdmin();
 
     const payload = payloadSchema.parse(input);
-    const effectiveDate = normalizeStartDate(payload.effectiveDate);
+    const startDateInput = payload.startDate ?? payload.effectiveDate;
+    if (!startDateInput) {
+      throw new Error("Start new enrolment is required.");
+    }
+    const requestedStartDate = normalizeStartDate(startDateInput);
+    if (!payload.endDate) {
+      throw new Error("End current enrolment is required.");
+    }
+    const requestedEndDate = normalizeStartDate(payload.endDate);
+    const requestedNewPaidThroughDate = payload.newPaidThroughDate
+      ? normalizeStartDate(payload.newPaidThroughDate)
+      : null;
 
     const result = await prisma.$transaction(async (tx) => {
       if (payload.fromClassId === payload.toClassId) {
@@ -110,8 +124,8 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
         where: {
           studentId: payload.studentId,
           status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.PAUSED] },
-          startDate: { lte: effectiveDate },
-          OR: [{ endDate: null }, { endDate: { gte: effectiveDate } }],
+          startDate: { lte: requestedStartDate },
+          OR: [{ endDate: null }, { endDate: { gte: requestedStartDate } }],
           AND: [
             {
               OR: [
@@ -138,14 +152,20 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
 
       const templateStart = startOfDay(toTemplate.startDate);
       const templateEnd = toTemplate.endDate ? startOfDay(toTemplate.endDate) : null;
-      const { alignedStart, plannedEnd, effectiveEnd } = resolveMoveClassDates({
-        effectiveDate,
+      const { alignedStart, plannedEnd } = resolveMoveClassDates({
+        effectiveDate: requestedStartDate,
         enrolmentStart: startOfDay(enrolment.startDate),
         enrolmentEnd: enrolment.endDate ? startOfDay(enrolment.endDate) : null,
         templateStart,
         templateEnd,
         plan,
       });
+      if (alignedStart.getTime() !== requestedStartDate.getTime()) {
+        throw new Error("Start new enrolment must be on or after the destination class start date.");
+      }
+      if (isBefore(requestedEndDate, startOfDay(enrolment.startDate))) {
+        throw new Error("End current enrolment cannot be before the existing enrolment start date.");
+      }
       const capacityIssue = await getCapacityIssueForTemplateRange({
         template: {
           id: toTemplate.id,
@@ -180,15 +200,13 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
       const oldPaidThrough = resolveChangeOverPaidThroughDate(
         enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null
       );
-      const newPaidThrough = await resolveMoveStudentPaidThroughDate({
-        tx,
-        enrolmentId: enrolment.id,
-        enrolmentEndDate: enrolment.endDate ? startOfDay(enrolment.endDate) : null,
-        oldPaidThroughDate: oldPaidThrough,
-        changeOverDate: alignedStart,
-        fromTemplate,
-        toTemplate,
+      const transitionDates = resolveMoveStudentTransitionDates({
+        startDate: alignedStart,
+        endDate: requestedEndDate,
+        requestedNewPaidThroughDate,
+        currentPaidThroughDate: oldPaidThrough,
       });
+      const newPaidThrough = transitionDates.newPaidThroughDate;
 
       const today = brisbaneStartOfDay(new Date());
       if (
@@ -226,7 +244,7 @@ export async function moveStudentToClass(input: z.input<typeof payloadSchema>): 
       await tx.enrolment.update({
         where: { id: enrolment.id },
         data: {
-          endDate: effectiveEnd,
+          endDate: transitionDates.endDate,
           status: EnrolmentStatus.CHANGEOVER,
           cancelledAt: null,
         },

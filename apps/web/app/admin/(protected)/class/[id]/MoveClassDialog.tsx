@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { addDays } from "date-fns";
 import type { ClassTemplate, Enrolment, EnrolmentPlan, Level, Student } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -81,23 +82,33 @@ export function MoveClassDialog({
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [destinationId, setDestinationId] = React.useState<string>("");
   const [planId, setPlanId] = React.useState<string>("");
-  const [effectiveDate, setEffectiveDate] = React.useState<string>("");
+  const [startDate, setStartDate] = React.useState<string>("");
+  const [endDate, setEndDate] = React.useState<string>("");
+  const [newPaidThroughDate, setNewPaidThroughDate] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
   const [capacityWarning, setCapacityWarning] = React.useState<CapacityExceededDetails | null>(null);
+
+  const currentPaidThroughDate = enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null;
+  const currentPaidThroughDateKey = currentPaidThroughDate ? scheduleDateKey(currentPaidThroughDate) : "";
 
   React.useEffect(() => {
     if (!open) {
       setScheduleOpen(false);
       setDestinationId("");
       setPlanId("");
-      setEffectiveDate("");
+      setStartDate("");
+      setEndDate("");
+      setNewPaidThroughDate("");
       setSaving(false);
       return;
     }
-    if (!effectiveDate) {
-      setEffectiveDate(scheduleDateKey(new Date()));
-    }
-  }, [open, effectiveDate]);
+
+    const defaultStartDate = scheduleDateKey(new Date());
+    const defaultEndDate = scheduleDateKey(addDays(new Date(), -1));
+    setStartDate(defaultStartDate);
+    setEndDate(defaultEndDate);
+    setNewPaidThroughDate(currentPaidThroughDateKey || defaultStartDate);
+  }, [open, currentPaidThroughDateKey]);
 
   const destinationTemplate = React.useMemo(
     () => classTemplates.find((template) => template.id === destinationId) ?? null,
@@ -140,18 +151,29 @@ export function MoveClassDialog({
   );
 
   const requiresMultipleTemplates = selectionRequirement.maxCount > 1;
+
+  const endDateError = !endDate
+    ? "End current enrolment is required."
+    : startDate && endDate > startDate
+      ? "End current enrolment must be on or before start new enrolment."
+      : null;
+  const startDateError = !startDate ? "Start new enrolment is required." : null;
+  const newPaidThroughDateError = !newPaidThroughDate
+    ? "New paid through is required."
+    : startDate && newPaidThroughDate < startDate
+      ? "New paid through must be on or after start new enrolment."
+      : null;
+
+  const hasDateErrors = Boolean(endDateError || startDateError || newPaidThroughDateError);
+
   const canSubmit =
     Boolean(destinationId) &&
     Boolean(planId) &&
-    Boolean(effectiveDate) &&
     !saving &&
-    !requiresMultipleTemplates;
+    !requiresMultipleTemplates &&
+    !hasDateErrors;
 
-  const previewStart = effectiveDate ? formatBrisbaneDate(effectiveDate) : null;
-
-  const handleScheduleClassClick = (
-    occurrence: NormalizedScheduleClass
-  ) => {
+  const handleScheduleClassClick = (occurrence: NormalizedScheduleClass) => {
     if (occurrence.templateId === fromClassTemplate.id) {
       toast.error("Select a different destination class.");
       return;
@@ -166,6 +188,9 @@ export function MoveClassDialog({
       if (requiresMultipleTemplates) {
         toast.error(selectionRequirement.helper);
       }
+      if (hasDateErrors) {
+        toast.error("Fix date errors before continuing.");
+      }
       return;
     }
     if (!destinationTemplate) {
@@ -175,14 +200,19 @@ export function MoveClassDialog({
 
     setSaving(true);
     try {
-      const effectiveDateTime = toDateTimeInputValue(effectiveDate);
-      if (!effectiveDateTime) return;
+      const startDateValue = toDateTimeInputValue(startDate);
+      const endDateValue = toDateTimeInputValue(endDate);
+      const newPaidThroughDateValue = toDateTimeInputValue(newPaidThroughDate);
+      if (!startDateValue || !endDateValue || !newPaidThroughDateValue) return;
+
       const result = await moveStudentToClass({
         studentId: enrolment.studentId,
         fromClassId: fromClassTemplate.id,
         toClassId: destinationTemplate.id,
         toEnrolmentPlanId: planId,
-        effectiveDate: effectiveDateTime,
+        startDate: startDateValue,
+        endDate: endDateValue,
+        newPaidThroughDate: newPaidThroughDateValue,
         allowOverload,
       });
 
@@ -224,6 +254,13 @@ export function MoveClassDialog({
 
           <div className="flex-1 overflow-y-auto px-6 pb-6 sm:px-8">
             <div className="space-y-5">
+              <div className="space-y-2">
+                <Label>Current paid through</Label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  {formatBrisbaneDate(currentPaidThroughDate)}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>Destination class</Label>
                 <Button type="button" variant="outline" className="w-full" onClick={() => setScheduleOpen(true)}>
@@ -273,20 +310,40 @@ export function MoveClassDialog({
                 ) : null}
               </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>End current enrolment</Label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  {endDateError ? <p className="text-xs text-destructive">{endDateError}</p> : null}
+                </div>
+                <div className="space-y-2">
+                  <Label>Start new enrolment</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  {startDateError ? <p className="text-xs text-destructive">{startDateError}</p> : null}
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label>Effective change date</Label>
-                <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+                <Label>New paid through</Label>
+                <Input
+                  type="date"
+                  value={newPaidThroughDate}
+                  onChange={(e) => setNewPaidThroughDate(e.target.value)}
+                />
+                {newPaidThroughDateError ? (
+                  <p className="text-xs text-destructive">{newPaidThroughDateError}</p>
+                ) : null}
               </div>
 
               <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
                 <p className="font-medium text-foreground">Preview</p>
                 <p>
-                  {previewStart
-                    ? `End ${fromClassTemplate.name ?? "current class"} enrolment on ${previewStart} and start the new class on ${previewStart}.`
-                    : "Select a date to preview the change."}
+                  {endDate && startDate
+                    ? `End ${fromClassTemplate.name ?? "current class"} enrolment on ${formatBrisbaneDate(endDate)} and start the new class on ${formatBrisbaneDate(startDate)}.`
+                    : "Set end and start dates to preview the change."}
                 </p>
-                {previewStart ? (
-                  <p>Paid-through coverage and billing adjustments will be recalculated automatically.</p>
+                {newPaidThroughDate ? (
+                  <p>New enrolment paid through will be set to {formatBrisbaneDate(newPaidThroughDate)}.</p>
                 ) : null}
               </div>
             </div>
