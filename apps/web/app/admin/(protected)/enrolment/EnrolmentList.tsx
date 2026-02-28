@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Search, X, MoreVerticalIcon, MoreHorizontalIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import type { Prisma } from "@prisma/client";
 
@@ -97,8 +98,17 @@ export default function EnrolmentList({
     if (!ok) return;
 
     for (const id of selectedFilteredIds) {
-      await deleteEnrolment(id);
+      const result = await deleteEnrolment(id, { confirmed: true });
+      if (!result.success) {
+        toast.error(result.error || "Unable to delete one or more enrolments.");
+        return;
+      }
     }
+    toast.success(
+      selectedFilteredIds.length === 1
+        ? "Enrolment deleted."
+        : `${selectedFilteredIds.length} enrolments deleted.`
+    );
     router.refresh();
     clearSelection();
   };

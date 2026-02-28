@@ -28,7 +28,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChangeEnrolmentDialog } from "../../student/[id]/ChangeEnrolmentDialog";
-import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
+import { buildEnrolmentDeleteConfirmationMessage } from "@/lib/enrolment/deleteEnrolmentModel";
+import {
+  deleteEnrolment,
+  getEnrolmentDeletePreview,
+} from "@/server/enrolment/deleteEnrolment";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { MoveClassDialog } from "./MoveClassDialog";
@@ -79,7 +83,7 @@ export function EnrolmentsTable({
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
   const [editingEnrolmentId, setEditingEnrolmentId] = React.useState<string | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
-  const [undoingId, setUndoingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [moving, setMoving] = React.useState<EnrolmentWithStudent | null>(null);
   const [removing, setRemoving] = React.useState<EnrolmentWithStudent | null>(null);
 
@@ -123,19 +127,39 @@ export function EnrolmentsTable({
     );
   };
 
-  const handleUndo = async (id: string) => {
-    const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
-    if (!confirmed) return;
-    setUndoingId(id);
+  const handleDelete = async (id: string) => {
+    let preview: Awaited<ReturnType<typeof getEnrolmentDeletePreview>>;
     try {
-      await undoEnrolment(id);
-      toast.success("Enrolment undone.");
+      preview = await getEnrolmentDeletePreview(id);
+    } catch (error) {
+      console.error(error);
+      toast.error("Unable to inspect enrolment dependencies.");
+      return;
+    }
+
+    if (!preview.success) {
+      toast.error(preview.error || "Unable to inspect enrolment dependencies.");
+      return;
+    }
+
+    const confirmed = window.confirm(buildEnrolmentDeleteConfirmationMessage(preview.linkedCounts));
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    try {
+      const result = await deleteEnrolment(id, { confirmed: true });
+      if (!result.success) {
+        toast.error(result.error || "Unable to delete enrolment.");
+        return;
+      }
+      setRows((prev) => prev.filter((row) => row.id !== id));
+      toast.success("Enrolment deleted.");
       router.refresh();
     } catch (err) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Unable to undo enrolment.");
+      toast.error(err instanceof Error ? err.message : "Unable to delete enrolment.");
     } finally {
-      setUndoingId(null);
+      setDeletingId(null);
     }
   };
 
@@ -250,10 +274,10 @@ export function EnrolmentsTable({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-                          onClick={() => handleUndo(e.id)}
-                          disabled={undoingId === e.id}
+                          onClick={() => void handleDelete(e.id)}
+                          disabled={deletingId === e.id}
                         >
-                          {undoingId === e.id ? "Undoing..." : "Undo enrolment"}
+                          {deletingId === e.id ? "Deleting..." : "Delete enrolment"}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
