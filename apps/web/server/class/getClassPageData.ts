@@ -10,7 +10,7 @@ import { parseDateKey } from "@/lib/dateKey";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import type { ClassPageData, ClientTemplateWithInclusions } from "@/app/admin/(protected)/class/[id]/types";
 import { getClassOccurrenceRoster } from "./getClassOccurrenceRoster";
-import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
+import { filterEligibleEnrolmentsForOccurrence } from "@/server/class/eligibleEnrolments";
 
 export async function getClassPageData(templateId: string, requestedDateKey: string | undefined): Promise<ClassPageData | null> {
   await getOrCreateUser();
@@ -115,7 +115,12 @@ export async function getClassPageData(templateId: string, requestedDateKey: str
     ]);
 
   const visibleCancellationCandidates = selectedDate
-    ? cancellationCandidates.filter((enrolment) => enrolmentIsVisibleOnClass(enrolment, selectedDate))
+    ? filterEligibleEnrolmentsForOccurrence(
+        cancellationCandidates,
+        templateId,
+        template.levelId,
+        selectedDate
+      )
     : [];
 
   const roster =

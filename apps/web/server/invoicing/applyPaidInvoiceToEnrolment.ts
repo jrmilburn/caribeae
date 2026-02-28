@@ -321,6 +321,10 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
             holidays: [],
             entitlementSessions: creditsDelta,
             endDayKey: enrolment.endDate ? toBrisbaneDayKey(enrolment.endDate) : null,
+            cadence: {
+              alternatingWeeks: plan.alternatingWeeks,
+              enrolmentStartDate: enrolment.startDate,
+            },
           });
           if (baseCoverageEndDayKey) {
             coverageEndBase = brisbaneStartOfDay(baseCoverageEndDayKey);
@@ -344,6 +348,7 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
           blockClassCount: plan.blockClassCount ?? 1,
           creditsPurchased: creditsDelta,
           holidays,
+          alternatingWeeks: plan.alternatingWeeks,
         });
 
         if (coverageRange.coverageEnd) {

@@ -240,6 +240,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
           blocksPurchased: 1,
           blockClassCount: planBlockLength,
           creditsPurchased: creditsToAdd,
+          alternatingWeeks: plan.alternatingWeeks,
           holidays,
         });
         coverageStart = coverageRange.coverageStart;

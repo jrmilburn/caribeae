@@ -245,6 +245,10 @@ export async function recalculateEnrolmentCoverage(
           endDayKey,
           assignedTemplates: templates,
           holidays,
+          cadence: {
+            alternatingWeeks: enrolment.plan.alternatingWeeks,
+            enrolmentStartDate: enrolment.startDate,
+          },
         });
 
       const cancellationHolidays = cancellationCredits.map((credit) => ({
@@ -258,6 +262,10 @@ export async function recalculateEnrolmentCoverage(
         holidays: [...holidays, ...cancellationHolidays],
         entitlementSessions: scheduledSessions,
         endDayKey: enrolmentEndDayKey,
+        cadence: {
+          alternatingWeeks: enrolment.plan.alternatingWeeks,
+          enrolmentStartDate: enrolment.startDate,
+        },
       });
 
       const currentPaidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;

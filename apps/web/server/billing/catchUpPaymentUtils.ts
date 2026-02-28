@@ -20,6 +20,7 @@ export type WeeklyCatchUpParams = {
   paidThroughDate: Date | null;
   durationWeeks: number;
   sessionsPerWeek: number | null;
+  alternatingWeeks?: boolean | null;
   assignedTemplates: { dayOfWeek: number | null }[];
   holidays: HolidayRange[];
 };
@@ -28,6 +29,7 @@ export type BlockCatchUpParams = {
   enrolmentStartDate: Date;
   enrolmentEndDate: Date | null;
   paidThroughDate: Date | null;
+  alternatingWeeks?: boolean | null;
   classTemplate: { dayOfWeek: number | null; startTime?: number | null };
   assignedTemplates?: { dayOfWeek: number | null; startTime?: number | null }[];
   blockClassCount: number;
@@ -54,6 +56,10 @@ function resolveStartDayKey(params: {
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
     endDayKey: params.enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 }
 
@@ -69,6 +75,7 @@ export function resolveWeeklyBlocksToCurrent(params: WeeklyCatchUpParams, today:
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
     enrolmentEndDayKey,
+    alternatingWeeks: params.alternatingWeeks,
   });
 
   if (!startDayKey) return 0;
@@ -86,6 +93,10 @@ export function resolveWeeklyBlocksToCurrent(params: WeeklyCatchUpParams, today:
     endDayKey,
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   if (scheduled <= 0) return 0;
@@ -109,6 +120,7 @@ export function resolveWeeklyCatchUpCoverage(params: WeeklyCatchUpParams, blocks
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
     enrolmentEndDayKey,
+    alternatingWeeks: params.alternatingWeeks,
   });
 
   if (!startDayKey) {
@@ -124,6 +136,10 @@ export function resolveWeeklyCatchUpCoverage(params: WeeklyCatchUpParams, blocks
     holidays: params.holidays,
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   const coverageEndBaseDayKey = computeCoverageEndDay({
@@ -132,6 +148,10 @@ export function resolveWeeklyCatchUpCoverage(params: WeeklyCatchUpParams, blocks
     holidays: [],
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   return {
@@ -181,5 +201,6 @@ export function resolveBlockCatchUpCoverage(params: BlockCatchUpParams, blocksBi
     blocksPurchased: blocksBilled,
     creditsPurchased: blockClassCount * blocksBilled,
     holidays: params.holidays,
+    alternatingWeeks: params.alternatingWeeks,
   });
 }

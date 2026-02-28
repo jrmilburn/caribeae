@@ -222,6 +222,10 @@ export async function mergeEnrolments(input: z.input<typeof mergeSchema>): Promi
             endDayKey,
             assignedTemplates,
             holidays,
+            cadence: {
+              alternatingWeeks: enrolment.plan?.alternatingWeeks,
+              enrolmentStartDate: enrolment.startDate,
+            },
           });
           totalSessions += scheduledSessions;
         }
@@ -251,6 +255,10 @@ export async function mergeEnrolments(input: z.input<typeof mergeSchema>): Promi
             holidays,
             entitlementSessions: totalSessions,
             endDayKey: enrolmentEndDayKey,
+            cadence: {
+              alternatingWeeks: plan.alternatingWeeks,
+              enrolmentStartDate: startDate,
+            },
           });
           paidThroughDate = newPaidThroughKey ? brisbaneStartOfDay(newPaidThroughKey) : null;
         }

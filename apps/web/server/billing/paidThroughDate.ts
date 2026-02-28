@@ -79,6 +79,7 @@ export function computeBlockCoverageRange(params: {
   blocksPurchased?: number;
   creditsPurchased?: number;
   holidays: HolidayRange[];
+  alternatingWeeks?: boolean | null;
 }): BlockCoverageResult {
   const blocksPurchased = Math.max(params.blocksPurchased ?? 0, 0);
   const blockClassCount = Math.max(params.blockClassCount, 0);
@@ -110,6 +111,10 @@ export function computeBlockCoverageRange(params: {
     assignedTemplates: templates,
     holidays: params.holidays,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   const coverageStart = dayKeyToDate(coverageStartDayKey);
@@ -129,6 +134,10 @@ export function computeBlockCoverageRange(params: {
     holidays: params.holidays,
     entitlementSessions: creditsPurchased,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   const projectionBaseDayKey = computeCoverageEndDay({
@@ -137,6 +146,10 @@ export function computeBlockCoverageRange(params: {
     holidays: [],
     entitlementSessions: creditsPurchased,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate,
+    },
   });
 
   if (process.env.DEBUG_BLOCK_COVERAGE === "1") {

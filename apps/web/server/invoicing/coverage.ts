@@ -75,6 +75,7 @@ function resolveCoverageStartDayKey(params: {
   assignedTemplates: { dayOfWeek: number | null }[];
   holidays: { startDate: Date; endDate: Date }[];
   enrolmentEndDayKey: string | null;
+  alternatingWeeks?: boolean | null;
 }) {
   const enrolmentStartDayKey = toBrisbaneDayKey(params.enrolmentStart);
   const todayDayKey = toBrisbaneDayKey(params.today);
@@ -90,12 +91,16 @@ function resolveCoverageStartDayKey(params: {
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
     endDayKey: params.enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStart,
+    },
   });
 }
 
 export function resolveWeeklyCoverageWindow(params: {
   enrolment: { startDate: Date; endDate: Date | null; paidThroughDate: Date | null };
-  plan: { durationWeeks: number | null; sessionsPerWeek: number | null };
+  plan: { durationWeeks: number | null; sessionsPerWeek: number | null; alternatingWeeks?: boolean | null };
   assignedTemplates: { dayOfWeek: number | null }[];
   holidays: { startDate: Date; endDate: Date }[];
   today?: Date;
@@ -125,6 +130,7 @@ export function resolveWeeklyCoverageWindow(params: {
     assignedTemplates: effectiveTemplates,
     holidays: params.holidays,
     enrolmentEndDayKey,
+    alternatingWeeks: params.plan.alternatingWeeks,
   });
 
   if (!coverageStartDayKey) {
@@ -141,6 +147,10 @@ export function resolveWeeklyCoverageWindow(params: {
     holidays: params.holidays,
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.plan.alternatingWeeks,
+      enrolmentStartDate: params.enrolment.startDate,
+    },
   });
 
   const coverageEndBaseDayKey = computeCoverageEndDay({
@@ -149,6 +159,10 @@ export function resolveWeeklyCoverageWindow(params: {
     holidays: [],
     entitlementSessions,
     endDayKey: enrolmentEndDayKey,
+    cadence: {
+      alternatingWeeks: params.plan.alternatingWeeks,
+      enrolmentStartDate: params.enrolment.startDate,
+    },
   });
 
   return {
@@ -216,7 +230,11 @@ export function resolveCoverageForPlan(params: {
         endDate: enrolment.endDate,
         paidThroughDate: enrolment.paidThroughDate,
       },
-      plan: { durationWeeks: plan.durationWeeks ?? null, sessionsPerWeek },
+      plan: {
+        durationWeeks: plan.durationWeeks ?? null,
+        sessionsPerWeek,
+        alternatingWeeks: Boolean(plan.alternatingWeeks),
+      },
       assignedTemplates: limitWeeklyTemplates(assignedTemplates, sessionsPerWeek),
       holidays: params.holidays,
       today,
@@ -265,6 +283,7 @@ export function resolveCoverageForPlan(params: {
     blocksPurchased,
     creditsPurchased,
     holidays: params.holidays,
+    alternatingWeeks: Boolean(plan.alternatingWeeks),
   });
 
   return {
@@ -281,6 +300,8 @@ export function countBlockCoverageBetweenDates(params: {
   blockClassCount: number;
   assignedTemplates: { dayOfWeek: number | null }[];
   holidays: { startDate: Date; endDate: Date }[];
+  alternatingWeeks?: boolean | null;
+  enrolmentStartDate?: Date | null;
 }) {
   if (!params.paidThroughDate) return 1;
   const blockClassCount = Math.max(params.blockClassCount, 1);
@@ -293,6 +314,10 @@ export function countBlockCoverageBetweenDates(params: {
     endDayKey: endKey,
     assignedTemplates: params.assignedTemplates,
     holidays: params.holidays,
+    cadence: {
+      alternatingWeeks: params.alternatingWeeks,
+      enrolmentStartDate: params.enrolmentStartDate ?? params.startDate,
+    },
   });
 
   if (sessionCount <= 0) return 1;

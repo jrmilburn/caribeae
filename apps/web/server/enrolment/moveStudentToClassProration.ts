@@ -4,7 +4,10 @@ import { BillingType, type EnrolmentPlan } from "@prisma/client";
 import { dayKeyToDate, nextScheduledDayKey } from "@/server/billing/coverageEngine";
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 
-type PlanPricing = Pick<EnrolmentPlan, "billingType" | "priceCents" | "sessionsPerWeek" | "blockClassCount">;
+type PlanPricing = Pick<
+  EnrolmentPlan,
+  "billingType" | "priceCents" | "sessionsPerWeek" | "blockClassCount" | "alternatingWeeks"
+>;
 
 export function getPlanUnitPriceCents(plan: PlanPricing) {
   if (plan.billingType === BillingType.PER_WEEK) {
@@ -46,6 +49,10 @@ export function computeProratedPaidThrough(params: {
     const nextKey = nextScheduledDayKey({
       startDayKey: candidateKey,
       assignedTemplates,
+      cadence: {
+        alternatingWeeks: params.newPlan.alternatingWeeks,
+        enrolmentStartDate: prorationStart,
+      },
     });
     return nextKey ? dayKeyToDate(nextKey) : proratedDate;
   }

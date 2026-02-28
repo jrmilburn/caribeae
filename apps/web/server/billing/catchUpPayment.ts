@@ -179,6 +179,7 @@ async function buildCatchUpPreview(
               paidThroughDate: fromPaidThrough ?? null,
               durationWeeks: plan.durationWeeks,
               sessionsPerWeek: plan.sessionsPerWeek ?? null,
+              alternatingWeeks: plan.alternatingWeeks,
               assignedTemplates,
               holidays,
             },
@@ -195,6 +196,7 @@ async function buildCatchUpPreview(
           paidThroughDate: fromPaidThrough ?? null,
           durationWeeks: plan.durationWeeks,
           sessionsPerWeek: plan.sessionsPerWeek ?? null,
+          alternatingWeeks: plan.alternatingWeeks,
           assignedTemplates,
           holidays,
         },
@@ -257,6 +259,7 @@ async function buildCatchUpPreview(
         enrolmentStartDate: enrolment.startDate,
         enrolmentEndDate: enrolment.endDate ?? null,
         paidThroughDate: fromPaidThrough ?? null,
+        alternatingWeeks: plan.alternatingWeeks,
         classTemplate: { dayOfWeek: anchorTemplate.dayOfWeek ?? null, startTime: anchorTemplate.startTime ?? null },
         assignedTemplates: assignedTemplates.map((template) => ({
           dayOfWeek: template.dayOfWeek,

@@ -17,6 +17,7 @@ type PayAheadCoverageParams = {
   blocksPurchased: number;
   blockClassCount: number;
   creditsPurchased?: number;
+  alternatingWeeks?: boolean | null;
   holidays: HolidayRange[];
 };
 
@@ -31,6 +32,7 @@ export function computeBlockPayAheadCoverage(params: PayAheadCoverageParams): Co
     blocksPurchased: params.blocksPurchased,
     creditsPurchased: params.creditsPurchased,
     holidays: params.holidays,
+    alternatingWeeks: params.alternatingWeeks,
   });
 
   return {

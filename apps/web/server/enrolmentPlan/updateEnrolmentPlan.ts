@@ -17,6 +17,7 @@ type EnrolmentPlanInput = {
   blockClassCount?: number | null;
   sessionsPerWeek?: number | null;
   isSaturdayOnly?: boolean;
+  alternatingWeeks?: boolean;
 };
 
 export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput) {
@@ -33,6 +34,7 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
     blockClassCount: z.number().int().positive().optional().nullable(),
     sessionsPerWeek: z.number().int().positive().optional().nullable(),
     isSaturdayOnly: z.boolean().optional(),
+    alternatingWeeks: z.boolean().optional(),
   });
   const parsed = schema.parse(input);
   const requiresDuration = parsed.billingType === "PER_WEEK";
@@ -60,6 +62,7 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
           : null,
       blockLength: parsed.blockClassCount ?? 1,
       isSaturdayOnly: Boolean(parsed.isSaturdayOnly),
+      alternatingWeeks: Boolean(parsed.alternatingWeeks),
     },
   });
 

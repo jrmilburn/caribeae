@@ -563,6 +563,7 @@ model EnrolmentPlan {
   name           String
   priceCents     Int     @default(0)
   isSaturdayOnly Boolean @default(false)
+  alternatingWeeks Boolean @default(false)
 
   enrolmentType   EnrolmentType @default(BLOCK)
   billingType     BillingType   @default(PER_CLASS)

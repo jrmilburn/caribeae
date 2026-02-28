@@ -9,9 +9,15 @@ import {
   toBrisbaneDayKey,
   type BrisbaneDayKey,
 } from "@/server/dates/brisbaneDay";
+import { isAlternatingWeekActiveOnDay } from "@/server/enrolment/occurrenceCadence";
 
 export type AssignedTemplateDay = {
   dayOfWeek: number | null | undefined;
+};
+
+type CadenceOptions = {
+  alternatingWeeks?: boolean | null;
+  enrolmentStartDate?: Date | string | null;
 };
 
 function buildWeekdayCounts(templates: AssignedTemplateDay[]) {
@@ -22,6 +28,20 @@ function buildWeekdayCounts(templates: AssignedTemplateDay[]) {
     counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
   });
   return counts;
+}
+
+function isScheduledForCadence(params: {
+  dayKey: BrisbaneDayKey;
+  dayOfWeek: number;
+  cadence?: CadenceOptions;
+}) {
+  if (!params.cadence?.alternatingWeeks) return true;
+  if (!params.cadence.enrolmentStartDate) return true;
+  return isAlternatingWeekActiveOnDay({
+    enrolmentStartDate: params.cadence.enrolmentStartDate,
+    classDate: params.dayKey,
+    classDayOfWeek: params.dayOfWeek,
+  });
 }
 
 export function buildHolidayDayKeySet(holidays: HolidayRange[]): Set<BrisbaneDayKey> {
@@ -41,6 +61,7 @@ export function countScheduledSessions(params: {
   startDayKey: BrisbaneDayKey;
   endDayKey: BrisbaneDayKey;
   assignedTemplates: AssignedTemplateDay[];
+  cadence?: CadenceOptions;
 }): number {
   if (brisbaneCompare(params.endDayKey, params.startDayKey) < 0) return 0;
   const weekdayCounts = buildWeekdayCounts(params.assignedTemplates);
@@ -51,7 +72,9 @@ export function countScheduledSessions(params: {
   while (brisbaneCompare(cursor, params.endDayKey) <= 0) {
     const weekday = brisbaneDayOfWeek(cursor);
     const count = weekdayCounts.get(weekday) ?? 0;
-    total += count;
+    if (count > 0 && isScheduledForCadence({ dayKey: cursor, dayOfWeek: weekday, cadence: params.cadence })) {
+      total += count;
+    }
     cursor = brisbaneAddDays(cursor, 1);
   }
   return total;
@@ -62,6 +85,7 @@ export function countScheduledSessionsExcludingHolidays(params: {
   endDayKey: BrisbaneDayKey;
   assignedTemplates: AssignedTemplateDay[];
   holidays: HolidayRange[];
+  cadence?: CadenceOptions;
 }): number {
   if (brisbaneCompare(params.endDayKey, params.startDayKey) < 0) return 0;
   const weekdayCounts = buildWeekdayCounts(params.assignedTemplates);
@@ -74,7 +98,9 @@ export function countScheduledSessionsExcludingHolidays(params: {
     if (!holidaySet.has(cursor)) {
       const weekday = brisbaneDayOfWeek(cursor);
       const count = weekdayCounts.get(weekday) ?? 0;
-      total += count;
+      if (count > 0 && isScheduledForCadence({ dayKey: cursor, dayOfWeek: weekday, cadence: params.cadence })) {
+        total += count;
+      }
     }
     cursor = brisbaneAddDays(cursor, 1);
   }
@@ -86,6 +112,7 @@ export function nextScheduledDayKey(params: {
   assignedTemplates: AssignedTemplateDay[];
   holidays?: HolidayRange[];
   endDayKey?: BrisbaneDayKey | null;
+  cadence?: CadenceOptions;
 }): BrisbaneDayKey | null {
   const weekdayCounts = buildWeekdayCounts(params.assignedTemplates);
   if (!weekdayCounts.size) return null;
@@ -95,7 +122,13 @@ export function nextScheduledDayKey(params: {
   while (!params.endDayKey || brisbaneCompare(cursor, params.endDayKey) <= 0) {
     const weekday = brisbaneDayOfWeek(cursor);
     const count = weekdayCounts.get(weekday) ?? 0;
-    if (count > 0 && !holidaySet.has(cursor)) return cursor;
+    if (
+      count > 0 &&
+      !holidaySet.has(cursor) &&
+      isScheduledForCadence({ dayKey: cursor, dayOfWeek: weekday, cadence: params.cadence })
+    ) {
+      return cursor;
+    }
     cursor = brisbaneAddDays(cursor, 1);
   }
   return null;
@@ -107,6 +140,7 @@ export function computeCoverageEndDay(params: {
   holidays: HolidayRange[];
   entitlementSessions: number;
   endDayKey?: BrisbaneDayKey | null;
+  cadence?: CadenceOptions;
 }): BrisbaneDayKey | null {
   if (params.entitlementSessions <= 0) return null;
   const weekdayCounts = buildWeekdayCounts(params.assignedTemplates);
@@ -120,7 +154,11 @@ export function computeCoverageEndDay(params: {
   while (remaining > 0 && (!params.endDayKey || brisbaneCompare(cursor, params.endDayKey) <= 0)) {
     const weekday = brisbaneDayOfWeek(cursor);
     const count = weekdayCounts.get(weekday) ?? 0;
-    if (count > 0 && !holidaySet.has(cursor)) {
+    if (
+      count > 0 &&
+      !holidaySet.has(cursor) &&
+      isScheduledForCadence({ dayKey: cursor, dayOfWeek: weekday, cadence: params.cadence })
+    ) {
       remaining -= count;
       lastCovered = cursor;
     }

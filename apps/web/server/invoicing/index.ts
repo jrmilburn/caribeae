@@ -114,6 +114,8 @@ export async function createInitialInvoiceForEnrolment(
               dayOfWeek: template.dayOfWeek,
             })),
             holidays,
+            alternatingWeeks: enrolment.plan.alternatingWeeks,
+            enrolmentStartDate: enrolment.startDate,
           })
         : 1;
 
@@ -137,6 +139,7 @@ export async function createInitialInvoiceForEnrolment(
             blocksPurchased: blocksToBill,
             creditsPurchased: effectiveBlockLength * blocksToBill,
             holidays,
+            alternatingWeeks: enrolment.plan.alternatingWeeks,
           })
         : resolveCoverageForPlan({
             enrolment,

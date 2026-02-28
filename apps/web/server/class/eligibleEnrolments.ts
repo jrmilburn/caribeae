@@ -4,6 +4,7 @@ import { isAfter } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import { enrolmentIsVisibleOnClass } from "@/lib/enrolment/enrolmentVisibility";
+import { isEnrolmentOccurringOnDate } from "@/server/enrolment/occurrenceCadence";
 
 export type EligibleEnrolmentCandidate = Awaited<ReturnType<typeof fetchEnrolmentCandidates>>[number];
 
@@ -21,6 +22,10 @@ export function filterEligibleEnrolmentsForOccurrence(
     const assignedTemplateIds = new Set(enrolment.classAssignments.map((assignment) => assignment.templateId));
     const hasAssignment = assignedTemplateIds.has(templateId) || enrolment.templateId === templateId;
     if (!hasAssignment) continue;
+    const matchingTemplate =
+      enrolment.classAssignments.find((assignment) => assignment.templateId === templateId)?.template ??
+      (enrolment.templateId === templateId ? enrolment.template : null);
+    if (!isEnrolmentOccurringOnDate(enrolment, date, matchingTemplate?.dayOfWeek)) continue;
     if (isWeekly && enrolment.student.levelId !== levelId) continue;
 
     if (isWeekly) {

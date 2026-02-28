@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { createEnrolmentPlan } from "@/server/enrolmentPlan/createEnrolmentPlan";
 import { updateEnrolmentPlan } from "@/server/enrolmentPlan/updateEnrolmentPlan";
@@ -36,6 +37,7 @@ type PlanFormState = {
   blockClassCount: string;
   sessionsPerWeek: string;
   isSaturdayOnly: boolean;
+  alternatingWeeks: boolean;
 };
 
 const BILLING_OPTIONS: BillingType[] = ["PER_CLASS", "PER_WEEK"];
@@ -66,6 +68,7 @@ export function EnrolmentPlanForm({
     blockClassCount: "1",
     sessionsPerWeek: "",
     isSaturdayOnly: false,
+    alternatingWeeks: false,
   }));
 
   React.useEffect(() => {
@@ -81,6 +84,7 @@ export function EnrolmentPlanForm({
         blockClassCount: String(plan.blockClassCount ?? 1),
         sessionsPerWeek: String(plan.sessionsPerWeek ?? ""),
         isSaturdayOnly: Boolean(plan.isSaturdayOnly),
+        alternatingWeeks: Boolean(plan.alternatingWeeks),
       });
     } else {
       setForm({
@@ -93,6 +97,7 @@ export function EnrolmentPlanForm({
         blockClassCount: "1",
         sessionsPerWeek: "",
         isSaturdayOnly: false,
+        alternatingWeeks: false,
       });
     }
     setSubmitting(false);
@@ -129,6 +134,7 @@ export function EnrolmentPlanForm({
       sessionsPerWeek: hasSessionsInput && parsedSessionsPerWeek > 0 ? parsedSessionsPerWeek : null,
       blockClassCount: form.billingType === "PER_CLASS" ? parsedBlockCount || 1 : null,
       isSaturdayOnly: form.isSaturdayOnly,
+      alternatingWeeks: form.alternatingWeeks,
     };
 
     try {
@@ -296,6 +302,22 @@ export function EnrolmentPlanForm({
               checked={form.isSaturdayOnly}
               onCheckedChange={(checked) => setForm((p) => ({ ...p, isSaturdayOnly: checked }))}
             />
+          </div>
+
+          <div className="flex items-start gap-3 rounded-md border px-3 py-2">
+            <Checkbox
+              className="mt-0.5"
+              checked={form.alternatingWeeks}
+              onCheckedChange={(checked) =>
+                setForm((p) => ({ ...p, alternatingWeeks: Boolean(checked) }))
+              }
+            />
+            <div className="space-y-1">
+              <Label className="text-sm">Alternating weeks (every 2nd week)</Label>
+              <p className="text-xs text-muted-foreground">
+                Student attends every second week from the enrolment start date.
+              </p>
+            </div>
           </div>
         </div>
 
