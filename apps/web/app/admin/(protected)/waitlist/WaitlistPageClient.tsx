@@ -26,6 +26,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { RequestListHeader } from "@/components/admin/RequestListHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -79,11 +81,15 @@ function asDate(value: Date | string) {
 export default function WaitlistPageClient({
   requests,
   totalCount,
+  nextCursor,
+  pageSize,
   statusFilter,
   templates,
 }: {
   requests: WaitlistRequestSummary[];
   totalCount: number;
+  nextCursor: string | null;
+  pageSize: number;
   statusFilter: WaitlistRequestStatus | "ALL";
   templates: TemplateOption[];
 }) {
@@ -182,37 +188,15 @@ export default function WaitlistPageClient({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-4 py-4">
-        <div>
-          <div className="text-base font-semibold">Waitlist requests</div>
-          <div className="text-xs text-muted-foreground">{totalCount} total requests</div>
-        </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(value) => {
-            const params = new URLSearchParams(window.location.search);
-            if (value === "ALL") {
-              params.delete("status");
-            } else {
-              params.set("status", value);
-            }
-            const qs = params.toString();
-            window.location.search = qs ? `?${qs}` : "";
-          }}
-        >
-          <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <RequestListHeader
+        title="Waitlist requests"
+        totalCount={totalCount}
+        searchPlaceholder="Search by family, student, class, or notes..."
+        filterValue={statusFilter}
+        filterOptions={STATUS_OPTIONS}
+        allFilterValue="ALL"
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -302,6 +286,16 @@ export default function WaitlistPageClient({
             </ul>
           )}
         </div>
+      </div>
+
+      <div className="shrink-0 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <AdminPagination
+          totalCount={totalCount}
+          pageSize={pageSize}
+          currentCount={requests.length}
+          nextCursor={nextCursor}
+          className="border-t-0 bg-transparent"
+        />
       </div>
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

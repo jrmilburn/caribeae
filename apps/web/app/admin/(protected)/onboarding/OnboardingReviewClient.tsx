@@ -9,8 +9,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 
-import { AdminListHeader } from "@/components/admin/AdminListHeader";
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { RequestListHeader } from "@/components/admin/RequestListHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -766,42 +766,15 @@ export function OnboardingReviewClient({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-hidden">
-      <AdminListHeader
-        title="Onboarding"
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <RequestListHeader
+        title="Onboarding requests"
         totalCount={totalCount}
         searchPlaceholder="Search by guardian, phone, or email..."
-        onNew={() => undefined}
-        showNew={false}
-        extraActions={
-          <Select
-            value={statusFilter ?? "all"}
-            onValueChange={(value) => {
-              const params = new URLSearchParams(window.location.search);
-              if (value === "all") {
-                params.delete("status");
-              } else {
-                params.set("status", value);
-              }
-              params.delete("cursor");
-              params.delete("cursors");
-              const qs = params.toString();
-              window.location.search = qs ? `?${qs}` : "";
-            }}
-          >
-            <SelectTrigger className="h-9 w-[150px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
-        sticky
+        filterValue={statusFilter ?? "all"}
+        filterOptions={statusOptions}
+        allFilterValue="all"
+        filterWidthClassName="w-[150px]"
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -861,12 +834,15 @@ export function OnboardingReviewClient({
         </div>
       </div>
 
-      <AdminPagination
-        totalCount={totalCount}
-        pageSize={pageSize}
-        currentCount={parsedRequests.length}
-        nextCursor={nextCursor}
-      />
+      <div className="shrink-0 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <AdminPagination
+          totalCount={totalCount}
+          pageSize={pageSize}
+          currentCount={parsedRequests.length}
+          nextCursor={nextCursor}
+          className="border-t-0 bg-transparent"
+        />
+      </div>
 
       <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && setSelectedId(null)}>
         <SheetContent className="w-full sm:max-w-xl">
