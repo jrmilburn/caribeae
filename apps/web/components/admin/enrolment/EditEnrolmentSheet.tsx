@@ -36,6 +36,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import {
+  ScheduleView,
+  type NormalizedScheduleClass,
+} from "@/packages/schedule";
+import {
   ENROLMENT_STATUS_VALUES,
   areEnrolmentFormValuesEqual,
   buildEnrolmentDiff,
@@ -84,6 +88,35 @@ function templateLabel(template: EnrolmentEditSheetData["options"]["classTemplat
   const time = start && end ? `${start}-${end}` : start || end;
   const base = template.name ?? "Unnamed class";
   return `${base} (${day}${time ? ` ${time}` : ""})`;
+}
+
+function getSelectionRequirement(plan: { billingType: "PER_WEEK" | "PER_CLASS"; sessionsPerWeek: number | null } | null) {
+  if (!plan) {
+    return {
+      requiredCount: 1,
+      maxCount: 1,
+      helper: "Select a plan to see class requirements.",
+    };
+  }
+
+  const sessionsPerWeek = plan.sessionsPerWeek && plan.sessionsPerWeek > 0 ? plan.sessionsPerWeek : 1;
+  if (plan.billingType === "PER_WEEK") {
+    return {
+      requiredCount: 0,
+      maxCount: Math.max(1, sessionsPerWeek),
+      helper:
+        sessionsPerWeek > 1
+          ? `Weekly plans cover up to ${sessionsPerWeek} classes per week. Select up to ${sessionsPerWeek} classes (optional).`
+          : "Weekly plans cover any class at this level. Selecting a class is optional.",
+    };
+  }
+
+  const requiredCount = Math.max(1, sessionsPerWeek);
+  return {
+    requiredCount,
+    maxCount: requiredCount,
+    helper: requiredCount === 1 ? "Select 1 class for this plan." : `Select ${requiredCount} classes for this plan.`,
+  };
 }
 
 function FieldError({ message }: { message?: string }) {
@@ -178,6 +211,7 @@ export function EditEnrolmentSheet({
   const [saving, setSaving] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [discardOpen, setDiscardOpen] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
 
   const normalizedValues = React.useMemo(
     () => (values ? normalizeEnrolmentFormValues(values) : null),
@@ -211,6 +245,7 @@ export function EditEnrolmentSheet({
   }, [data, initialValues, values]);
 
   const clearForClose = React.useCallback(() => {
+    setScheduleOpen(false);
     setConfirmOpen(false);
     setDiscardOpen(false);
     setSaveError(null);
@@ -306,19 +341,50 @@ export function EditEnrolmentSheet({
     []
   );
 
-  const handleTemplateToggle = React.useCallback(
-    (templateId: string, checked: boolean) => {
+  const selectedPlan = React.useMemo(() => {
+    if (!data || !values) return null;
+    return data.options.plans.find((plan) => plan.id === values.planId) ?? null;
+  }, [data, values]);
+
+  const selectionRequirement = React.useMemo(
+    () => getSelectionRequirement(selectedPlan),
+    [selectedPlan]
+  );
+
+  const selectionCountLabel = React.useMemo(() => {
+    const count = values?.templateIds.length ?? 0;
+    if (selectionRequirement.requiredCount === 0) {
+      return `${count}/${selectionRequirement.maxCount} selected (optional)`;
+    }
+    return `${count}/${selectionRequirement.requiredCount} selected`;
+  }, [selectionRequirement.maxCount, selectionRequirement.requiredCount, values?.templateIds.length]);
+
+  const handleScheduleClassClick = React.useCallback(
+    (occurrence: NormalizedScheduleClass) => {
+      if (!values) return;
+
+      const planLevelId = selectedPlan?.levelId ?? null;
+      if (planLevelId && occurrence.levelId && occurrence.levelId !== planLevelId) {
+        toast.error("Select classes that match the selected plan level.");
+        return;
+      }
+
       setValues((prev) => {
         if (!prev) return prev;
-        if (checked) {
+        const isSelected = prev.templateIds.includes(occurrence.templateId);
+        if (isSelected) {
           return {
             ...prev,
-            templateIds: normalizeTemplateIds([...prev.templateIds, templateId]),
+            templateIds: prev.templateIds.filter((id) => id !== occurrence.templateId),
           };
+        }
+        if (prev.templateIds.length >= selectionRequirement.maxCount) {
+          toast.error(selectionRequirement.helper);
+          return prev;
         }
         return {
           ...prev,
-          templateIds: prev.templateIds.filter((id) => id !== templateId),
+          templateIds: normalizeTemplateIds([...prev.templateIds, occurrence.templateId]),
         };
       });
       setFieldErrors((prev) => {
@@ -328,7 +394,7 @@ export function EditEnrolmentSheet({
         return next;
       });
     },
-    []
+    [selectedPlan?.levelId, selectionRequirement.helper, selectionRequirement.maxCount, values]
   );
 
   const persist = React.useCallback(
@@ -427,9 +493,18 @@ export function EditEnrolmentSheet({
     setConfirmOpen(true);
   }, [values]);
 
-  const selectedTemplateSet = React.useMemo(
-    () => new Set(values?.templateIds ?? []),
-    [values?.templateIds]
+  const templatesById = React.useMemo(
+    () => new Map((data?.options.classTemplates ?? []).map((template) => [template.id, template])),
+    [data?.options.classTemplates]
+  );
+
+  const selectedTemplateDetails = React.useMemo(
+    () =>
+      (values?.templateIds ?? []).map((templateId) => ({
+        id: templateId,
+        template: templatesById.get(templateId) ?? null,
+      })),
+    [templatesById, values?.templateIds]
   );
 
   return (
@@ -568,27 +643,32 @@ export function EditEnrolmentSheet({
                   >
                     <FormRow
                       label="Assigned classes"
-                      hint={`${values.templateIds.length} selected`}
+                      hint={selectionRequirement.helper}
                       error={fieldErrors.templateIds}
                     >
-                      <div className="max-h-56 divide-y overflow-y-auto rounded-md border">
-                        {data.options.classTemplates.map((template) => (
-                          <label
-                            key={template.id}
-                            className="flex cursor-pointer items-start gap-3 px-3 py-2.5 text-sm hover:bg-muted/30"
-                          >
-                            <Checkbox
-                              checked={selectedTemplateSet.has(template.id)}
-                              onCheckedChange={(checked) => handleTemplateToggle(template.id, Boolean(checked))}
-                            />
-                            <span className="space-y-0.5">
-                              <span className="block font-medium">{templateLabel(template)}</span>
-                              <span className="block text-xs text-muted-foreground">
-                                {template.levelName ?? "No level"} · {template.active ? "Active" : "Inactive"}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
+                      <div className="space-y-3">
+                        <Button type="button" variant="outline" className="w-full justify-between" onClick={() => setScheduleOpen(true)}>
+                          <span>Select classes in schedule</span>
+                          <span className="text-xs text-muted-foreground">{selectionCountLabel}</span>
+                        </Button>
+                        {selectedTemplateDetails.length ? (
+                          <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                            {selectedTemplateDetails.map(({ id, template }) => (
+                              <div key={id} className="text-sm">
+                                <div className="font-medium">
+                                  {template ? templateLabel(template) : `Class template ${id.slice(-6)}`}
+                                </div>
+                                {template ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {template.levelName ?? "No level"} · {template.active ? "Active" : "Inactive"}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No classes selected.</p>
+                        )}
                       </div>
                     </FormRow>
                   </FormSection>
@@ -742,6 +822,43 @@ export function EditEnrolmentSheet({
               {saving ? "Saving..." : "Confirm"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+          <DialogHeader>
+            <DialogTitle>Select assigned classes</DialogTitle>
+            <DialogDescription>
+              Click classes on the schedule to add or remove class assignments.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
+            <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
+              <div className="space-y-0.5">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {selectionRequirement.helper}
+                </div>
+                <div className="text-xs text-muted-foreground">{selectionCountLabel}</div>
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setScheduleOpen(false)}>
+                Done
+              </Button>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <ScheduleView
+                levels={[]}
+                onClassClick={handleScheduleClassClick}
+                allowTemplateMoves={false}
+                defaultViewMode="week"
+                mode="enrolmentChange"
+                selectedTemplateIds={values?.templateIds ?? []}
+                filters={{ levelId: null, teacherId: null }}
+              />
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
