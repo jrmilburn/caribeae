@@ -108,6 +108,58 @@ function LoadingSkeleton() {
   );
 }
 
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mt-6 space-y-6 border-y border-border/60 py-5 sm:space-y-0 sm:divide-y sm:divide-border/60 sm:py-0">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function FormRow({
+  label,
+  hint,
+  error,
+  align = "start",
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  align?: "start" | "center";
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={[
+        "sm:grid sm:grid-cols-3 sm:gap-4 sm:py-5",
+        align === "center" ? "sm:items-center" : "sm:items-start",
+      ].join(" ")}
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground sm:pt-1.5">{label}</p>
+        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      </div>
+      <div className="mt-2 space-y-2 sm:col-span-2 sm:mt-0">
+        {children}
+        <FieldError message={error} />
+      </div>
+    </div>
+  );
+}
+
 export function EditEnrolmentSheet({
   enrolmentId,
   open,
@@ -414,174 +466,201 @@ export function EditEnrolmentSheet({
                   <div className="font-medium">{data.enrolment.studentName}</div>
                   <Badge variant="outline">ID {data.enrolment.id.slice(-6)}</Badge>
                   {data.enrolment.plan ? (
-                    <Badge variant="secondary">{data.enrolment.plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}</Badge>
+                    <Badge variant="secondary">
+                      {data.enrolment.plan.billingType === "PER_WEEK" ? "Per week" : "Per class"}
+                    </Badge>
                   ) : null}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-status">Status</Label>
-                    <Select
-                      value={values.status}
-                      onValueChange={(value) =>
-                        setFieldValue("status", value as EnrolmentEditFormValues["status"])
-                      }
-                    >
-                      <SelectTrigger id="edit-enrolment-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ENROLMENT_STATUS_VALUES.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldError message={fieldErrors.status} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-plan">Plan</Label>
-                    <Select value={values.planId} onValueChange={(value) => setFieldValue("planId", value)}>
-                      <SelectTrigger id="edit-enrolment-plan">
-                        <SelectValue placeholder="Select plan" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {data.options.plans.map((plan) => (
-                          <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"} · {formatCurrencyFromCents(plan.priceCents)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldError message={fieldErrors.planId} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-start">Start date</Label>
-                    <Input
-                      id="edit-enrolment-start"
-                      type="date"
-                      value={values.startDate}
-                      onChange={(event) => setFieldValue("startDate", event.target.value)}
-                    />
-                    <FieldError message={fieldErrors.startDate} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-end">End date</Label>
-                    <Input
-                      id="edit-enrolment-end"
-                      type="date"
-                      value={values.endDate}
-                      onChange={(event) => setFieldValue("endDate", event.target.value)}
-                    />
-                    <FieldError message={fieldErrors.endDate} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-paid-through">Paid-through date</Label>
-                    <Input
-                      id="edit-enrolment-paid-through"
-                      type="date"
-                      value={values.paidThroughDate}
-                      onChange={(event) => setFieldValue("paidThroughDate", event.target.value)}
-                    />
-                    <FieldError message={fieldErrors.paidThroughDate} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-cancelled-at">Cancelled at</Label>
-                    <Input
-                      id="edit-enrolment-cancelled-at"
-                      type="date"
-                      value={values.cancelledAt}
-                      onChange={(event) => setFieldValue("cancelledAt", event.target.value)}
-                    />
-                    <FieldError message={fieldErrors.cancelledAt} />
-                  </div>
-                </div>
-
-                <div className="space-y-3 rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label>Class assignments</Label>
-                    <span className="text-xs text-muted-foreground">
-                      {values.templateIds.length} selected
-                    </span>
-                  </div>
-                  <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
-                    {data.options.classTemplates.map((template) => (
-                      <label
-                        key={template.id}
-                        className="flex cursor-pointer items-start gap-3 rounded border px-3 py-2 text-sm hover:bg-muted/30"
-                      >
-                        <Checkbox
-                          checked={selectedTemplateSet.has(template.id)}
-                          onCheckedChange={(checked) => handleTemplateToggle(template.id, Boolean(checked))}
-                        />
-                        <span className="space-y-0.5">
-                          <span className="block font-medium">{templateLabel(template)}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {template.levelName ?? "No level"} · {template.active ? "Active" : "Inactive"}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <FieldError message={fieldErrors.templateIds} />
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2 rounded-md border p-3">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="edit-enrolment-billing-primary"
-                        checked={values.isBillingPrimary}
-                        onCheckedChange={(checked) =>
-                          setFieldValue("isBillingPrimary", Boolean(checked))
+                <div className="space-y-10">
+                  <FormSection
+                    title="Enrolment details"
+                    description="Update the core enrolment status, dates, and plan configuration."
+                  >
+                    <FormRow label="Status" error={fieldErrors.status}>
+                      <Select
+                        value={values.status}
+                        onValueChange={(value) =>
+                          setFieldValue("status", value as EnrolmentEditFormValues["status"])
                         }
+                      >
+                        <SelectTrigger id="edit-enrolment-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ENROLMENT_STATUS_VALUES.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormRow>
+
+                    <FormRow
+                      label="Plan"
+                      hint="Changing plan can affect billing cadence and coverage."
+                      error={fieldErrors.planId}
+                    >
+                      <Select value={values.planId} onValueChange={(value) => setFieldValue("planId", value)}>
+                        <SelectTrigger id="edit-enrolment-plan">
+                          <SelectValue placeholder="Select plan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {data.options.plans.map((plan) => (
+                            <SelectItem key={plan.id} value={plan.id}>
+                              {plan.name} · {plan.billingType === "PER_WEEK" ? "Per week" : "Per class"} ·{" "}
+                              {formatCurrencyFromCents(plan.priceCents)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormRow>
+
+                    <FormRow label="Start date" error={fieldErrors.startDate}>
+                      <Input
+                        id="edit-enrolment-start"
+                        type="date"
+                        value={values.startDate}
+                        onChange={(event) => setFieldValue("startDate", event.target.value)}
+                        className="max-w-sm"
                       />
-                      <Label htmlFor="edit-enrolment-billing-primary">Billing primary</Label>
-                    </div>
-                    <FieldError message={fieldErrors.isBillingPrimary} />
-                  </div>
+                    </FormRow>
 
-                  <div className="space-y-2 rounded-md border p-3 text-xs text-muted-foreground">
-                    <div>
-                      Computed paid-through: <span className="font-medium text-foreground">{data.enrolment.paidThroughDateComputed || "—"}</span>
-                    </div>
-                    <div>
-                      Next due: <span className="font-medium text-foreground">{data.enrolment.nextDueDateComputed || "—"}</span>
-                    </div>
-                    <div>
-                      Credits remaining: <span className="font-medium text-foreground">{data.enrolment.creditsRemaining ?? "—"}</span>
-                    </div>
-                  </div>
-                </div>
+                    <FormRow label="End date" hint="Leave blank for open-ended enrolments." error={fieldErrors.endDate}>
+                      <Input
+                        id="edit-enrolment-end"
+                        type="date"
+                        value={values.endDate}
+                        onChange={(event) => setFieldValue("endDate", event.target.value)}
+                        className="max-w-sm"
+                      />
+                    </FormRow>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-billing-group">Billing group ID</Label>
-                    <Input
-                      id="edit-enrolment-billing-group"
-                      value={values.billingGroupId}
-                      onChange={(event) => setFieldValue("billingGroupId", event.target.value)}
-                      placeholder="Optional"
-                    />
-                    <FieldError message={fieldErrors.billingGroupId} />
-                  </div>
+                    <FormRow
+                      label="Paid-through date"
+                      hint="Inclusive coverage date used by billing and attendance."
+                      error={fieldErrors.paidThroughDate}
+                    >
+                      <Input
+                        id="edit-enrolment-paid-through"
+                        type="date"
+                        value={values.paidThroughDate}
+                        onChange={(event) => setFieldValue("paidThroughDate", event.target.value)}
+                        className="max-w-sm"
+                      />
+                    </FormRow>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-enrolment-billing-primary-id">Billing primary ID</Label>
-                    <Input
-                      id="edit-enrolment-billing-primary-id"
-                      value={values.billingPrimaryId}
-                      onChange={(event) => setFieldValue("billingPrimaryId", event.target.value)}
-                      placeholder="Optional"
-                    />
-                    <FieldError message={fieldErrors.billingPrimaryId} />
-                  </div>
+                    <FormRow label="Cancelled at" error={fieldErrors.cancelledAt}>
+                      <Input
+                        id="edit-enrolment-cancelled-at"
+                        type="date"
+                        value={values.cancelledAt}
+                        onChange={(event) => setFieldValue("cancelledAt", event.target.value)}
+                        className="max-w-sm"
+                      />
+                    </FormRow>
+                  </FormSection>
+
+                  <FormSection
+                    title="Class assignments"
+                    description="Select all classes this enrolment should be attached to."
+                  >
+                    <FormRow
+                      label="Assigned classes"
+                      hint={`${values.templateIds.length} selected`}
+                      error={fieldErrors.templateIds}
+                    >
+                      <div className="max-h-56 divide-y overflow-y-auto rounded-md border">
+                        {data.options.classTemplates.map((template) => (
+                          <label
+                            key={template.id}
+                            className="flex cursor-pointer items-start gap-3 px-3 py-2.5 text-sm hover:bg-muted/30"
+                          >
+                            <Checkbox
+                              checked={selectedTemplateSet.has(template.id)}
+                              onCheckedChange={(checked) => handleTemplateToggle(template.id, Boolean(checked))}
+                            />
+                            <span className="space-y-0.5">
+                              <span className="block font-medium">{templateLabel(template)}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {template.levelName ?? "No level"} · {template.active ? "Active" : "Inactive"}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </FormRow>
+                  </FormSection>
+
+                  <FormSection
+                    title="Billing settings"
+                    description="These settings impact grouping and account calculations."
+                  >
+                    <FormRow
+                      label="Billing primary"
+                      hint="Marks this enrolment as the billing anchor in its group."
+                      align="center"
+                      error={fieldErrors.isBillingPrimary}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="edit-enrolment-billing-primary"
+                          checked={values.isBillingPrimary}
+                          onCheckedChange={(checked) =>
+                            setFieldValue("isBillingPrimary", Boolean(checked))
+                          }
+                        />
+                        <Label htmlFor="edit-enrolment-billing-primary">Use as billing primary</Label>
+                      </div>
+                    </FormRow>
+
+                    <FormRow label="Billing group ID" error={fieldErrors.billingGroupId}>
+                      <Input
+                        id="edit-enrolment-billing-group"
+                        value={values.billingGroupId}
+                        onChange={(event) => setFieldValue("billingGroupId", event.target.value)}
+                        placeholder="Optional"
+                        className="max-w-md"
+                      />
+                    </FormRow>
+
+                    <FormRow label="Billing primary ID" error={fieldErrors.billingPrimaryId}>
+                      <Input
+                        id="edit-enrolment-billing-primary-id"
+                        value={values.billingPrimaryId}
+                        onChange={(event) => setFieldValue("billingPrimaryId", event.target.value)}
+                        placeholder="Optional"
+                        className="max-w-md"
+                      />
+                    </FormRow>
+
+                    <FormRow
+                      label="Computed values"
+                      hint="Read-only values derived from billing calculations."
+                    >
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div>
+                          Computed paid-through:{" "}
+                          <span className="font-medium text-foreground">
+                            {data.enrolment.paidThroughDateComputed || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          Next due:{" "}
+                          <span className="font-medium text-foreground">
+                            {data.enrolment.nextDueDateComputed || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          Credits remaining:{" "}
+                          <span className="font-medium text-foreground">
+                            {data.enrolment.creditsRemaining ?? "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </FormRow>
+                  </FormSection>
                 </div>
 
                 {saveError ? (
