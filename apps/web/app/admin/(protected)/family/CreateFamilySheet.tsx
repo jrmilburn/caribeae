@@ -16,19 +16,47 @@ import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
 import type { ClientFamilyWithStudents, FamilyActionResult, FamilyStudentPayload } from "@/server/family/types";
 import type { Level } from "@prisma/client";
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3 sm:items-center">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="sm:col-span-2">{children}</div>
-    </div>
+    <section>
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mt-6 space-y-6 border-y border-border/60 py-5 sm:space-y-0 sm:divide-y sm:divide-border/60 sm:py-0">
+        {children}
+      </div>
+    </section>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function FormRow({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {children}
+    <div className="sm:grid sm:grid-cols-3 sm:items-start sm:gap-4 sm:py-5">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground sm:pt-1.5">{label}</p>
+        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      </div>
+      <div className="mt-2 space-y-2 sm:col-span-2 sm:mt-0">
+        {children}
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
     </div>
   );
 }
@@ -323,49 +351,48 @@ export function CreateFamilySheet({ open, onOpenChange, levels, onSave }: Create
             <div className={cn("relative", "min-h-[520px]")}> 
               <div
                 className={cn(
-                  "space-y-6",
+                  "space-y-10",
                   "absolute inset-0 transition-all duration-300",
                   step !== 1 && "-translate-x-6 opacity-0 pointer-events-none",
                   step === 1 && "translate-x-0 opacity-100"
                 )}
               >
-                <div className="space-y-3">
-                  <SectionTitle>Family</SectionTitle>
-                  <FieldRow label="Family name">
-                    <div className="space-y-1">
-                      <Input
-                        value={form.name}
-                        onChange={(e) => setField("name", e.target.value)}
-                        onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                        placeholder="e.g. Smith Family"
-                        className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
-                      />
-                      {nameError ? (
-                        <p className="text-xs text-destructive">{nameError}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          This is what appears in the family list.
-                        </p>
-                      )}
-                    </div>
-                  </FieldRow>
-                </div>
+                <FormSection
+                  title="Family"
+                  description="Set the core family details used in lists and billing."
+                >
+                  <FormRow
+                    label="Family name"
+                    hint="This is what appears in the family list."
+                    error={nameError}
+                  >
+                    <Input
+                      value={form.name}
+                      onChange={(e) => setField("name", e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                      placeholder="e.g. Smith Family"
+                      className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                    />
+                  </FormRow>
+                </FormSection>
 
-                <div className="space-y-3">
-                  <SectionTitle>Primary contact (optional)</SectionTitle>
-                  <FieldRow label="Name">
+                <FormSection
+                  title="Primary Contact (Optional)"
+                  description="Main contact details for communication and payment follow-up."
+                >
+                  <FormRow label="Name">
                     <Input
                       value={form.primaryContactName ?? ""}
                       onChange={(e) => setField("primaryContactName", e.target.value)}
                     />
-                  </FieldRow>
-                  <FieldRow label="Email">
+                  </FormRow>
+                  <FormRow label="Email">
                     <Input
                       value={form.primaryEmail ?? ""}
                       onChange={(e) => setField("primaryEmail", e.target.value)}
                     />
-                  </FieldRow>
-                  <FieldRow label="Phone">
+                  </FormRow>
+                  <FormRow label="Phone">
                     <SmartPhoneInput
                       label="Phone"
                       hideLabel
@@ -377,24 +404,26 @@ export function CreateFamilySheet({ open, onOpenChange, levels, onSave }: Create
                       onBlur={() => validatePhoneField("primaryPhone")}
                       error={phoneErrors.primaryPhone}
                     />
-                  </FieldRow>
-                </div>
+                  </FormRow>
+                </FormSection>
 
-                <div className="space-y-3">
-                  <SectionTitle>Secondary contact (optional)</SectionTitle>
-                  <FieldRow label="Name">
+                <FormSection
+                  title="Secondary Contact (Optional)"
+                  description="Backup contact details if the primary contact is unavailable."
+                >
+                  <FormRow label="Name">
                     <Input
                       value={form.secondaryContactName ?? ""}
                       onChange={(e) => setField("secondaryContactName", e.target.value)}
                     />
-                  </FieldRow>
-                  <FieldRow label="Email">
+                  </FormRow>
+                  <FormRow label="Email">
                     <Input
                       value={form.secondaryEmail ?? ""}
                       onChange={(e) => setField("secondaryEmail", e.target.value)}
                     />
-                  </FieldRow>
-                  <FieldRow label="Phone">
+                  </FormRow>
+                  <FormRow label="Phone">
                     <SmartPhoneInput
                       label="Phone"
                       hideLabel
@@ -406,35 +435,39 @@ export function CreateFamilySheet({ open, onOpenChange, levels, onSave }: Create
                       onBlur={() => validatePhoneField("secondaryPhone")}
                       error={phoneErrors.secondaryPhone}
                     />
-                  </FieldRow>
-                </div>
+                  </FormRow>
+                </FormSection>
 
-                <div className="space-y-3">
-                  <SectionTitle>Address</SectionTitle>
-                  <FieldRow label="Address">
+                <FormSection
+                  title="Address"
+                  description="Optional residential or mailing address for family records."
+                >
+                  <FormRow label="Address">
                     <Input
                       value={form.address ?? ""}
                       onChange={(e) => setField("address", e.target.value)}
                       placeholder="Street, suburb, state"
                     />
-                  </FieldRow>
-                </div>
+                  </FormRow>
+                </FormSection>
 
-                <div className="space-y-3">
-                  <SectionTitle>Medical contact (optional)</SectionTitle>
-                  <FieldRow label="Name">
+                <FormSection
+                  title="Medical Contact (Optional)"
+                  description="Emergency contact details for medical-related communication."
+                >
+                  <FormRow label="Name">
                     <Input
                       value={form.medicalContactName ?? ""}
                       onChange={(e) => setField("medicalContactName", e.target.value)}
                     />
-                  </FieldRow>
-                  <FieldRow label="Phone">
+                  </FormRow>
+                  <FormRow label="Phone">
                     <Input
                       value={form.medicalContactPhone ?? ""}
                       onChange={(e) => setField("medicalContactPhone", e.target.value)}
                     />
-                  </FieldRow>
-                </div>
+                  </FormRow>
+                </FormSection>
               </div>
 
               <div
@@ -445,7 +478,9 @@ export function CreateFamilySheet({ open, onOpenChange, levels, onSave }: Create
                 )}
               >
                 <div className="space-y-1">
-                  <SectionTitle>Students (optional)</SectionTitle>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Students (optional)
+                  </div>
                   <p className="text-sm text-muted-foreground">Add students now or skip and add them later.</p>
                 </div>
 
