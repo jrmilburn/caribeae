@@ -85,7 +85,7 @@ export function TeachersSection({ teachers }: { teachers: Teacher[] }) {
         </div>
       </div>
 
-      <Card className="border-l-0! pb-0 shadow-none">
+      <Card className="border-x-0! pb-0 shadow-none">
         <CardContent className="px-2 py-0">
           <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
