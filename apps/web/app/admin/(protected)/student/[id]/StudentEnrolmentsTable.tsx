@@ -135,16 +135,28 @@ export function StudentEnrolmentsTable({
 
   return (
     <>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Class/template</TableHead>
-              <TableHead>Schedule</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Start</TableHead>
-              <TableHead>End</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+        <Table className="min-w-full">
+          <TableHeader className="bg-muted/40">
+            <TableRow className="hover:bg-muted/40">
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Class/template
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Schedule
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Status
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Start
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                End
+              </TableHead>
+              <TableHead className="h-11 px-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -167,8 +179,8 @@ export function StudentEnrolmentsTable({
                 : ["—"];
 
               return (
-                <TableRow key={enrolment.id}>
-                  <TableCell className="font-medium">
+                <TableRow key={enrolment.id} className="hover:bg-muted/30">
+                  <TableCell className="px-4 py-3 align-top font-medium whitespace-normal">
                     <div className="space-y-1">
                       {assignments.length
                         ? assignments.map((template, index) => (
@@ -183,21 +195,21 @@ export function StudentEnrolmentsTable({
                         : "—"}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="px-4 py-3 whitespace-nowrap">
                     <div className="space-y-1">
                       {scheduleLabels.map((label, index) => (
                         <div key={`${enrolment.id}-schedule-${index}`}>{label}</div>
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="px-4 py-3">
                     <Badge variant={enrolment.status === "CHANGEOVER" ? "outline" : "secondary"}>
                       {enrolment.status === "CHANGEOVER" ? "Changeover" : enrolment.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{fmtDate(enrolment.startDate)}</TableCell>
-                  <TableCell>{fmtDate(enrolment.endDate ?? null)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="px-4 py-3">{fmtDate(enrolment.startDate)}</TableCell>
+                  <TableCell className="px-4 py-3">{fmtDate(enrolment.endDate ?? null)}</TableCell>
+                  <TableCell className="px-4 py-3 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">

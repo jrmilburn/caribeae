@@ -100,16 +100,28 @@ export function EnrolmentsTable({
 
   return (
     <>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Student</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Start</TableHead>
-              <TableHead>End</TableHead>
-              <TableHead>Paid through</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+        <Table className="min-w-full">
+          <TableHeader className="bg-muted/40">
+            <TableRow className="hover:bg-muted/40">
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Student
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Status
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Start
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                End
+              </TableHead>
+              <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Paid through
+              </TableHead>
+              <TableHead className="h-11 px-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,8 +136,8 @@ export function EnrolmentsTable({
               const showExcused = Boolean(attendance?.isExcused) && !showAway;
 
               return (
-                <TableRow key={e.id}>
-                  <TableCell className="font-medium">
+                <TableRow key={e.id} className="hover:bg-muted/30">
+                  <TableCell className="px-4 py-3 align-top font-medium whitespace-normal">
                     <div className="space-y-1">
                       <Link href={`/admin/student/${e.student.id}`} className="w-full underline">
                         {e.student.name ?? "Unnamed student"}
@@ -146,11 +158,11 @@ export function EnrolmentsTable({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell>{e.status}</TableCell>
-                  <TableCell>{fmtDate(e.startDate)}</TableCell>
-                  <TableCell>{fmtDate(e.endDate ?? null)}</TableCell>
-                  <TableCell>{formatBrisbaneDate(e.paidThroughDate ?? null)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="px-4 py-3">{e.status}</TableCell>
+                  <TableCell className="px-4 py-3">{fmtDate(e.startDate)}</TableCell>
+                  <TableCell className="px-4 py-3">{fmtDate(e.endDate ?? null)}</TableCell>
+                  <TableCell className="px-4 py-3">{formatBrisbaneDate(e.paidThroughDate ?? null)}</TableCell>
+                  <TableCell className="px-4 py-3 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">

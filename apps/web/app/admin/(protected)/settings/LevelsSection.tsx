@@ -6,7 +6,7 @@ import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +63,13 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
         <div className="sm:flex-auto">
           <h2 className="text-lg font-semibold">Levels</h2>
         </div>
-        <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+        <div className="mt-4 flex w-full items-center gap-3 sm:mt-0 sm:ml-16 sm:w-auto sm:flex-none">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search levels"
+            className="w-full sm:w-64"
+          />
           <Button
             size="sm"
             onClick={() => {
@@ -78,15 +84,6 @@ export function LevelsSection({ levels }: { levels: Level[] }) {
       </div>
 
       <Card className="border-l-0! shadow-none pb-0">
-        <CardHeader className="flex flex-row items-center justify-end gap-3 space-y-0 px-4 pt-0">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search levels"
-            className="max-w-xs"
-          />
-        </CardHeader>
-
         <CardContent className="px-2 py-0">
           <div className="flow-root">
             <div className="-mx-4 -my-2 overflow-x-auto sm:mx-0 sm:overflow-x-visible">
