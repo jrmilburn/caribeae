@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -170,6 +170,7 @@ export default function StudentPageClient({
   enrolmentPlans: EnrolmentPlan[];
   billingPosition: FamilyBillingPosition;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = parseReturnContext(searchParams);
 
@@ -397,10 +398,12 @@ export default function StudentPageClient({
                   enrolmentPlans={enrolmentPlans}
                   onUpdated={() => {
                     setEnrolmentAction(null);
+                    router.refresh();
                   }}
                   action={enrolmentAction}
                   onActionHandled={() => setEnrolmentAction(null)}
                   showPaidThroughAction={false}
+                  editContextSource="student"
                 />
               ) : null}
             </TabsContent>

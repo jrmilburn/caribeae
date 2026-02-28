@@ -877,7 +877,11 @@ export default function FamilyForm({
                         student={studentDetails}
                         levels={levels}
                         enrolmentPlans={enrolmentPlans}
-                        onUpdated={() => refreshStudentDetails(selectedStudentId)}
+                        onUpdated={() => {
+                          refreshStudentDetails(selectedStudentId);
+                          router.refresh();
+                        }}
+                        editContextSource="family"
                       />
                     ) : (
                       <div className="text-sm text-muted-foreground">

@@ -32,6 +32,12 @@ import { ChangeEnrolmentDialog } from "./ChangeEnrolmentDialog";
 import { undoEnrolment } from "@/server/enrolment/undoEnrolment";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
+import { EditEnrolmentSheet } from "@/components/admin/enrolment/EditEnrolmentSheet";
+import type {
+  EnrolmentEditContextSource,
+  EnrolmentEditSnapshot,
+} from "@/lib/enrolment/editEnrolmentModel";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 type EnrolmentRow = ClientStudentWithRelations["enrolments"][number];
 
@@ -66,6 +72,7 @@ export function StudentEnrolmentsTable({
   showPaidThroughAction = true,
   action,
   onActionHandled,
+  editContextSource = "student",
 }: {
   enrolments: EnrolmentRow[];
   levels: Level[];
@@ -75,12 +82,19 @@ export function StudentEnrolmentsTable({
   showPaidThroughAction?: boolean;
   action?: { type: "change-enrolment" | "edit-paid-through"; enrolmentId: string } | null;
   onActionHandled?: () => void;
+  editContextSource?: EnrolmentEditContextSource;
 }) {
   const router = useRouter();
+  const [rows, setRows] = React.useState<EnrolmentRow[]>(enrolments);
   const [editing, setEditing] = React.useState<EnrolmentRow | null>(null);
+  const [editingEnrolmentId, setEditingEnrolmentId] = React.useState<string | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentRow | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
   const lastActionRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    setRows(enrolments);
+  }, [enrolments]);
 
   React.useEffect(() => {
     if (!action) {
@@ -90,7 +104,7 @@ export function StudentEnrolmentsTable({
     const key = `${action.type}:${action.enrolmentId}`;
     if (lastActionRef.current === key) return;
     lastActionRef.current = key;
-    const target = enrolments.find((enrolment) => enrolment.id === action.enrolmentId) ?? enrolments[0];
+    const target = rows.find((enrolment) => enrolment.id === action.enrolmentId) ?? rows[0];
     if (!target) {
       onActionHandled?.();
       return;
@@ -110,11 +124,43 @@ export function StudentEnrolmentsTable({
       setEditingPaidThrough(target);
     }
     onActionHandled?.();
-  }, [action, enrolments, onActionHandled, showPaidThroughAction]);
+  }, [action, onActionHandled, rows, showPaidThroughAction]);
 
-  if (!enrolments.length) {
+  if (!rows.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
   }
+
+  const parseDayKey = (value: string) => {
+    if (!value) return null;
+    try {
+      return brisbaneStartOfDay(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const applyLocalUpdate = (updated: EnrolmentEditSnapshot) => {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== updated.id) return row;
+        return {
+          ...row,
+          status: updated.status,
+          startDate: parseDayKey(updated.startDate) ?? row.startDate,
+          endDate: parseDayKey(updated.endDate),
+          paidThroughDate: parseDayKey(updated.paidThroughDate),
+          cancelledAt: parseDayKey(updated.cancelledAt),
+          templateId: updated.templateId,
+          planId: updated.planId || null,
+          isBillingPrimary: updated.isBillingPrimary,
+          billingGroupId: updated.billingGroupId || null,
+          billingPrimaryId: updated.billingPrimaryId || null,
+          classAssignments: row.classAssignments,
+          plan: row.plan && row.plan.id === updated.planId ? row.plan : null,
+        };
+      })
+    );
+  };
 
   const handleUndo = async (id: string) => {
     const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
@@ -160,7 +206,7 @@ export function StudentEnrolmentsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {enrolments.map((enrolment) => {
+            {rows.map((enrolment) => {
               const assignments = enrolment.classAssignments?.length
                 ? enrolment.classAssignments.map((assignment) => assignment.template)
                 : enrolment.template
@@ -218,6 +264,9 @@ export function StudentEnrolmentsTable({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => setEditingEnrolmentId(enrolment.id)}>
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!enrolment.plan}
                           onClick={() => {
@@ -286,6 +335,18 @@ export function StudentEnrolmentsTable({
           }}
         />
       ) : null}
+      <EditEnrolmentSheet
+        enrolmentId={editingEnrolmentId}
+        open={Boolean(editingEnrolmentId)}
+        onOpenChange={(next) => {
+          if (!next) setEditingEnrolmentId(null);
+        }}
+        context={{ source: editContextSource }}
+        onSaved={(updated) => {
+          applyLocalUpdate(updated);
+          onUpdated?.();
+        }}
+      />
     </>
   );
 }

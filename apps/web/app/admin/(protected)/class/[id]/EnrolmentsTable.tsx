@@ -33,6 +33,9 @@ import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog"
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { MoveClassDialog } from "./MoveClassDialog";
 import { RemoveFromClassDialog } from "./RemoveFromClassDialog";
+import { EditEnrolmentSheet } from "@/components/admin/enrolment/EditEnrolmentSheet";
+import type { EnrolmentEditSnapshot } from "@/lib/enrolment/editEnrolmentModel";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 function fmtDate(d: Date | null | undefined) {
   if (!d) return "—";
@@ -72,15 +75,53 @@ export function EnrolmentsTable({
   >;
 }) {
   const router = useRouter();
+  const [rows, setRows] = React.useState<EnrolmentWithStudent[]>(enrolments);
   const [editing, setEditing] = React.useState<EnrolmentWithStudent | null>(null);
+  const [editingEnrolmentId, setEditingEnrolmentId] = React.useState<string | null>(null);
   const [editingPaidThrough, setEditingPaidThrough] = React.useState<EnrolmentWithStudent | null>(null);
   const [undoingId, setUndoingId] = React.useState<string | null>(null);
   const [moving, setMoving] = React.useState<EnrolmentWithStudent | null>(null);
   const [removing, setRemoving] = React.useState<EnrolmentWithStudent | null>(null);
 
-  if (!enrolments.length) {
+  React.useEffect(() => {
+    setRows(enrolments);
+  }, [enrolments]);
+
+  if (!rows.length) {
     return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
   }
+
+  const parseDayKey = (value: string) => {
+    if (!value) return null;
+    try {
+      return brisbaneStartOfDay(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const applyLocalUpdate = (updated: EnrolmentEditSnapshot) => {
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== updated.id) return row;
+        return {
+          ...row,
+          status: updated.status,
+          startDate: parseDayKey(updated.startDate) ?? row.startDate,
+          endDate: parseDayKey(updated.endDate),
+          paidThroughDate: parseDayKey(updated.paidThroughDate),
+          cancelledAt: parseDayKey(updated.cancelledAt),
+          templateId: updated.templateId,
+          planId: updated.planId || null,
+          isBillingPrimary: updated.isBillingPrimary,
+          billingGroupId: updated.billingGroupId || null,
+          billingPrimaryId: updated.billingPrimaryId || null,
+          classAssignments: updated.templateIds.map((templateId) => ({ templateId })),
+          plan: row.plan && row.plan.id === updated.planId ? row.plan : null,
+        };
+      })
+    );
+  };
 
   const handleUndo = async (id: string) => {
     const confirmed = window.confirm("Undo this enrolment? Invoices will be voided if unpaid.");
@@ -125,7 +166,7 @@ export function EnrolmentsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {enrolments.map((e) => {
+            {rows.map((e) => {
               const linkedTemplateIds = new Set([
                 e.templateId,
                 ...(e.classAssignments?.map((assignment) => assignment.templateId) ?? []),
@@ -171,6 +212,9 @@ export function EnrolmentsTable({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => setEditingEnrolmentId(e.id)}>
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!e.plan}
                           onClick={() => {
@@ -280,6 +324,18 @@ export function EnrolmentsTable({
           }}
         />
       ) : null}
+      <EditEnrolmentSheet
+        enrolmentId={editingEnrolmentId}
+        open={Boolean(editingEnrolmentId)}
+        onOpenChange={(next) => {
+          if (!next) setEditingEnrolmentId(null);
+        }}
+        context={{ source: "class", sourceId: fromClassTemplate.id }}
+        onSaved={(updated) => {
+          applyLocalUpdate(updated);
+          router.refresh();
+        }}
+      />
     </>
   );
 }

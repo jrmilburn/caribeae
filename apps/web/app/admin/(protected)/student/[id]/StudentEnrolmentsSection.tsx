@@ -11,6 +11,7 @@ import type { ClientStudentWithRelations } from "./types";
 import { StudentEnrolmentsTable } from "./StudentEnrolmentsTable";
 import { AddEnrolmentDialog } from "./AddEnrolmentDialog";
 import { MergeEnrolmentsDialog } from "./MergeEnrolmentsDialog";
+import type { EnrolmentEditContextSource } from "@/lib/enrolment/editEnrolmentModel";
 
 export function StudentEnrolmentsSection({
   student,
@@ -20,6 +21,7 @@ export function StudentEnrolmentsSection({
   showPaidThroughAction = true,
   action,
   onActionHandled,
+  editContextSource = "student",
 }: {
   student: ClientStudentWithRelations;
   levels: Level[];
@@ -28,6 +30,7 @@ export function StudentEnrolmentsSection({
   showPaidThroughAction?: boolean;
   action?: "add-enrolment" | "change-enrolment" | "edit-paid-through" | null;
   onActionHandled?: () => void;
+  editContextSource?: EnrolmentEditContextSource;
 }) {
   const [open, setOpen] = React.useState(false);
   const [mergeOpen, setMergeOpen] = React.useState(false);
@@ -80,6 +83,7 @@ export function StudentEnrolmentsSection({
           enrolmentPlans={enrolmentPlans}
           onUpdated={onUpdated}
           showPaidThroughAction={showPaidThroughAction}
+          editContextSource={editContextSource}
           action={
             action === "change-enrolment" || action === "edit-paid-through"
               ? primaryEnrolment
