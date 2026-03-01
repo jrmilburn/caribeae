@@ -1,6 +1,6 @@
 import "server-only";
 
-import { EnrolmentStatus } from "@prisma/client";
+import { EnrolmentStatus, MakeupBookingStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
@@ -166,7 +166,42 @@ export async function ensureTeacherCanAccessStudent(params: {
     select: { id: true },
   });
 
-  if (!enrolment) {
-    throw new Error("Unauthorized");
+  if (enrolment) {
+    return;
   }
+
+  const makeupBooking = await prisma.makeupBooking.findFirst({
+    where: {
+      studentId: params.studentId,
+      targetSessionDate: date,
+      status: MakeupBookingStatus.BOOKED,
+      targetClass: {
+        OR: [
+          {
+            teacherSubstitutions: {
+              some: {
+                date,
+                teacherId: params.teacherId,
+              },
+            },
+          },
+          {
+            teacherId: params.teacherId,
+            teacherSubstitutions: {
+              none: {
+                date,
+              },
+            },
+          },
+        ],
+      },
+    },
+    select: { id: true },
+  });
+
+  if (makeupBooking) {
+    return;
+  }
+
+  throw new Error("Unauthorized");
 }
