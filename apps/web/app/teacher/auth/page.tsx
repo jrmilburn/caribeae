@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 
@@ -18,6 +19,25 @@ import {
 const NOT_ELIGIBLE_MESSAGE = "Your teacher account isn't enabled yet. Please contact the admin.";
 
 export default function TeacherAuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <AuthShell mode="teacher">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              Teacher access
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Loading sign in</h1>
+          </div>
+        </AuthShell>
+      }
+    >
+      <TeacherAuthContent />
+    </Suspense>
+  );
+}
+
+function TeacherAuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signOut } = useClerk();
