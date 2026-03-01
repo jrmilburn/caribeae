@@ -60,6 +60,14 @@ function dayKeyIsBefore(a: Date | string, b: Date | string) {
   return brisbaneCompare(dayKey(a), dayKey(b)) < 0;
 }
 
+function resolveRequiredMakeupLevelId(params: {
+  studentLevelId: string | null;
+  creditLevelId: string | null;
+}) {
+  // Match booking options to the student's current level, with credit-level fallback for legacy data.
+  return params.studentLevelId ?? params.creditLevelId ?? null;
+}
+
 function revalidateMakeupPaths(familyId: string, classId?: string | null) {
   revalidatePath(`/admin/family/${familyId}`);
   revalidatePath("/portal");
@@ -243,7 +251,10 @@ export async function listAvailableMakeupSessionsForCredit(
     throw new Error("This makeup credit is not available.");
   }
 
-  const levelId = credit.levelId ?? credit.student.levelId;
+  const levelId = resolveRequiredMakeupLevelId({
+    studentLevelId: credit.student.levelId ?? null,
+    creditLevelId: credit.levelId ?? null,
+  });
   if (!levelId) {
     throw new Error("Student level is required to book a makeup.");
   }
@@ -396,7 +407,10 @@ export async function bookMakeupSession(input: z.input<typeof bookMakeupSessionS
           throw new Error("This class session has already started.");
         }
 
-        const requiredLevelId = credit.levelId ?? credit.student.levelId;
+        const requiredLevelId = resolveRequiredMakeupLevelId({
+          studentLevelId: credit.student.levelId ?? null,
+          creditLevelId: credit.levelId ?? null,
+        });
         if (!requiredLevelId) {
           throw new Error("Student level is required to book this makeup.");
         }
