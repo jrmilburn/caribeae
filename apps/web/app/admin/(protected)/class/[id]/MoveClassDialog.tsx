@@ -29,8 +29,10 @@ import {
 } from "@/components/ui/select";
 import {
   formatScheduleWeekdayTime,
+  scheduleAddDays,
   scheduleDateAtMinutes,
   scheduleDateKey,
+  scheduleWeekStart,
   ScheduleView,
   type NormalizedScheduleClass,
 } from "@/packages/schedule";
@@ -48,7 +50,9 @@ function formatTemplateLabel(template: ClassTemplate & { level: Level | null }) 
   const name = template.name?.trim() || "Untitled class";
   const levelName = template.level?.name ?? "Level";
   if (template.startTime != null && template.dayOfWeek != null) {
-    const date = scheduleDateAtMinutes(new Date(), template.startTime);
+    const weekStart = scheduleWeekStart(new Date());
+    const classDay = scheduleAddDays(weekStart, template.dayOfWeek);
+    const date = scheduleDateAtMinutes(classDay, template.startTime);
     return `${name} · ${levelName} · ${formatScheduleWeekdayTime(date)}`;
   }
   return `${name} · ${levelName}`;
