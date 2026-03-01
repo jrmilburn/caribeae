@@ -12,7 +12,6 @@ import {
   Receipt,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,19 +50,6 @@ type CheckoutCreateResponse = {
 
 function classNames(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function statusBadgeClass(status: PortalPayment["status"]) {
-  if (status === "PAID") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (status === "PENDING") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  if (status === "FAILED") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-  return "border-gray-200 bg-gray-100 text-gray-700";
 }
 
 function statusLabel(status: PortalPayment["status"]) {
@@ -205,93 +191,6 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
             )}
           </div>
         </div>
-      </section>
-
-      <section className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-        <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
-          <h2 className="text-base font-semibold text-gray-900">Recent payments</h2>
-          <p className="mt-1 text-sm text-gray-600">Compact list optimized for mobile and desktop.</p>
-        </div>
-
-        {sortedPayments.length === 0 ? (
-          <div className="px-6 py-10 text-center">
-            <p className="text-sm font-medium text-gray-900">No payments yet.</p>
-            <p className="mt-2 text-sm text-gray-500">Payments will appear here once a transaction is recorded.</p>
-          </div>
-        ) : (
-          <div className="-mx-4 sm:mx-0">
-            <table className="min-w-full divide-y divide-gray-300">
-              <thead className="hidden sm:table-header-group">
-                <tr>
-                  <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
-                    Amount
-                  </th>
-                  <th scope="col" className="hidden px-3 py-3.5 text-left text-sm font-semibold text-gray-900 md:table-cell">
-                    Date
-                  </th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                    Status
-                  </th>
-                  <th scope="col" className="hidden px-3 py-3.5 text-left text-sm font-semibold text-gray-900 lg:table-cell">
-                    Method
-                  </th>
-                  <th scope="col" className="py-3.5 pl-3 pr-4 text-right text-sm font-semibold text-gray-900 sm:pr-6">
-                    Receipts
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {sortedPayments.map((payment) => (
-                  <tr key={payment.id}>
-                    <td className="w-full max-w-0 py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:w-auto sm:max-w-none sm:pl-6">
-                      {formatCurrencyFromCents(payment.amountCents)}
-                      <dl className="mt-1 font-normal sm:hidden">
-                        <dt className="sr-only">Date</dt>
-                        <dd className="truncate text-gray-600">{formatBrisbaneDate(payment.paidAt ?? payment.createdAt)}</dd>
-                        <dt className="sr-only">Method</dt>
-                        <dd className="truncate text-gray-500">{payment.method || "Method unavailable"}</dd>
-                        {payment.stripeSessionId ? (
-                          <>
-                            <dt className="sr-only">Session</dt>
-                            <dd className="truncate text-gray-500">Session: {payment.stripeSessionId}</dd>
-                          </>
-                        ) : null}
-                      </dl>
-                    </td>
-                    <td className="hidden px-3 py-4 text-sm text-gray-600 md:table-cell">
-                      {formatBrisbaneDate(payment.paidAt ?? payment.createdAt)}
-                    </td>
-                    <td className="px-3 py-4 text-sm text-gray-600">
-                      <Badge variant="outline" className={statusBadgeClass(payment.status)}>
-                        {statusLabel(payment.status)}
-                      </Badge>
-                    </td>
-                    <td className="hidden px-3 py-4 text-sm text-gray-600 lg:table-cell">{payment.method || "-"}</td>
-                    <td className="py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                      {payment.invoiceIds.length ? (
-                        <div className="flex flex-wrap justify-end gap-2">
-                          {payment.invoiceIds.map((invoiceId) => (
-                            <Link
-                              key={invoiceId}
-                              href={`/portal/invoice/${invoiceId}/receipt`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-teal-700 hover:text-teal-600"
-                            >
-                              Receipt
-                            </Link>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
 
       <section className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
