@@ -156,6 +156,7 @@ export async function setTeacherStudentSkillMastery(input: {
   studentId: string;
   skillId: string;
   mastered: boolean;
+  templateId?: string;
 }): Promise<TeacherSkillUpdateResult> {
   const teacher = await requireTeacherForAction();
 
@@ -163,6 +164,7 @@ export async function setTeacherStudentSkillMastery(input: {
     teacherId: teacher.id,
     studentId: input.studentId,
     date: getTodayBrisbaneDate(),
+    templateId: input.templateId,
   });
 
   const [student, skill] = await Promise.all([

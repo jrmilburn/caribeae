@@ -50,6 +50,7 @@ export default async function TeacherStudentPage({ params, searchParams }: PageP
 
       <TeacherStudentPageClient
         studentId={data.student.id}
+        templateId={classId}
         skills={data.skills}
         history={data.history}
       />

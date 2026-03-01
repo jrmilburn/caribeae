@@ -14,12 +14,14 @@ import type {
 
 type TeacherStudentPageClientProps = {
   studentId: string;
+  templateId?: string;
   skills: TeacherStudentSkillItem[];
   history: TeacherStudentHistoryItem[];
 };
 
 export default function TeacherStudentPageClient({
   studentId,
+  templateId,
   skills: initialSkills,
   history,
 }: TeacherStudentPageClientProps) {
@@ -40,6 +42,7 @@ export default function TeacherStudentPageClient({
             studentId,
             skillId,
             mastered,
+            templateId,
           }),
         {
           pending: { title: "Saving skill..." },
