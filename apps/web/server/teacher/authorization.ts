@@ -260,3 +260,82 @@ export async function ensureTeacherCanAccessStudent(params: {
 
   throw new Error("Unauthorized");
 }
+
+export async function ensureTeacherCanAccessStudentForProgress(params: {
+  teacherId: string;
+  studentId: string;
+  date?: Date;
+  templateId?: string;
+}) {
+  const date = brisbaneStartOfDay(params.date ?? new Date());
+
+  try {
+    await ensureTeacherCanAccessStudent({
+      teacherId: params.teacherId,
+      studentId: params.studentId,
+      date,
+      templateId: params.templateId,
+    });
+    return;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message !== "Unauthorized" && message !== "Class is unavailable.") {
+      throw error;
+    }
+  }
+
+  if (!params.templateId) {
+    throw new Error("Unauthorized");
+  }
+
+  const linkedTemplate = await prisma.classTemplate.findFirst({
+    where: {
+      id: params.templateId,
+      OR: [
+        { teacherId: params.teacherId },
+        { teacherSubstitutions: { some: { teacherId: params.teacherId } } },
+      ],
+      AND: [
+        {
+          OR: [
+            {
+              enrolments: {
+                some: {
+                  studentId: params.studentId,
+                  status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
+                  startDate: { lte: date },
+                  OR: [{ endDate: null }, { endDate: { gte: date } }],
+                },
+              },
+            },
+            {
+              enrolmentAssignments: {
+                some: {
+                  enrolment: {
+                    studentId: params.studentId,
+                    status: { in: [EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER] },
+                    startDate: { lte: date },
+                    OR: [{ endDate: null }, { endDate: { gte: date } }],
+                  },
+                },
+              },
+            },
+            {
+              makeupBookingsTarget: {
+                some: {
+                  studentId: params.studentId,
+                  status: MakeupBookingStatus.BOOKED,
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!linkedTemplate) {
+    throw new Error("Unauthorized");
+  }
+}

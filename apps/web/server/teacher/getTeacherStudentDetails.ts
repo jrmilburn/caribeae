@@ -3,7 +3,7 @@ import "server-only";
 import type { AttendanceStatus, StudentSkillProgressAction } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { ensureTeacherCanAccessStudent, getTodayBrisbaneDate } from "@/server/teacher/authorization";
+import { ensureTeacherCanAccessStudentForProgress, getTodayBrisbaneDate } from "@/server/teacher/authorization";
 
 export type TeacherStudentSkillItem = {
   skillId: string;
@@ -59,7 +59,7 @@ export async function getTeacherStudentDetails(params: {
 }): Promise<TeacherStudentDetails> {
   const today = getTodayBrisbaneDate();
 
-  await ensureTeacherCanAccessStudent({
+  await ensureTeacherCanAccessStudentForProgress({
     teacherId: params.teacherId,
     studentId: params.studentId,
     date: today,

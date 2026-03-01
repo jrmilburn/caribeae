@@ -12,7 +12,7 @@ import { registerCreditConsumptionForDate } from "@/server/billing/enrolmentBill
 import { getEligibleStudentsForOccurrence } from "@/server/class/getClassOccurrenceRoster";
 import {
   assertTeacherCanManageClassForDate,
-  ensureTeacherCanAccessStudent,
+  ensureTeacherCanAccessStudentForProgress,
   getTodayBrisbaneDate,
   getTodayBrisbaneDayKey,
   requireTeacherForAction,
@@ -160,7 +160,7 @@ export async function setTeacherStudentSkillMastery(input: {
 }): Promise<TeacherSkillUpdateResult> {
   const teacher = await requireTeacherForAction();
 
-  await ensureTeacherCanAccessStudent({
+  await ensureTeacherCanAccessStudentForProgress({
     teacherId: teacher.id,
     studentId: input.studentId,
     date: getTodayBrisbaneDate(),
