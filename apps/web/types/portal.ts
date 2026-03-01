@@ -7,6 +7,33 @@ export type PortalClassOption = {
   levelId: string;
 };
 
+export type PortalStudentSkillSummary = {
+  totalSkills: number;
+  masteredSkills: number;
+  nextSkills: string[];
+};
+
+export type PortalStudentHistoryKind = "ENROLMENT" | "SKILL" | "LEVEL";
+
+export type PortalStudentHistoryItem = {
+  id: string;
+  kind: PortalStudentHistoryKind;
+  occurredAt: Date;
+  title: string;
+  description: string;
+};
+
+export type PortalStudentCurrentEnrolment = {
+  id: string;
+  status: string;
+  className: string | null;
+  classDayOfWeek: number | null;
+  classStartTime: number | null;
+  classEndTime: number | null;
+  startDate: Date;
+  endDate: Date | null;
+};
+
 export type PortalStudentSummary = {
   id: string;
   name: string;
@@ -14,6 +41,9 @@ export type PortalStudentSummary = {
   paidThroughDate: Date | null;
   currentClassId: string | null;
   eligibleClasses: PortalClassOption[];
+  currentEnrolment: PortalStudentCurrentEnrolment | null;
+  skillProgress: PortalStudentSkillSummary;
+  history: PortalStudentHistoryItem[];
 };
 
 export type FamilyPortalDashboard = {

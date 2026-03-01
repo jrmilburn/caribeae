@@ -9,6 +9,18 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { OPEN_INVOICE_STATUSES } from "@/server/invoicing";
 import type { FamilyPortalDashboard, PortalClassOption, PortalStudentSummary } from "@/types/portal";
 
+function toSentenceCase(value: string) {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatSkillAction(action: "MASTERED" | "UNMASTERED") {
+  return action === "MASTERED" ? "marked as mastered" : "marked as not mastered";
+}
+
 export async function getFamilyDashboardData(familyId: string): Promise<FamilyPortalDashboard> {
   const today = brisbaneStartOfDay(new Date());
 
@@ -42,15 +54,70 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
                   name: true,
                   dayOfWeek: true,
                   startTime: true,
+                  endTime: true,
                 },
               },
               plan: {
                 select: {
                   id: true,
+                  name: true,
                   billingType: true,
                   priceCents: true,
                   blockClassCount: true,
                   sessionsPerWeek: true,
+                },
+              },
+            },
+          },
+          skillProgress: {
+            where: {
+              mastered: true,
+              skill: { active: true },
+            },
+            orderBy: [{ masteredAt: "desc" }, { updatedAt: "desc" }],
+            select: {
+              skillId: true,
+              mastered: true,
+              masteredAt: true,
+              skill: {
+                select: {
+                  id: true,
+                  name: true,
+                  levelId: true,
+                },
+              },
+            },
+          },
+          skillEvents: {
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            select: {
+              id: true,
+              createdAt: true,
+              action: true,
+              note: true,
+              skill: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          levelChanges: {
+            orderBy: { effectiveDate: "desc" },
+            take: 8,
+            select: {
+              id: true,
+              effectiveDate: true,
+              note: true,
+              fromLevel: {
+                select: {
+                  name: true,
+                },
+              },
+              toLevel: {
+                select: {
+                  name: true,
                 },
               },
             },
@@ -126,29 +193,50 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
     new Set(family.students.map((student) => student.levelId).filter(Boolean))
   ) as string[];
 
-  const classTemplates = levelIds.length
-    ? await prisma.classTemplate.findMany({
-        where: {
-          active: true,
-          levelId: { in: levelIds },
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
-        },
-        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-        select: {
-          id: true,
-          name: true,
-          dayOfWeek: true,
-          startTime: true,
-          endTime: true,
-          levelId: true,
-        },
-      })
-    : [];
+  const [classTemplates, levelSkills] = levelIds.length
+    ? await Promise.all([
+        prisma.classTemplate.findMany({
+          where: {
+            active: true,
+            levelId: { in: levelIds },
+            OR: [{ endDate: null }, { endDate: { gte: today } }],
+          },
+          orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+            levelId: true,
+          },
+        }),
+        prisma.skill.findMany({
+          where: {
+            active: true,
+            levelId: { in: levelIds },
+          },
+          orderBy: [{ levelId: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            levelId: true,
+          },
+        }),
+      ])
+    : [[], []];
 
   const templatesByLevel = classTemplates.reduce<Map<string, PortalClassOption[]>>((map, template) => {
     const entry = map.get(template.levelId) ?? [];
     entry.push(template);
     map.set(template.levelId, entry);
+    return map;
+  }, new Map());
+
+  const skillsByLevel = levelSkills.reduce<Map<string, { id: string; name: string }[]>>((map, skill) => {
+    const entry = map.get(skill.levelId) ?? [];
+    entry.push({ id: skill.id, name: skill.name });
+    map.set(skill.levelId, entry);
     return map;
   }, new Map());
 
@@ -160,6 +248,61 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
     const eligibleClasses = student.levelId
       ? templatesByLevel.get(student.levelId) ?? []
       : [];
+    const levelSkillRows = student.levelId ? skillsByLevel.get(student.levelId) ?? [] : [];
+    const levelSkillIds = new Set(levelSkillRows.map((skill) => skill.id));
+    const masteredSkillRows = student.skillProgress
+      .filter((row) => levelSkillIds.has(row.skillId))
+      .sort(
+        (a, b) =>
+          new Date(b.masteredAt ?? 0).getTime() -
+          new Date(a.masteredAt ?? 0).getTime()
+      );
+    const masteredSkillIds = new Set(masteredSkillRows.map((row) => row.skillId));
+
+    const history = [
+      ...student.enrolments.flatMap((enrolment) => {
+        const className = enrolment.template?.name?.trim() || "class";
+        const entries: PortalStudentSummary["history"] = [
+          {
+            id: `enrolment-start-${enrolment.id}`,
+            kind: "ENROLMENT",
+            occurredAt: enrolment.startDate,
+            title: `Enrolled in ${className}`,
+            description: `Status: ${toSentenceCase(enrolment.status)}.`,
+          },
+        ];
+
+        if (enrolment.endDate) {
+          entries.push({
+            id: `enrolment-end-${enrolment.id}`,
+            kind: "ENROLMENT",
+            occurredAt: enrolment.endDate,
+            title: `Enrolment ended in ${className}`,
+            description: "This enrolment is no longer active.",
+          });
+        }
+
+        return entries;
+      }),
+      ...student.skillEvents.map((event) => ({
+        id: `skill-${event.id}`,
+        kind: "SKILL" as const,
+        occurredAt: event.createdAt,
+        title: `${event.skill.name} ${formatSkillAction(event.action)}`,
+        description: event.note?.trim() || "Skill progression updated.",
+      })),
+      ...student.levelChanges.map((change) => ({
+        id: `level-${change.id}`,
+        kind: "LEVEL" as const,
+        occurredAt: change.effectiveDate,
+        title: change.fromLevel?.name
+          ? `Level changed from ${change.fromLevel.name} to ${change.toLevel.name}`
+          : `Level set to ${change.toLevel.name}`,
+        description: change.note?.trim() || "Level progression recorded.",
+      })),
+    ]
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .slice(0, 8);
 
     return {
       id: student.id,
@@ -168,6 +311,27 @@ export async function getFamilyDashboardData(familyId: string): Promise<FamilyPo
       paidThroughDate,
       currentClassId,
       eligibleClasses: eligibleClasses.filter((template) => template.id !== currentClassId),
+      currentEnrolment: primaryEnrolment
+        ? {
+            id: primaryEnrolment.id,
+            status: primaryEnrolment.status,
+            className: primaryEnrolment.template?.name?.trim() || null,
+            classDayOfWeek: primaryEnrolment.template?.dayOfWeek ?? null,
+            classStartTime: primaryEnrolment.template?.startTime ?? null,
+            classEndTime: primaryEnrolment.template?.endTime ?? null,
+            startDate: primaryEnrolment.startDate,
+            endDate: primaryEnrolment.endDate ?? null,
+          }
+        : null,
+      skillProgress: {
+        totalSkills: levelSkillRows.length,
+        masteredSkills: masteredSkillRows.length,
+        nextSkills: levelSkillRows
+          .filter((skill) => !masteredSkillIds.has(skill.id))
+          .slice(0, 3)
+          .map((skill) => skill.name),
+      },
+      history,
     };
   });
 

@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -29,11 +28,20 @@ import type { FamilyMakeupSummary } from "@/server/makeup/getFamilyMakeups";
 type MakeupSummary = FamilyMakeupSummary;
 type AvailableSession = Awaited<ReturnType<typeof listAvailableMakeupSessionsForCredit>>[number];
 
-function badgeVariantForStatus(status: MakeupCreditStatus): "default" | "secondary" | "outline" | "destructive" {
-  if (status === MakeupCreditStatus.AVAILABLE) return "secondary";
-  if (status === MakeupCreditStatus.USED) return "default";
-  if (status === MakeupCreditStatus.EXPIRED) return "outline";
-  return "outline";
+function statusBadgeClass(status: MakeupCreditStatus) {
+  if (status === MakeupCreditStatus.AVAILABLE) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (status === MakeupCreditStatus.USED) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+
+  if (status === MakeupCreditStatus.EXPIRED) {
+    return "border-gray-200 bg-gray-100 text-gray-700";
+  }
+
+  return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
 export default function PortalMakeupsClient({ summary }: { summary: MakeupSummary }) {
@@ -148,54 +156,71 @@ export default function PortalMakeupsClient({ summary }: { summary: MakeupSummar
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div>
-            <CardTitle>Makeups</CardTitle>
-            <p className="text-sm text-muted-foreground">Use available credits before they expire.</p>
+      <div className="space-y-6">
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Makeups</h1>
+              <p className="mt-2 text-sm text-gray-600">Use available credits before they expire.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="border-gray-200 bg-gray-50 text-gray-700">
+                Available: {summary.availableCount}
+              </Badge>
+              <Button onClick={() => setOpen(true)} disabled={!availableCredits.length}>
+                Book makeup
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">Available: {summary.availableCount}</Badge>
-            <Button onClick={() => setOpen(true)} disabled={!availableCredits.length}>
-              Book makeup
-            </Button>
+        </section>
+
+        <section className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+            <h2 className="text-base font-semibold text-gray-900">Credits</h2>
+            <p className="mt-1 text-sm text-gray-600">Track credits, bookings, and expiry dates.</p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
+
           {summary.credits.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No makeup credits yet.</p>
+            <div className="px-6 py-10 text-center">
+              <p className="text-sm font-medium text-gray-900">No makeup credits yet.</p>
+              <p className="mt-2 text-sm text-gray-500">Credits will appear here when absences are converted to makeups.</p>
+            </div>
           ) : (
-            summary.credits.map((credit) => (
-              <div key={credit.id} className="rounded-lg border bg-muted/20 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold">{credit.student.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {credit.reason} · Expires {formatBrisbaneDate(credit.expiresAt)}
+            <div className="divide-y divide-gray-200">
+              {summary.credits.map((credit) => (
+                <article key={credit.id} className="px-4 py-4 sm:px-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-gray-900">{credit.student.name}</p>
+                      <p className="text-xs text-gray-600">
+                        {credit.reason} · Expires {formatBrisbaneDate(credit.expiresAt)}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        Missed {credit.earnedFromClass?.name ?? "Class"} on {formatBrisbaneDate(credit.earnedFromSessionDate)}
+                      </p>
+                      {credit.booking ? (
+                        <p className="text-xs text-gray-600">
+                          Booked into {credit.booking.targetClass?.name ?? "Class"} on {formatBrisbaneDate(credit.booking.targetSessionDate)}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Missed {credit.earnedFromClass?.name ?? "Class"} on {formatBrisbaneDate(credit.earnedFromSessionDate)}
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={statusBadgeClass(credit.status)}>
+                        {credit.status}
+                      </Badge>
+                      {credit.booking && credit.booking.status === "BOOKED" ? (
+                        <Button size="sm" variant="outline" onClick={() => handleCancelBooking(credit.booking!.id)}>
+                          Cancel
+                        </Button>
+                      ) : null}
                     </div>
-                    {credit.booking ? (
-                      <div className="text-xs text-muted-foreground">
-                        Booked into {credit.booking.targetClass?.name ?? "Class"} on {formatBrisbaneDate(credit.booking.targetSessionDate)}
-                      </div>
-                    ) : null}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={badgeVariantForStatus(credit.status)}>{credit.status}</Badge>
-                    {credit.booking && credit.booking.status === "BOOKED" ? (
-                      <Button size="sm" variant="outline" onClick={() => handleCancelBooking(credit.booking!.id)}>
-                        Cancel
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ))
+                </article>
+              ))}
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </section>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -244,7 +269,7 @@ export default function PortalMakeupsClient({ summary }: { summary: MakeupSummar
                 </SelectContent>
               </Select>
               {!loadingSessions && sessions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No eligible sessions are currently available for this credit.</p>
+                <p className="text-xs text-gray-500">No eligible sessions are currently available for this credit.</p>
               ) : null}
             </div>
           </div>

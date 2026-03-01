@@ -2,10 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
+import {
+  Ban,
+  Check,
+  CircleX,
+  Clock3,
+  CreditCard,
+  type LucideIcon,
+  Receipt,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -41,17 +49,21 @@ type CheckoutCreateResponse = {
   error?: string;
 };
 
+function classNames(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
 function statusBadgeClass(status: PortalPayment["status"]) {
   if (status === "PAID") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
   if (status === "PENDING") {
-    return "bg-amber-50 text-amber-700 border-amber-200";
+    return "border-amber-200 bg-amber-50 text-amber-700";
   }
   if (status === "FAILED") {
-    return "bg-rose-50 text-rose-700 border-rose-200";
+    return "border-rose-200 bg-rose-50 text-rose-700";
   }
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  return "border-gray-200 bg-gray-100 text-gray-700";
 }
 
 function statusLabel(status: PortalPayment["status"]) {
@@ -59,6 +71,19 @@ function statusLabel(status: PortalPayment["status"]) {
   if (status === "PENDING") return "Processing";
   if (status === "FAILED") return "Failed";
   return "Cancelled";
+}
+
+function statusTimeline(status: PortalPayment["status"]): { icon: LucideIcon; iconClass: string } {
+  if (status === "PAID") {
+    return { icon: Check, iconClass: "bg-emerald-500" };
+  }
+  if (status === "FAILED") {
+    return { icon: CircleX, iconClass: "bg-rose-500" };
+  }
+  if (status === "CANCELLED") {
+    return { icon: Ban, iconClass: "bg-gray-500" };
+  }
+  return { icon: Clock3, iconClass: "bg-amber-500" };
 }
 
 function paymentSortTimestamp(payment: PortalPayment) {
@@ -120,16 +145,12 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
 
   const confirmBody = (
     <div className="space-y-4">
-      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="text-xs uppercase tracking-wide text-slate-500">Amount due</div>
-        <div className="mt-1 text-2xl font-semibold text-slate-900">
-          {formatCurrencyFromCents(outstandingCents)}
-        </div>
+      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+        <div className="text-xs uppercase tracking-wide text-gray-500">Amount due</div>
+        <div className="mt-1 text-2xl font-semibold text-gray-900">{formatCurrencyFromCents(outstandingCents)}</div>
       </div>
 
-      <p className="text-sm text-slate-600">
-        You will be redirected to Stripe Checkout to complete payment securely.
-      </p>
+      <p className="text-sm text-gray-600">You will be redirected to Stripe Checkout to complete payment securely.</p>
 
       {errorMessage ? (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -144,95 +165,221 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
   );
 
   return (
-    <div className={cn("space-y-6", hasOutstandingBalance ? "pb-24 sm:pb-0" : null)}>
-      {showCancelledNotice ? (
-        <Card className="border-amber-200 bg-amber-50/70">
-          <CardContent className="pt-6 text-sm text-amber-800">
-            Payment canceled. You can retry whenever you are ready.
-          </CardContent>
-        </Card>
-      ) : null}
+    <div className={cn("space-y-8", hasOutstandingBalance ? "pb-24 sm:pb-0" : null)}>
+      <section className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">Billing & payments</h1>
+          <p className="mt-2 text-sm text-gray-600">Review your balance and payment history.</p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Outstanding balance</div>
-            <div className="mt-1 text-3xl font-semibold text-slate-900">
-              {formatCurrencyFromCents(Math.max(outstandingCents, 0))}
+        {showCancelledNotice ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Payment canceled. You can retry whenever you are ready.
+          </div>
+        ) : null}
+
+        <div className="relative overflow-hidden rounded-lg bg-white px-4 pb-12 pt-5 shadow-sm ring-1 ring-gray-200 sm:px-6 sm:pt-6">
+          <div>
+            <div className="absolute rounded-md bg-teal-600 p-3">
+              <CreditCard aria-hidden="true" className="size-6 text-white" />
+            </div>
+            <p className="ml-16 truncate text-sm font-medium text-gray-500">Outstanding balance</p>
+          </div>
+          <div className="ml-16 pb-6 sm:pb-7">
+            <p className="text-3xl font-semibold text-gray-900">{formatCurrencyFromCents(Math.max(outstandingCents, 0))}</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {hasOutstandingBalance
+                ? "Secure checkout is available from this page."
+                : "Your account is fully paid."}
+            </p>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 bg-gray-50 px-4 py-4 sm:px-6">
+            {hasOutstandingBalance && onlinePaymentsEnabled ? (
+              <Button className="hidden h-10 sm:inline-flex" onClick={() => setConfirmOpen(true)}>
+                Pay now
+              </Button>
+            ) : hasOutstandingBalance ? (
+              <p className="text-sm text-amber-800">Online payments not enabled. Please contact the swim school.</p>
+            ) : (
+              <p className="text-sm text-emerald-700">No payment action required.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+        <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+          <h2 className="text-base font-semibold text-gray-900">Recent payments</h2>
+          <p className="mt-1 text-sm text-gray-600">Compact list optimized for mobile and desktop.</p>
+        </div>
+
+        {sortedPayments.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm font-medium text-gray-900">No payments yet.</p>
+            <p className="mt-2 text-sm text-gray-500">Payments will appear here once a transaction is recorded.</p>
+          </div>
+        ) : (
+          <div className="-mx-4 sm:mx-0">
+            <table className="min-w-full divide-y divide-gray-300">
+              <thead className="hidden sm:table-header-group">
+                <tr>
+                  <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                    Amount
+                  </th>
+                  <th scope="col" className="hidden px-3 py-3.5 text-left text-sm font-semibold text-gray-900 md:table-cell">
+                    Date
+                  </th>
+                  <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Status
+                  </th>
+                  <th scope="col" className="hidden px-3 py-3.5 text-left text-sm font-semibold text-gray-900 lg:table-cell">
+                    Method
+                  </th>
+                  <th scope="col" className="py-3.5 pl-3 pr-4 text-right text-sm font-semibold text-gray-900 sm:pr-6">
+                    Receipts
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {sortedPayments.map((payment) => (
+                  <tr key={payment.id}>
+                    <td className="w-full max-w-0 py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:w-auto sm:max-w-none sm:pl-6">
+                      {formatCurrencyFromCents(payment.amountCents)}
+                      <dl className="mt-1 font-normal sm:hidden">
+                        <dt className="sr-only">Date</dt>
+                        <dd className="truncate text-gray-600">{formatBrisbaneDate(payment.paidAt ?? payment.createdAt)}</dd>
+                        <dt className="sr-only">Method</dt>
+                        <dd className="truncate text-gray-500">{payment.method || "Method unavailable"}</dd>
+                        {payment.stripeSessionId ? (
+                          <>
+                            <dt className="sr-only">Session</dt>
+                            <dd className="truncate text-gray-500">Session: {payment.stripeSessionId}</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </td>
+                    <td className="hidden px-3 py-4 text-sm text-gray-600 md:table-cell">
+                      {formatBrisbaneDate(payment.paidAt ?? payment.createdAt)}
+                    </td>
+                    <td className="px-3 py-4 text-sm text-gray-600">
+                      <Badge variant="outline" className={statusBadgeClass(payment.status)}>
+                        {statusLabel(payment.status)}
+                      </Badge>
+                    </td>
+                    <td className="hidden px-3 py-4 text-sm text-gray-600 lg:table-cell">{payment.method || "-"}</td>
+                    <td className="py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      {payment.invoiceIds.length ? (
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {payment.invoiceIds.map((invoiceId) => (
+                            <Link
+                              key={invoiceId}
+                              href={`/portal/invoice/${invoiceId}/receipt`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-teal-700 hover:text-teal-600"
+                            >
+                              Receipt
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
+        <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+          <h2 className="text-base font-semibold text-gray-900">Payments feed</h2>
+          <p className="mt-1 text-sm text-gray-600">Timeline view of recent payment activity.</p>
+        </div>
+
+        {sortedPayments.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm font-medium text-gray-900">No payment activity yet.</p>
+            <p className="mt-2 text-sm text-gray-500">Once payments are created, they will appear here chronologically.</p>
+          </div>
+        ) : (
+          <div className="px-4 py-5 sm:px-6">
+            <div className="flow-root">
+              <ul role="list" className="-mb-8">
+                {sortedPayments.map((payment, index) => {
+                  const timeline = statusTimeline(payment.status);
+                  const Icon = timeline.icon;
+                  const isLast = index === sortedPayments.length - 1;
+                  const paymentDate = payment.paidAt ?? payment.createdAt;
+
+                  return (
+                    <li key={`feed-${payment.id}`}>
+                      <div className="relative pb-8">
+                        {!isLast ? (
+                          <span aria-hidden="true" className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" />
+                        ) : null}
+                        <div className="relative flex space-x-3">
+                          <div>
+                            <span
+                              className={classNames(
+                                timeline.iconClass,
+                                "flex size-8 items-center justify-center rounded-full ring-8 ring-white"
+                              )}
+                            >
+                              <Icon aria-hidden="true" className="size-4 text-white" />
+                            </span>
+                          </div>
+                          <div className="flex min-w-0 flex-1 justify-between gap-4 pt-1.5">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {statusLabel(payment.status)} payment of {formatCurrencyFromCents(payment.amountCents)}
+                              </p>
+                              <p className="mt-1 text-sm text-gray-500">
+                                {payment.method ? `${payment.method} • ` : ""}
+                                {payment.invoiceIds.length
+                                  ? `${payment.invoiceIds.length} receipt${payment.invoiceIds.length === 1 ? "" : "s"}`
+                                  : "No linked receipts"}
+                              </p>
+                              {payment.invoiceIds.length ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {payment.invoiceIds.map((invoiceId) => (
+                                    <Link
+                                      key={`feed-${payment.id}-${invoiceId}`}
+                                      href={`/portal/invoice/${invoiceId}/receipt`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                                    >
+                                      <Receipt className="h-3.5 w-3.5" />
+                                      Receipt
+                                    </Link>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            <time
+                              dateTime={new Date(paymentDate).toISOString()}
+                              className="shrink-0 text-right text-xs whitespace-nowrap text-gray-500"
+                            >
+                              {formatBrisbaneDate(paymentDate)}
+                            </time>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           </div>
-
-          {hasOutstandingBalance && onlinePaymentsEnabled ? (
-            <Button className="hidden h-11 sm:inline-flex" onClick={() => setConfirmOpen(true)}>
-              Pay now
-            </Button>
-          ) : hasOutstandingBalance ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Online payments not enabled. Please contact the swim school.
-            </div>
-          ) : (
-            <div className="text-sm text-emerald-700">Your account is fully paid.</div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent payments</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sortedPayments.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">No payments yet.</div>
-          ) : (
-            <div className="space-y-3">
-              {sortedPayments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="rounded-lg border border-slate-200 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">
-                        {formatCurrencyFromCents(payment.amountCents)}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {formatBrisbaneDate(payment.paidAt ?? payment.createdAt)}
-                      </div>
-                    </div>
-                    <Badge className={statusBadgeClass(payment.status)} variant="outline">
-                      {statusLabel(payment.status)}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    {payment.method ? <span>{payment.method}</span> : null}
-                    {payment.stripeSessionId ? <span>Session: {payment.stripeSessionId}</span> : null}
-                    {payment.invoiceIds.length ? (
-                      payment.invoiceIds.map((invoiceId) => (
-                        <Link
-                          key={invoiceId}
-                          href={`/portal/invoice/${invoiceId}/receipt`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline"
-                        >
-                          Receipt
-                        </Link>
-                      ))
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        )}
+      </section>
 
       {hasOutstandingBalance && onlinePaymentsEnabled && !isDesktop ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur sm:hidden">
           <Button className="h-12 w-full" onClick={() => setConfirmOpen(true)}>
             Pay now
           </Button>
@@ -252,9 +399,7 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Confirm payment</DialogTitle>
-              <DialogDescription>
-                Review your balance and continue to Stripe.
-              </DialogDescription>
+              <DialogDescription>Review your balance and continue to Stripe.</DialogDescription>
             </DialogHeader>
             {confirmBody}
             <DialogFooter>
@@ -282,12 +427,10 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
             }
           }}
         >
-          <SheetContent side="bottom" className="rounded-t-2xl border-slate-200">
+          <SheetContent side="bottom" className="rounded-t-2xl border-gray-200">
             <SheetHeader>
               <SheetTitle>Confirm payment</SheetTitle>
-              <SheetDescription>
-                Review your amount due and continue securely with Stripe.
-              </SheetDescription>
+              <SheetDescription>Review your amount due and continue securely with Stripe.</SheetDescription>
             </SheetHeader>
             <div className="px-4">{confirmBody}</div>
             <SheetFooter className="pb-[calc(1rem+env(safe-area-inset-bottom))]" />
