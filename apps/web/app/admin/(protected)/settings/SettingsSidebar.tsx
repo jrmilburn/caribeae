@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  ClipboardList,
   CreditCard,
   Layers,
   Package,
@@ -26,6 +27,7 @@ export type SettingsSection = {
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "levels", label: "Levels", href: "/admin/settings/levels", icon: Layers },
+  { id: "skills", label: "Skills", href: "/admin/settings/skills", icon: ClipboardList },
   { id: "plans", label: "Enrolment plans", href: "/admin/settings/plans", icon: WalletCards },
   { id: "teachers", label: "Teachers", href: "/admin/settings/teachers", icon: UserRound },
   { id: "holidays", label: "Holidays", href: "/admin/settings/holidays", icon: CalendarDays },

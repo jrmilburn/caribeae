@@ -4,6 +4,8 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPortalRoute = createRouteMatcher(["/portal(.*)"]);
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 const isAdminAuthRoute = createRouteMatcher(["/admin/auth(.*)"]);
+const isTeacherRoute = createRouteMatcher(["/teacher(.*)"]);
+const isTeacherAuthRoute = createRouteMatcher(["/teacher/auth(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
   if (isAdminRoute(request) && !isAdminAuthRoute(request)) {
@@ -18,6 +20,13 @@ export default clerkMiddleware(async (auth, request) => {
     const session = await auth();
     if (!session.userId) {
       return NextResponse.redirect(new URL("/auth", request.url));
+    }
+  }
+
+  if (isTeacherRoute(request) && !isTeacherAuthRoute(request)) {
+    const session = await auth();
+    if (!session.userId) {
+      return NextResponse.redirect(new URL("/teacher/auth", request.url));
     }
   }
 });

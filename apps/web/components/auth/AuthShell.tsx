@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-type AuthShellMode = "client" | "admin";
+type AuthShellMode = "client" | "admin" | "teacher";
 const SUPPORT_EMAIL = "rachele@caribeae.com.au";
 
 const COPY: Record<AuthShellMode, {
@@ -20,6 +20,10 @@ const COPY: Record<AuthShellMode, {
   },
   admin: {
     brandEyebrow: "Admin Portal",
+    brandHeading: "Caribeae",
+  },
+  teacher: {
+    brandEyebrow: "Teacher Portal",
     brandHeading: "Caribeae",
   },
 };

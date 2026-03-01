@@ -112,6 +112,8 @@ model Student {
   waitlistRequests WaitlistRequest[]
   makeupCredits    MakeupCredit[]
   makeupBookings   MakeupBooking[]
+  skillProgress    StudentSkillProgress[]
+  skillEvents      StudentSkillProgressEvent[]
 }
 
 model ClassTemplate {
@@ -622,6 +624,77 @@ model Level {
   holidays         Holiday[]
   waitlistRequests WaitlistRequest[]
   makeupCredits    MakeupCredit[]
+  skills           Skill[]
+}
+
+model Skill {
+  id String @id @default(cuid())
+
+  name        String
+  description String?
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+
+  levelId String
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentProgress StudentSkillProgress[]
+  progressEvents  StudentSkillProgressEvent[]
+
+  @@index([levelId, sortOrder])
+  @@index([levelId, active])
+}
+
+enum StudentSkillProgressAction {
+  MASTERED
+  UNMASTERED
+}
+
+model StudentSkillProgress {
+  id String @id @default(cuid())
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  skillId String
+  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  mastered   Boolean   @default(false)
+  masteredAt DateTime?
+
+  updatedByTeacherId String?
+  updatedByTeacher   Teacher? @relation("TeacherSkillProgressUpdates", fields: [updatedByTeacherId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, skillId])
+  @@index([studentId, mastered])
+  @@index([skillId])
+}
+
+model StudentSkillProgressEvent {
+  id String @id @default(cuid())
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  skillId String
+  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  action StudentSkillProgressAction
+  note   String?
+
+  teacherId String?
+  teacher   Teacher? @relation("TeacherSkillProgressEvents", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([skillId, createdAt])
 }
 
 enum MakeupCreditReason {
@@ -720,6 +793,8 @@ model Teacher {
   updatedAt            DateTime              @updatedAt
   classTemplates       ClassTemplate[]       @relation("ClassTemplateTeacher")
   teacherSubstitutions TeacherSubstitution[]
+  skillProgressUpdates StudentSkillProgress[]      @relation("TeacherSkillProgressUpdates")
+  skillProgressEvents  StudentSkillProgressEvent[] @relation("TeacherSkillProgressEvents")
 }
 
 model Product {
