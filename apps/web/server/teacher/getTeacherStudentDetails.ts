@@ -55,6 +55,7 @@ function formatSkillAction(action: StudentSkillProgressAction) {
 export async function getTeacherStudentDetails(params: {
   teacherId: string;
   studentId: string;
+  templateId?: string;
 }): Promise<TeacherStudentDetails> {
   const today = getTodayBrisbaneDate();
 
@@ -62,6 +63,7 @@ export async function getTeacherStudentDetails(params: {
     teacherId: params.teacherId,
     studentId: params.studentId,
     date: today,
+    templateId: params.templateId,
   });
 
   const student = await prisma.student.findUnique({

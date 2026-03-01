@@ -179,7 +179,7 @@ export default function TeacherClassPageClient({
                 </td>
                 <td className="py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                   <Link
-                    href={`/teacher/students/${row.studentId}`}
+                    href={`/teacher/students/${row.studentId}?classId=${templateId}`}
                     className="text-indigo-600 hover:text-indigo-700"
                   >
                     View

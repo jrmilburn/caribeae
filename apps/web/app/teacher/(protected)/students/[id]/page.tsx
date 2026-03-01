@@ -10,17 +10,25 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: { id: string };
+  searchParams?: {
+    classId?: string;
+  } | Promise<{
+    classId?: string;
+  }>;
 };
 
-export default async function TeacherStudentPage({ params }: PageProps) {
+export default async function TeacherStudentPage({ params, searchParams }: PageProps) {
   const teacher = await requireTeacherAccess();
   const { id } = await params;
+  const search = await searchParams;
+  const classId = typeof search?.classId === "string" ? search.classId : undefined;
 
   let data;
   try {
     data = await getTeacherStudentDetails({
       teacherId: teacher.id,
       studentId: id,
+      templateId: classId,
     });
   } catch (error) {
     if (

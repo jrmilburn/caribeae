@@ -4,6 +4,7 @@ import { EnrolmentStatus, MakeupBookingStatus } from "@prisma/client";
 import { addDays } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
+import { getEligibleStudentsForOccurrence } from "@/server/class/getClassOccurrenceRoster";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { getTeacherForCurrentUser } from "@/server/teacher/getTeacherForCurrentUser";
 
@@ -120,9 +121,46 @@ export async function ensureTeacherCanAccessStudent(params: {
   teacherId: string;
   studentId: string;
   date?: Date;
+  templateId?: string;
 }) {
   const date = brisbaneStartOfDay(params.date ?? new Date());
   const nextDate = addDays(date, 1);
+  const dayKey = toBrisbaneDayKey(date);
+
+  if (params.templateId) {
+    await assertTeacherCanManageClassForDate({
+      teacherId: params.teacherId,
+      templateId: params.templateId,
+      date,
+    });
+
+    const eligibleStudentIds = await getEligibleStudentsForOccurrence(params.templateId, dayKey, {
+      includeAttendance: false,
+      skipAuth: true,
+    });
+
+    const makeupStudents = await prisma.makeupBooking.findMany({
+      where: {
+        targetClassId: params.templateId,
+        targetSessionDate: {
+          gte: date,
+          lt: nextDate,
+        },
+        status: MakeupBookingStatus.BOOKED,
+      },
+      select: {
+        studentId: true,
+      },
+    });
+
+    makeupStudents.forEach((booking) => {
+      eligibleStudentIds.add(booking.studentId);
+    });
+
+    if (eligibleStudentIds.has(params.studentId)) {
+      return;
+    }
+  }
 
   const enrolment = await prisma.enrolment.findFirst({
     where: {
