@@ -1,6 +1,7 @@
 import "server-only";
 
 import { EnrolmentStatus, MakeupBookingStatus } from "@prisma/client";
+import { addDays } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { brisbaneDayOfWeek, brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
@@ -121,6 +122,7 @@ export async function ensureTeacherCanAccessStudent(params: {
   date?: Date;
 }) {
   const date = brisbaneStartOfDay(params.date ?? new Date());
+  const nextDate = addDays(date, 1);
 
   const enrolment = await prisma.enrolment.findFirst({
     where: {
@@ -139,7 +141,10 @@ export async function ensureTeacherCanAccessStudent(params: {
               template: {
                 teacherSubstitutions: {
                   some: {
-                    date,
+                    date: {
+                      gte: date,
+                      lt: nextDate,
+                    },
                     teacherId: params.teacherId,
                   },
                 },
@@ -151,7 +156,10 @@ export async function ensureTeacherCanAccessStudent(params: {
                   template: {
                     teacherSubstitutions: {
                       some: {
-                        date,
+                        date: {
+                          gte: date,
+                          lt: nextDate,
+                        },
                         teacherId: params.teacherId,
                       },
                     },
@@ -173,14 +181,20 @@ export async function ensureTeacherCanAccessStudent(params: {
   const makeupBooking = await prisma.makeupBooking.findFirst({
     where: {
       studentId: params.studentId,
-      targetSessionDate: date,
+      targetSessionDate: {
+        gte: date,
+        lt: nextDate,
+      },
       status: MakeupBookingStatus.BOOKED,
       targetClass: {
         OR: [
           {
             teacherSubstitutions: {
               some: {
-                date,
+                date: {
+                  gte: date,
+                  lt: nextDate,
+                },
                 teacherId: params.teacherId,
               },
             },
@@ -189,7 +203,10 @@ export async function ensureTeacherCanAccessStudent(params: {
             teacherId: params.teacherId,
             teacherSubstitutions: {
               none: {
-                date,
+                date: {
+                  gte: date,
+                  lt: nextDate,
+                },
               },
             },
           },

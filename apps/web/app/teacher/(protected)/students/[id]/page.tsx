@@ -22,8 +22,14 @@ export default async function TeacherStudentPage({ params }: PageProps) {
       teacherId: teacher.id,
       studentId: id,
     });
-  } catch {
-    redirect("/teacher");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === "Unauthorized" || error.message === "Student not found.")
+    ) {
+      redirect("/teacher");
+    }
+    throw error;
   }
 
   return (
