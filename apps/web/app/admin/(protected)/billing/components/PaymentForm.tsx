@@ -8,7 +8,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,6 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents, dollarsToCents, centsToDollarString } from "@/lib/currency";
@@ -47,6 +53,7 @@ type Props = {
     idempotencyKey?: string;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
+  presentation?: "dialog" | "sheet";
 };
 
 type InvoiceOption = {
@@ -65,6 +72,7 @@ export function PaymentForm({
   payment,
   onSubmit,
   onDelete,
+  presentation = "dialog",
 }: Props) {
   const [familyId, setFamilyId] = React.useState(payment?.familyId ?? "");
   const [amount, setAmount] = React.useState(payment ? centsToDollarString(payment.amountCents) : "");
@@ -281,17 +289,8 @@ export function PaymentForm({
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{payment ? "Edit payment" : "Record payment"}</DialogTitle>
-          <DialogDescription>
-            Apply payments against open invoices or leave unapplied for later allocation.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Family</Label>
@@ -476,7 +475,7 @@ export function PaymentForm({
             </div>
           ) : null}
 
-          <DialogFooter className="flex items-center justify-between gap-3 sm:justify-between">
+          <div className="flex items-center justify-between gap-3 sm:justify-between">
             <div>
               {payment && onDelete ? (
                 <Button
@@ -498,8 +497,36 @@ export function PaymentForm({
                 {submitting ? "Saving..." : payment ? "Save payment" : "Record payment"}
               </Button>
             </div>
-          </DialogFooter>
+          </div>
         </form>
+  );
+
+  if (presentation === "sheet") {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+          <SheetHeader className="px-0">
+            <SheetTitle>{payment ? "Edit payment" : "Record payment"}</SheetTitle>
+            <SheetDescription>
+              Apply payments against open invoices or leave unapplied for later allocation.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-2">{formContent}</div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{payment ? "Edit payment" : "Record payment"}</DialogTitle>
+          <DialogDescription>
+            Apply payments against open invoices or leave unapplied for later allocation.
+          </DialogDescription>
+        </DialogHeader>
+        {formContent}
       </DialogContent>
     </Dialog>
   );

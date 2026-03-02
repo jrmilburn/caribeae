@@ -11,6 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -48,6 +55,7 @@ export function AddEnrolmentDialog({
   enrolmentPlans,
   studentLevelId,
   onCreated,
+  presentation = "dialog",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,6 +64,7 @@ export function AddEnrolmentDialog({
   enrolmentPlans: EnrolmentPlan[];
   studentLevelId?: string | null;
   onCreated?: () => void;
+  presentation?: "dialog" | "sheet";
 }) {
   const router = useRouter();
   const [selectedTemplates, setSelectedTemplates] = React.useState<Record<string, NormalizedScheduleClass>>(
@@ -317,19 +326,8 @@ export function AddEnrolmentDialog({
     }
   };
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
-          <DialogHeader>
-            <DialogTitle>Add enrolment</DialogTitle>
-            <DialogDescription>
-              Select classes when needed for the plan. Weekly plans allow attendance in any class at the
-              student&apos;s level.
-            </DialogDescription>
-          </DialogHeader>
-
-        <div className="space-y-3">
+  const content = (
+    <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-2">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -492,14 +490,43 @@ export function AddEnrolmentDialog({
             </div>
           </div>
         </div>
+  );
 
-        </DialogContent>
-      </Dialog>
+  return (
+    <>
+      {presentation === "sheet" ? (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+          <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-[1100px]">
+            <SheetHeader className="px-0">
+              <SheetTitle>Add enrolment</SheetTitle>
+              <SheetDescription>
+                Select classes when needed for the plan. Weekly plans allow attendance in any class at the
+                student&apos;s level.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-2">{content}</div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+            <DialogHeader>
+              <DialogTitle>Add enrolment</DialogTitle>
+              <DialogDescription>
+                Select classes when needed for the plan. Weekly plans allow attendance in any class at the
+                student&apos;s level.
+              </DialogDescription>
+            </DialogHeader>
+            {content}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <CapacityOverloadDialog
         open={Boolean(capacityWarning)}
         details={capacityWarning}
         busy={saving}
+        presentation={presentation}
         onCancel={() => setCapacityWarning(null)}
         onConfirm={() => {
           setCapacityWarning(null);

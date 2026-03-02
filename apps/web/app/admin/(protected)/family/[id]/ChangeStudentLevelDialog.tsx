@@ -12,6 +12,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -45,6 +52,7 @@ type Props = {
   student: StudentWithHistory;
   levels: Level[];
   enrolmentPlans: EnrolmentPlan[];
+  presentation?: "dialog" | "sheet";
 };
 
 function toDateInputValue(date: Date) {
@@ -54,7 +62,14 @@ function toDateInputValue(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, enrolmentPlans }: Props) {
+export function ChangeStudentLevelDialog({
+  open,
+  onOpenChange,
+  student,
+  levels,
+  enrolmentPlans,
+  presentation = "dialog",
+}: Props) {
   const router = useRouter();
   const today = React.useMemo(() => toDateInputValue(new Date()), []);
 
@@ -218,15 +233,8 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
     }
   };
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
-        <DialogHeader>
-          <DialogTitle>Change level for {student.name}</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4">
+  const wizardContent = (
+    <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={step === 1 ? "default" : "secondary"}>Step 1: Select level & classes</Badge>
             <Badge variant={step === 2 ? "default" : "secondary"}>Step 2: Pick plan & confirm</Badge>
@@ -438,13 +446,38 @@ export function ChangeStudentLevelDialog({ open, onOpenChange, student, levels, 
             </div>
           ) : null}
         </div>
-        </DialogContent>
-      </Dialog>
+  );
+
+  return (
+    <>
+      {presentation === "sheet" ? (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+          <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-[1100px]">
+            <SheetHeader className="px-0">
+              <SheetTitle>Change level for {student.name}</SheetTitle>
+              <SheetDescription>
+                Select level, classes, and plan before confirming the level change.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="mt-2">{wizardContent}</div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
+            <DialogHeader>
+              <DialogTitle>Change level for {student.name}</DialogTitle>
+            </DialogHeader>
+            {wizardContent}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <CapacityOverloadDialog
         open={Boolean(capacityWarning)}
         details={capacityWarning}
         busy={submitting}
+        presentation={presentation}
         onCancel={() => setCapacityWarning(null)}
         onConfirm={() => {
           setCapacityWarning(null);

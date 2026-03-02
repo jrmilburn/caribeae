@@ -8,11 +8,11 @@ import type { ClassTemplate, EnrolmentPlan, Level, Teacher } from "@prisma/clien
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatCurrencyFromCents, dollarsToCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import { dayOfWeekToName } from "@/packages/schedule";
@@ -316,11 +316,11 @@ export function FamilyTransitionWizard({
         </CardContent>
       </Card>
 
-      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1100px] max-h-[calc(100vh-4rem)] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Transition family</DialogTitle>
-          </DialogHeader>
+      <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-[1100px]">
+          <SheetHeader className="px-0">
+            <SheetTitle>Transition family</SheetTitle>
+          </SheetHeader>
 
           <div className="space-y-6">
             <div className="flex flex-wrap gap-2">
@@ -671,19 +671,19 @@ export function FamilyTransitionWizard({
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog
+      <Sheet
         open={Boolean(scheduleStudentId)}
         onOpenChange={(open) => {
           if (!open) setScheduleStudentId(null);
         }}
       >
-        <DialogContent className="w-[calc(100vw-3rem)] max-w-[1200px]">
-          <DialogHeader>
-            <DialogTitle>Select class template</DialogTitle>
-          </DialogHeader>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-[1100px]">
+          <SheetHeader className="px-0">
+            <SheetTitle>Select class template</SheetTitle>
+          </SheetHeader>
           <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
             <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
               <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
@@ -720,13 +720,14 @@ export function FamilyTransitionWizard({
               </div>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <CapacityOverloadDialog
         open={Boolean(capacityWarning)}
         details={capacityWarning}
         busy={submitting}
+        presentation="sheet"
         onCancel={() => setCapacityWarning(null)}
         onConfirm={() => {
           setCapacityWarning(null);

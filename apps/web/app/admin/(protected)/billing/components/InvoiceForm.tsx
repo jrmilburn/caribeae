@@ -8,7 +8,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,6 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { formatCurrencyFromCents } from "@/lib/currency";
 
 import type { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
@@ -89,6 +95,7 @@ type Props = {
     }>;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
+  presentation?: "dialog" | "sheet";
 };
 
 export function InvoiceForm({
@@ -99,6 +106,7 @@ export function InvoiceForm({
   invoice,
   onSubmit,
   onDelete,
+  presentation = "dialog",
 }: Props) {
   const defaultState: InvoiceFormState = React.useMemo(
     () => ({
@@ -229,17 +237,8 @@ export function InvoiceForm({
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{invoice ? "Edit invoice" : "New invoice"}</DialogTitle>
-          <DialogDescription>
-            {invoice ? "Update invoice details and status." : "Create a manual invoice for a family."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Family</Label>
@@ -453,7 +452,7 @@ export function InvoiceForm({
             </div>
           ) : null}
 
-          <DialogFooter className="flex items-center justify-between gap-3 sm:justify-between">
+          <div className="flex items-center justify-between gap-3 sm:justify-between">
             <div>
               {invoice && onDelete ? (
                 <Button
@@ -475,8 +474,36 @@ export function InvoiceForm({
                 {submitting ? "Saving..." : invoice ? "Save invoice" : "Create invoice"}
               </Button>
             </div>
-          </DialogFooter>
+          </div>
         </form>
+  );
+
+  if (presentation === "sheet") {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+          <SheetHeader className="px-0">
+            <SheetTitle>{invoice ? "Edit invoice" : "New invoice"}</SheetTitle>
+            <SheetDescription>
+              {invoice ? "Update invoice details and status." : "Create a manual invoice for a family."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-2">{formContent}</div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{invoice ? "Edit invoice" : "New invoice"}</DialogTitle>
+          <DialogDescription>
+            {invoice ? "Update invoice details and status." : "Create a manual invoice for a family."}
+          </DialogDescription>
+        </DialogHeader>
+        {formContent}
       </DialogContent>
     </Dialog>
   );

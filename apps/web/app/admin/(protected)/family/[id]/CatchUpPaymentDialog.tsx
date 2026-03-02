@@ -7,7 +7,14 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,22 +107,22 @@ export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
   const totalCents = preview?.totalCents ?? 0;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={setOpen}>
       {trigger === null ? null : (
-        <DialogTrigger asChild>
+        <SheetTrigger asChild>
           {trigger ?? (
             <Button size="sm" variant="secondary">
               Catch up payment
             </Button>
           )}
-        </DialogTrigger>
+        </SheetTrigger>
       )}
-      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-3rem)] max-w-[1100px] flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>Catch up payment for {familyName}</DialogTitle>
-        </DialogHeader>
+      <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-[1100px]">
+        <SheetHeader className="px-0">
+          <SheetTitle>Catch up payment for {familyName}</SheetTitle>
+        </SheetHeader>
 
-        <div className="space-y-4 overflow-y-auto pr-1">
+        <div className="mt-2 space-y-4 overflow-y-auto pr-1">
           <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-2">
               <Label>Pay ahead blocks</Label>
@@ -222,7 +229,7 @@ export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <SheetFooter className="px-0 pb-0 gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
             Cancel
           </Button>
@@ -234,8 +241,8 @@ export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
             {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Confirm catch-up payment
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
