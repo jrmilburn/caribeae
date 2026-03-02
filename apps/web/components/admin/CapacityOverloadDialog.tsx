@@ -11,6 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { parseDateKey } from "@/lib/dateKey";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
 import { dayOfWeekToName } from "@/packages/schedule";
@@ -22,6 +30,7 @@ type CapacityOverloadDialogProps = {
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  presentation?: "dialog" | "sheet";
 };
 
 function formatClassLabel(details: CapacityExceededDetails) {
@@ -43,9 +52,69 @@ export function CapacityOverloadDialog({
   onConfirm,
   onCancel,
   busy,
+  presentation = "dialog",
 }: CapacityOverloadDialogProps) {
   if (!details) return null;
   const classLabel = formatClassLabel(details);
+  const content = (
+    <>
+      <div className="space-y-2 text-sm">
+        <div>
+          <span className="font-medium">Class:</span> {classLabel}
+        </div>
+        <div>
+          <span className="font-medium">Overload date:</span>{" "}
+          {details.occurrenceDateKey}
+        </div>
+        <div>
+          <span className="font-medium">Capacity:</span> {details.capacity}
+        </div>
+        <div>
+          <span className="font-medium">Current enrolled ({details.occurrenceDateKey}):</span>{" "}
+          {details.currentCount}
+        </div>
+        <div>
+          <span className="font-medium">After this change:</span>{" "}
+          {details.projectedCount}
+        </div>
+      </div>
+      {presentation === "sheet" ? (
+        <SheetFooter className="px-0 pb-0">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={busy}>
+            Confirm overload
+          </Button>
+        </SheetFooter>
+      ) : (
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={busy}>
+            Confirm overload
+          </Button>
+        </DialogFooter>
+      )}
+    </>
+  );
+
+  if (presentation === "sheet") {
+    return (
+      <Sheet open={open} onOpenChange={(next) => (!next ? onCancel() : null)}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader className="px-0">
+            <SheetTitle>Confirm class overload</SheetTitle>
+            <SheetDescription>
+              This will overload the class. Please confirm to continue.
+            </SheetDescription>
+          </SheetHeader>
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onCancel() : null)}>
@@ -56,34 +125,7 @@ export function CapacityOverloadDialog({
             This will overload the class. Please confirm to continue.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 text-sm">
-          <div>
-            <span className="font-medium">Class:</span> {classLabel}
-          </div>
-          <div>
-            <span className="font-medium">Overload date:</span>{" "}
-            {details.occurrenceDateKey}
-          </div>
-          <div>
-            <span className="font-medium">Capacity:</span> {details.capacity}
-          </div>
-          <div>
-            <span className="font-medium">Current enrolled ({details.occurrenceDateKey}):</span>{" "}
-            {details.currentCount}
-          </div>
-          <div>
-            <span className="font-medium">After this change:</span>{" "}
-            {details.projectedCount}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} disabled={busy}>
-            Confirm overload
-          </Button>
-        </DialogFooter>
+        {content}
       </DialogContent>
     </Dialog>
   );

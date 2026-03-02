@@ -13,6 +13,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +36,7 @@ export type EditPaidThroughDialogProps = {
   onOpenChange?: (open: boolean) => void;
   onUpdated?: () => void;
   trigger?: React.ReactNode;
+  presentation?: "dialog" | "sheet";
 };
 
 function resolveDayKey(value?: Date | string | null) {
@@ -45,6 +55,7 @@ export function EditPaidThroughDialog({
   onOpenChange,
   onUpdated,
   trigger,
+  presentation = "dialog",
 }: EditPaidThroughDialogProps) {
   const router = useRouter();
   const controlled = typeof open === "boolean";
@@ -92,6 +103,62 @@ export function EditPaidThroughDialog({
     }
   };
 
+  const content = (
+    <>
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Current paid-through</Label>
+          <div className="text-sm font-medium">{formatBrisbaneDate(currentPaidThrough ?? null)}</div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`paid-through-${enrolmentId}`}>New paid-through date</Label>
+          <Input
+            id={`paid-through-${enrolmentId}`}
+            type="date"
+            value={dateValue}
+            onChange={(event) => setDateValue(event.target.value)}
+          />
+        </div>
+      </div>
+      {presentation === "sheet" ? (
+        <SheetFooter className="px-0 pb-0">
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </SheetFooter>
+      ) : (
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      )}
+    </>
+  );
+
+  if (presentation === "sheet") {
+    return (
+      <Sheet open={dialogOpen} onOpenChange={handleOpenChange}>
+        {trigger ? <SheetTrigger asChild>{trigger}</SheetTrigger> : null}
+        <SheetContent side="right" className="w-full sm:max-w-xl">
+          <SheetHeader className="px-0">
+            <SheetTitle>Edit paid-through date</SheetTitle>
+            <SheetDescription>
+              Paid-through is inclusive (last entitled class date).
+            </SheetDescription>
+          </SheetHeader>
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
@@ -102,29 +169,7 @@ export function EditPaidThroughDialog({
             Paid-through is inclusive (last entitled class date).
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Current paid-through</Label>
-            <div className="text-sm font-medium">{formatBrisbaneDate(currentPaidThrough ?? null)}</div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`paid-through-${enrolmentId}`}>New paid-through date</Label>
-            <Input
-              id={`paid-through-${enrolmentId}`}
-              type="date"
-              value={dateValue}
-              onChange={(event) => setDateValue(event.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </DialogFooter>
+        {content}
       </DialogContent>
     </Dialog>
   );
