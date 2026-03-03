@@ -110,7 +110,7 @@ export function ChangeEnrolmentDialog({
       filtered = [enrolment.plan, ...filtered];
     }
     return filtered;
-  }, [enrolment.plan.billingType, enrolment.plan.levelId, enrolmentPlans, selectionDayType]);
+  }, [enrolment.plan, enrolmentPlans, selectionDayType]);
 
   const selectionRequirement = React.useMemo(
     () => getSelectionRequirement(selectedPlan),
@@ -126,7 +126,7 @@ export function ChangeEnrolmentDialog({
       setPlanId(enrolment.plan.id);
       setSaving(false);
     }
-  }, [enrolment.startDate, open]);
+  }, [enrolment.plan.id, enrolment.startDate, open]);
 
   React.useEffect(() => {
     if (!availablePlans.find((plan) => plan.id === planId)) {

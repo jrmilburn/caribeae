@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -233,16 +233,16 @@ export function MakeupsSection({
         </CardContent>
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Grant makeup credit</DialogTitle>
-            <DialogDescription>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-lg">
+          <SheetHeader className="px-0">
+            <SheetTitle>Grant makeup credit</SheetTitle>
+            <SheetDescription>
               Marks attendance as excused and creates one makeup credit.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-4">
+          <div className="mt-2 space-y-4">
             <div className="space-y-2">
               <Label>Student</Label>
               <Select value={studentId} onValueChange={setStudentId}>
@@ -311,16 +311,16 @@ export function MakeupsSection({
             </label>
           </div>
 
-          <DialogFooter>
+          <SheetFooter className="px-0 pb-0">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
               Cancel
             </Button>
             <Button onClick={handleGrant} disabled={!canSubmit}>
               {saving ? "Granting..." : "Grant credit"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

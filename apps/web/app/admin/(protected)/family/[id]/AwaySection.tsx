@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -231,7 +231,7 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
         </CardContent>
       </Card>
 
-      <Dialog
+      <Sheet
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
@@ -240,15 +240,15 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit away period" : "Mark away"}</DialogTitle>
-            <DialogDescription>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-lg">
+          <SheetHeader className="px-0">
+            <SheetTitle>{editing ? "Edit away period" : "Mark away"}</SheetTitle>
+            <SheetDescription>
               This will extend paid-through dates for missed classes.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="space-y-4">
+          <div className="mt-2 space-y-4">
             <div className="space-y-2">
               <Label>Scope</Label>
               <div className="grid grid-cols-2 gap-2">
@@ -350,7 +350,7 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
             </div>
           </div>
 
-          <DialogFooter>
+          <SheetFooter className="px-0 pb-0">
             <Button
               type="button"
               variant="outline"
@@ -364,9 +364,9 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
             <Button type="button" onClick={handleSubmit} disabled={!canSubmit || saving}>
               {saving ? "Saving..." : editing ? "Save changes" : "Mark away"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

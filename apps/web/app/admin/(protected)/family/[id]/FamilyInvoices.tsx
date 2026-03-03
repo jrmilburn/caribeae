@@ -2,14 +2,20 @@
 
 import * as React from "react";
 import { format } from "date-fns";
+import { InvoiceStatus } from "@prisma/client";
+import {
+  AlertCircle,
+  FileText,
+  Loader2,
+  MoreHorizontal,
+  Receipt,
+  Undo2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { InvoiceStatus } from "@prisma/client";
-import { Loader2, MoreHorizontal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,10 +24,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
-import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 
 import { InvoiceForm } from "@/app/admin/(protected)/billing/components/InvoiceForm";
 import { PaymentForm } from "@/app/admin/(protected)/billing/components/PaymentForm";
@@ -31,7 +43,7 @@ import { resolveInvoiceDisplayStatus } from "./invoiceDisplay";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
-import type { BillingInvoice, BillingPayment } from "@/server/billing/types";
+import type { BillingPayment } from "@/server/billing/types";
 import { createInvoice } from "@/server/billing/createInvoice";
 import { updateInvoice } from "@/server/billing/updateInvoice";
 import { deleteInvoice } from "@/server/billing/deleteInvoice";
@@ -53,37 +65,19 @@ type Props = {
 
 type InvoiceRow = FamilyWithStudentsAndInvoices["invoices"][number] & { amountOwingCents: number };
 
-function formatDate(value?: Date | null) {
-  if (!value) return "—";
-  return format(value, "d MMM yyyy");
-}
-
-function invoiceVariant(status: string) {
-  switch (status) {
-    case "OVERDUE":
-      return "destructive";
-    case "PAID":
-      return "secondary";
-    case "PARTIALLY_PAID":
-      return "outline";
-    case "SENT":
-      return "secondary";
-    case "DRAFT":
-    default:
-      return "default";
-  }
-}
-
-function statusDotClass(status: string) {
-  if (status === "OVERDUE") return "bg-destructive";
-  if (status === "PARTIALLY_PAID") return "bg-amber-500";
-  if (status === "PAID") return "bg-muted-foreground/40";
-  return "bg-emerald-500";
-}
-
-function getInvoiceBalanceCents(invoice: { amountCents: number; amountPaidCents: number }) {
-  return Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
-}
+type BillingActivityItem = {
+  id: string;
+  kind: "invoice" | "payment";
+  when: Date | null;
+  title: string;
+  description: string;
+  amountLabel: string;
+  detailLabel: string;
+  statusLabel: string;
+  tone: "danger" | "warning" | "success" | "muted" | "brand";
+  invoice?: InvoiceRow;
+  payment?: BillingPayment;
+};
 
 type InvoiceAllocationItem = {
   paymentId: string;
@@ -92,6 +86,58 @@ type InvoiceAllocationItem = {
   note?: string | null;
   amountCents: number;
 };
+
+function formatDate(value?: Date | null) {
+  if (!value) return "—";
+  return format(value, "d MMM yyyy");
+}
+
+function formatDateWithTime(value?: Date | null) {
+  if (!value) return "—";
+  return format(value, "d MMM yyyy · h:mm a");
+}
+
+function statusBadgeVariant(status: string) {
+  switch (status) {
+    case "OVERDUE":
+      return "destructive" as const;
+    case "PARTIALLY_PAID":
+      return "outline" as const;
+    case "PAID":
+      return "secondary" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function toneClass(tone: BillingActivityItem["tone"]) {
+  switch (tone) {
+    case "danger":
+      return "bg-red-500";
+    case "warning":
+      return "bg-amber-500";
+    case "success":
+      return "bg-emerald-500";
+    case "brand":
+      return "bg-sky-500";
+    default:
+      return "bg-gray-400";
+  }
+}
+
+function getInvoiceBalanceCents(invoice: { amountCents: number; amountPaidCents: number }) {
+  return Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+}
+
+function resolveCoverageLabel(invoice: FamilyWithStudentsAndInvoices["invoices"][number]) {
+  if (invoice.coverageStart && invoice.coverageEnd) {
+    return `${formatDate(invoice.coverageStart)} → ${formatDate(invoice.coverageEnd)}`;
+  }
+  if (invoice.creditsPurchased) {
+    return `${invoice.creditsPurchased} credits`;
+  }
+  return "No coverage window";
+}
 
 function nullToUndefined<T>(value: T | null | undefined): T | undefined {
   return value === null ? undefined : value;
@@ -107,28 +153,18 @@ function normalizeInvoicePayloadForServer(payload: any) {
     coverageEnd: nullToUndefined(payload.coverageEnd),
     creditsPurchased: nullToUndefined(payload.creditsPurchased),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lineItems: (payload.lineItems ?? []).map((li: any) => {
-      const quantity = li.quantity ?? 1;
+    lineItems: (payload.lineItems ?? []).map((lineItem: any) => {
+      const quantity = lineItem.quantity ?? 1;
       const unitPriceCents =
-        li.unitPriceCents ??
-        (li.amountCents != null ? Math.round(li.amountCents / quantity) : 0);
+        lineItem.unitPriceCents ??
+        (lineItem.amountCents != null ? Math.round(lineItem.amountCents / quantity) : 0);
       return {
-        ...li,
+        ...lineItem,
         quantity,
         unitPriceCents,
       };
     }),
   };
-}
-
-function resolveCoverageLabel(invoice: FamilyWithStudentsAndInvoices["invoices"][number]) {
-  if (invoice.coverageStart && invoice.coverageEnd) {
-    return `${formatDate(invoice.coverageStart)} → ${formatDate(invoice.coverageEnd)}`;
-  }
-  if (invoice.creditsPurchased) {
-    return `${invoice.creditsPurchased} credits`;
-  }
-  return "—";
 }
 
 export default function FamilyInvoices({
@@ -141,28 +177,18 @@ export default function FamilyInvoices({
 }: Props) {
   const router = useRouter();
 
-  const [invoiceModalOpen, setInvoiceModalOpen] = React.useState(false);
+  const [invoiceFormOpen, setInvoiceFormOpen] = React.useState(false);
   const [editingInvoice, setEditingInvoice] = React.useState<InvoiceRow | null>(null);
-  const [invoiceDetailOpen, setInvoiceDetailOpen] = React.useState(false);
   const [selectedInvoice, setSelectedInvoice] = React.useState<InvoiceRow | null>(null);
 
-  const [paymentModalOpen, setPaymentModalOpen] = React.useState(false);
+  const [paymentFormOpen, setPaymentFormOpen] = React.useState(false);
   const [editingPayment, setEditingPayment] = React.useState<BillingPayment | null>(null);
-  const [paymentDetailOpen, setPaymentDetailOpen] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState<BillingPayment | null>(null);
 
   const [undoingPaymentId, setUndoingPaymentId] = React.useState<string | null>(null);
   const [isUndoing, startUndo] = React.useTransition();
 
-  const openInvoices = billing.openInvoices.map((invoice) => ({
-    ...invoice,
-    balanceCents: getInvoiceBalanceCents(invoice),
-  }));
-
-  const openInvoiceCount = openInvoices.filter((invoice) => invoice.balanceCents > 0).length;
-  const nextDue = billingPosition.nextDueInvoice ?? null;
-
-  const invoicesWithBalance = React.useMemo<InvoiceRow[]>(
+  const invoices = React.useMemo<InvoiceRow[]>(
     () =>
       family.invoices.map((invoice) => ({
         ...invoice,
@@ -171,82 +197,109 @@ export default function FamilyInvoices({
     [family.invoices]
   );
 
-  const invoicesSorted = React.useMemo(() => {
-    const all = [...invoicesWithBalance];
-    return all.sort((a, b) => {
-      const aBal = a.amountOwingCents;
-      const bBal = b.amountOwingCents;
-      const aStatus = a.status;
-      const bStatus = b.status;
-      const aIsOpen = aBal > 0 && aStatus !== "PAID";
-      const bIsOpen = bBal > 0 && bStatus !== "PAID";
-      if (aIsOpen && !bIsOpen) return -1;
-      if (bIsOpen && !aIsOpen) return 1;
-      if (aStatus === "OVERDUE" && bStatus !== "OVERDUE") return -1;
-      if (bStatus === "OVERDUE" && aStatus !== "OVERDUE") return 1;
-      const adue = a.dueAt ? new Date(a.dueAt).getTime() : Number.POSITIVE_INFINITY;
-      const bdue = b.dueAt ? new Date(b.dueAt).getTime() : Number.POSITIVE_INFINITY;
-      if (aIsOpen && bIsOpen && adue !== bdue) return adue - bdue;
-      const aiss = a.issuedAt ? new Date(a.issuedAt).getTime() : 0;
-      const biss = b.issuedAt ? new Date(b.issuedAt).getTime() : 0;
-      return biss - aiss;
+  const payments = React.useMemo(
+    () => (billing.payments ?? []).map((payment) => payment as BillingPayment),
+    [billing.payments]
+  );
+
+  const openInvoiceCount = React.useMemo(
+    () => invoices.filter((invoice) => invoice.amountOwingCents > 0 && invoice.status !== "PAID").length,
+    [invoices]
+  );
+
+  const nextDue = billingPosition.nextDueInvoice ?? null;
+
+  const billingActivity = React.useMemo<BillingActivityItem[]>(() => {
+    const invoiceItems = invoices.map((invoice) => {
+      const displayStatus = resolveInvoiceDisplayStatus(invoice.status);
+      const tone: BillingActivityItem["tone"] =
+        displayStatus === "OVERDUE"
+          ? "danger"
+          : displayStatus === "PARTIALLY_PAID"
+            ? "warning"
+            : displayStatus === "PAID"
+              ? "success"
+              : "brand";
+
+      return {
+        id: `invoice-${invoice.id}`,
+        kind: "invoice" as const,
+        when: invoice.issuedAt ?? invoice.dueAt ?? null,
+        title: `Invoice ${invoice.id}`,
+        description: `${resolveCoverageLabel(invoice)}${invoice.dueAt ? ` · Due ${formatDate(invoice.dueAt)}` : ""}`,
+        amountLabel: formatCurrencyFromCents(invoice.amountCents),
+        detailLabel: `${formatCurrencyFromCents(invoice.amountOwingCents)} outstanding`,
+        statusLabel: displayStatus,
+        tone,
+        invoice,
+      };
     });
-  }, [invoicesWithBalance]);
+
+    const paymentItems = payments.map((payment) => {
+      const status = payment.status ?? "RECORDED";
+      const tone: BillingActivityItem["tone"] = status === "VOID" ? "warning" : "success";
+
+      return {
+        id: `payment-${payment.id}`,
+        kind: "payment" as const,
+        when: payment.paidAt ?? null,
+        title: `Payment ${payment.id}`,
+        description: `${payment.method ?? "Payment"}${payment.note ? ` · ${payment.note}` : ""}`,
+        amountLabel: formatCurrencyFromCents(payment.amountCents),
+        detailLabel: payment.allocations?.length
+          ? `${payment.allocations.length} allocation${payment.allocations.length === 1 ? "" : "s"}`
+          : "Unallocated",
+        statusLabel: status,
+        tone,
+        payment,
+      };
+    });
+
+    return [...invoiceItems, ...paymentItems].sort((a, b) => {
+      const aTime = a.when ? a.when.getTime() : 0;
+      const bTime = b.when ? b.when.getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.id.localeCompare(b.id);
+    });
+  }, [invoices, payments]);
 
   const allocationsByInvoiceId = React.useMemo(() => {
     const map = new Map<string, InvoiceAllocationItem[]>();
-    for (const payment of billing.payments ?? []) {
+
+    for (const payment of payments) {
       for (const allocation of payment.allocations ?? []) {
-        const arr = map.get(allocation.invoiceId) ?? [];
-        arr.push({
+        const rows = map.get(allocation.invoiceId) ?? [];
+        rows.push({
           paymentId: payment.id,
           paidAt: payment.paidAt ?? null,
           method: payment.method ?? null,
           note: payment.note ?? null,
           amountCents: allocation.amountCents,
         });
-        map.set(allocation.invoiceId, arr);
+        map.set(allocation.invoiceId, rows);
       }
     }
-    for (const [key, arr] of map.entries()) {
-      arr.sort((a, b) => {
-        const ad = a.paidAt ? new Date(a.paidAt).getTime() : 0;
-        const bd = b.paidAt ? new Date(b.paidAt).getTime() : 0;
-        return bd - ad;
+
+    for (const [invoiceId, rows] of map.entries()) {
+      rows.sort((a, b) => {
+        const aDate = a.paidAt ? a.paidAt.getTime() : 0;
+        const bDate = b.paidAt ? b.paidAt.getTime() : 0;
+        return bDate - aDate;
       });
-      map.set(key, arr);
+      map.set(invoiceId, rows);
     }
+
     return map;
-  }, [billing.payments]);
+  }, [payments]);
+
+  const selectedInvoiceAllocations = selectedInvoice
+    ? allocationsByInvoiceId.get(selectedInvoice.id) ?? []
+    : [];
 
   const handleRefresh = React.useCallback(() => {
     router.refresh();
     onUpdated?.();
   }, [onUpdated, router]);
-
-  const handleCreateInvoice = () => {
-    setEditingInvoice(null);
-    setInvoiceModalOpen(true);
-  };
-
-  const handleEditInvoice = (invoice: InvoiceRow) => {
-    setInvoiceDetailOpen(false);
-    setSelectedInvoice(null);
-    setEditingInvoice(invoice);
-    setInvoiceModalOpen(true);
-  };
-
-  const handleOpenPaymentDetail = (payment: BillingPayment) => {
-    setSelectedPayment(payment);
-    setPaymentDetailOpen(true);
-  };
-
-  const handleEditPayment = (payment: BillingPayment) => {
-    setPaymentDetailOpen(false);
-    setSelectedPayment(null);
-    setEditingPayment(payment);
-    setPaymentModalOpen(true);
-  };
 
   const handleSaveInvoice: React.ComponentProps<typeof InvoiceForm>["onSubmit"] = async (payload) => {
     try {
@@ -259,28 +312,27 @@ export default function FamilyInvoices({
         toast.success("Invoice created.");
       }
       setEditingInvoice(null);
-      setInvoiceModalOpen(false);
+      setInvoiceFormOpen(false);
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to save invoice.";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to save invoice.");
     }
   };
 
   const handleDeleteInvoice = async (invoice: InvoiceRow) => {
-    const ok = window.confirm("Delete this invoice? Payments will remain untouched.");
-    if (!ok) return;
+    const confirmed = window.confirm("Delete this invoice? Payments will remain untouched.");
+    if (!confirmed) return;
+
     try {
       await deleteInvoice(invoice.id);
       toast.success("Invoice deleted.");
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to delete invoice.";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to delete invoice.");
     }
   };
 
-  const markInvoice = async (invoice: InvoiceRow, status: InvoiceStatus) => {
+  const handleMarkInvoice = async (invoice: InvoiceRow, status: InvoiceStatus) => {
     try {
       await updateInvoice(invoice.id, {
         status,
@@ -298,14 +350,8 @@ export default function FamilyInvoices({
       );
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to update invoice.";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to update invoice.");
     }
-  };
-
-  const handleOpenInvoiceDetail = (invoice: InvoiceRow) => {
-    setSelectedInvoice(invoice);
-    setInvoiceDetailOpen(true);
   };
 
   const handleSavePayment: React.ComponentProps<typeof PaymentForm>["onSubmit"] = async (payload) => {
@@ -334,24 +380,23 @@ export default function FamilyInvoices({
       }
 
       setEditingPayment(null);
-      setPaymentModalOpen(false);
+      setPaymentFormOpen(false);
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to save payment.";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to save payment.");
     }
   };
 
   const handleDeletePayment = async (payment: BillingPayment) => {
-    const ok = window.confirm("Delete this payment? Allocations will be removed.");
-    if (!ok) return;
+    const confirmed = window.confirm("Delete this payment? Allocations will be removed.");
+    if (!confirmed) return;
+
     try {
       await deletePayment(payment.id);
       toast.success("Payment deleted.");
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to delete payment.";
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to delete payment.");
     }
   };
 
@@ -360,6 +405,7 @@ export default function FamilyInvoices({
       "Undo this payment? Allocations and enrolment entitlements granted by it will be rolled back."
     );
     if (!confirmed) return;
+
     setUndoingPaymentId(paymentId);
     startUndo(async () => {
       try {
@@ -367,274 +413,259 @@ export default function FamilyInvoices({
         toast.success("Payment undone and allocations removed.");
         handleRefresh();
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to undo payment.";
-        toast.error(message);
+        toast.error(error instanceof Error ? error.message : "Unable to undo payment.");
       } finally {
         setUndoingPaymentId(null);
       }
     });
   };
 
-  const selectedInvoiceAllocations = selectedInvoice
-    ? allocationsByInvoiceId.get(selectedInvoice.id) ?? []
-    : [];
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold">Billing</div>
-          <div className="text-xs text-muted-foreground">
-            Invoices, payments, credits, and allocations.
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {onOpenPayment ? (
-            <Button size="sm" variant="secondary" onClick={onOpenPayment}>
-              Take payment
-            </Button>
-          ) : null}
-          {onOpenPayAhead ? (
-            <Button size="sm" variant="outline" onClick={onOpenPayAhead}>
-              Pay ahead
-            </Button>
-          ) : null}
-          <Button size="sm" onClick={handleCreateInvoice}>
-            New invoice
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost">
-                More actions
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-200 px-6 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Billing activity</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Combined invoice and payment timeline for this family.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {onOpenPayment ? (
+                <Button size="sm" variant="secondary" onClick={onOpenPayment}>
+                  Record payment
+                </Button>
+              ) : null}
+              {onOpenPayAhead ? (
+                <Button size="sm" variant="outline" onClick={onOpenPayAhead}>
+                  Pay ahead
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingInvoice(null);
+                  setInvoiceFormOpen(true);
+                }}
+              >
+                Create invoice
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <CatchUpPaymentDialog
-                familyId={family.id}
-                familyName={family.name}
-                trigger={<DropdownMenuItem>Catch up payment</DropdownMenuItem>}
-              />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="text-xs text-muted-foreground">Open invoices</div>
-          <div className="mt-1 text-2xl font-semibold">{openInvoiceCount}</div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {nextDue?.dueAt ? `Next due ${formatDate(nextDue.dueAt)}` : "No upcoming due date"}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    More
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <CatchUpPaymentDialog
+                    familyId={family.id}
+                    familyName={family.name}
+                    trigger={<DropdownMenuItem>Catch up payment</DropdownMenuItem>}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="text-xs text-muted-foreground">Next payment due</div>
-          <div className="mt-1 text-2xl font-semibold">
-            {nextDue?.dueAt ? formatDate(nextDue.dueAt) : "—"}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            {nextDue ? (
-              <>
-                <span className={cn("h-2.5 w-2.5 rounded-full", statusDotClass(nextDue.status))} />
-                <span>{nextDue.status}</span>
-                <span>•</span>
-                <span>{formatCurrencyFromCents(nextDue.balanceCents)} balance</span>
-              </>
-            ) : (
-              "No open invoices"
-            )}
-          </div>
-        </div>
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="text-xs text-muted-foreground">Credits remaining</div>
-          <div className="mt-1 text-2xl font-semibold">{billingPosition.creditsTotal}</div>
-          <div className="mt-1 text-xs text-muted-foreground">Across active enrolments</div>
-        </div>
-      </div>
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Invoices</h3>
-          <span className="text-xs text-muted-foreground">
-            Click an invoice to view details.
-          </span>
+        <div className="grid gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4 sm:grid-cols-3">
+          <SummaryStat
+            label="Open invoices"
+            value={String(openInvoiceCount)}
+            detail={nextDue?.dueAt ? `Next due ${formatDate(nextDue.dueAt)}` : "No upcoming due date"}
+          />
+          <SummaryStat
+            label="Current balance"
+            value={formatCurrencyFromCents(billingPosition.outstandingCents)}
+            detail={
+              billingPosition.outstandingCents > 0
+                ? "Outstanding amount"
+                : "Account currently settled"
+            }
+            valueClassName={billingPosition.outstandingCents > 0 ? "text-red-700" : "text-emerald-700"}
+          />
+          <SummaryStat
+            label="Credits remaining"
+            value={String(billingPosition.creditsTotal)}
+            detail="Across active enrolments"
+          />
         </div>
 
-        <div className="rounded-lg border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40">
-                <TableHead>Invoice</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Issued</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="w-[64px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoicesSorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-6 text-sm text-muted-foreground">
-                    No invoices for this family yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                invoicesSorted.map((invoice) => {
-                  const displayStatus = resolveInvoiceDisplayStatus(invoice.status);
+        <div className="p-6">
+          {billingActivity.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-gray-900">No billing activity yet</p>
+              <p className="mt-1 text-sm text-gray-500">
+                Create an invoice or record a payment to start this timeline.
+              </p>
+            </div>
+          ) : (
+            <div className="flow-root">
+              <ul role="list" className="-mb-8">
+                {billingActivity.map((item, itemIdx) => {
+                  const isInvoice = item.kind === "invoice";
+                  const icon = isInvoice ? FileText : Receipt;
+                  const Icon = icon;
+
                   return (
-                    <TableRow
-                      key={invoice.id}
-                      className="cursor-pointer hover:bg-muted/30"
-                      onClick={() => handleOpenInvoiceDetail(invoice)}
-                    >
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="text-sm font-semibold">Invoice {invoice.id}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {resolveCoverageLabel(invoice)}
+                    <li key={item.id}>
+                      <div className="relative pb-8">
+                        {itemIdx !== billingActivity.length - 1 ? (
+                          <span
+                            aria-hidden="true"
+                            className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                          />
+                        ) : null}
+                        <div className="relative flex space-x-3">
+                          <div>
+                            <span
+                              className={cn(
+                                toneClass(item.tone),
+                                "flex h-8 w-8 items-center justify-center rounded-full ring-8 ring-white"
+                              )}
+                            >
+                              <Icon aria-hidden="true" className="h-4 w-4 text-white" />
+                            </span>
+                          </div>
+                          <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
+                            <div className="min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                                <Badge variant={statusBadgeVariant(item.statusLabel)}>{item.statusLabel}</Badge>
+                              </div>
+                              <p className="text-xs text-gray-500">{item.description}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <span className="font-semibold text-gray-900">{item.amountLabel}</span>
+                                <span className="text-gray-400">•</span>
+                                <span className="text-gray-600">{item.detailLabel}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (isInvoice && item.invoice) {
+                                      setSelectedInvoice(item.invoice);
+                                    }
+                                    if (!isInvoice && item.payment) {
+                                      setSelectedPayment(item.payment);
+                                    }
+                                  }}
+                                >
+                                  View details
+                                </Button>
+                                {isInvoice && item.invoice ? (
+                                  <PrintReceiptButton
+                                    href={`/admin/invoice/${item.invoice.id}/receipt`}
+                                    label="Invoice receipt"
+                                    size="sm"
+                                    variant="ghost"
+                                  />
+                                ) : null}
+                                {!isInvoice && item.payment ? (
+                                  <PrintReceiptButton
+                                    href={`/admin/payment/${item.payment.id}/receipt`}
+                                    label="Payment receipt"
+                                    size="sm"
+                                    variant="ghost"
+                                  />
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2 text-right">
+                              <time className="text-xs whitespace-nowrap text-gray-500">
+                                {formatDateWithTime(item.when)}
+                              </time>
+                              {isInvoice && item.invoice ? (
+                                <InvoiceActions
+                                  invoice={item.invoice}
+                                  onView={(invoice) => setSelectedInvoice(invoice)}
+                                  onEdit={(invoice) => {
+                                    setSelectedInvoice(null);
+                                    setEditingInvoice(invoice);
+                                    setInvoiceFormOpen(true);
+                                  }}
+                                  onDelete={handleDeleteInvoice}
+                                  onMarkPaid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.PAID)}
+                                  onMarkSent={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.SENT)}
+                                  onMarkVoid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.VOID)}
+                                />
+                              ) : null}
+                              {!isInvoice && item.payment ? (
+                                <PaymentActions
+                                  payment={item.payment}
+                                  onView={(payment) => setSelectedPayment(payment)}
+                                  onEdit={(payment) => {
+                                    setSelectedPayment(null);
+                                    setEditingPayment(payment);
+                                    setPaymentFormOpen(true);
+                                  }}
+                                  onDelete={handleDeletePayment}
+                                  onUndo={handleUndoPayment}
+                                  undoingId={undoingPaymentId}
+                                  isUndoing={isUndoing}
+                                />
+                              ) : null}
+                            </div>
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={invoiceVariant(displayStatus)}>{displayStatus}</Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(invoice.issuedAt)}</TableCell>
-                      <TableCell>{formatDate(invoice.dueAt)}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrencyFromCents(invoice.amountCents)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right font-semibold",
-                          invoice.amountOwingCents > 0 ? "text-foreground" : "text-muted-foreground"
-                        )}
-                      >
-                        {formatCurrencyFromCents(invoice.amountOwingCents)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <InvoiceActions
-                          invoice={invoice}
-                          onView={(row) => {
-                            handleOpenInvoiceDetail(row);
-                          }}
-                          onDelete={handleDeleteInvoice}
-                          onMarkPaid={(row) => markInvoice(row, InvoiceStatus.PAID)}
-                          onMarkSent={(row) => markInvoice(row, InvoiceStatus.SENT)}
-                          onMarkVoid={(row) => markInvoice(row, InvoiceStatus.VOID)}
-                        />
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </li>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Payments</h3>
-          <span className="text-xs text-muted-foreground">Recent payments only.</span>
-        </div>
-        <div className="rounded-lg border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40">
-                <TableHead>Date</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-[64px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {billing.payments?.length ? (
-                billing.payments.map((payment) => (
-                  <TableRow
-                    key={payment.id}
-                    className="cursor-pointer hover:bg-muted/30"
-                    onClick={() => handleOpenPaymentDetail(payment as BillingPayment)}
-                  >
-                    <TableCell className="font-medium">{formatDate(payment.paidAt)}</TableCell>
-                    <TableCell>{payment.method ?? "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {payment.note ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrencyFromCents(payment.amountCents)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <PaymentActions
-                        payment={payment as BillingPayment}
-                        onView={handleOpenPaymentDetail}
-                        onDelete={handleDeletePayment}
-                        onUndo={handleUndoPayment}
-                        undoingId={undoingPaymentId}
-                        isUndoing={isUndoing}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-6 text-sm text-muted-foreground">
-                    No payments yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       </section>
 
       <InvoiceForm
-        open={invoiceModalOpen}
-        onOpenChange={(open) => {
-          setInvoiceModalOpen(open);
-          if (!open) setEditingInvoice(null);
+        open={invoiceFormOpen}
+        onOpenChange={(next) => {
+          setInvoiceFormOpen(next);
+          if (!next) setEditingInvoice(null);
         }}
         invoice={editingInvoice}
         families={[{ id: family.id, name: family.name }]}
         statuses={Object.values(InvoiceStatus)}
+        presentation="sheet"
         onSubmit={handleSaveInvoice}
         onDelete={editingInvoice ? () => handleDeleteInvoice(editingInvoice) : undefined}
       />
 
       <PaymentForm
-        open={paymentModalOpen}
-        onOpenChange={(open) => {
-          setPaymentModalOpen(open);
-          if (!open) setEditingPayment(null);
+        open={paymentFormOpen}
+        onOpenChange={(next) => {
+          setPaymentFormOpen(next);
+          if (!next) setEditingPayment(null);
         }}
         payment={editingPayment}
         families={[{ id: family.id, name: family.name }]}
+        presentation="sheet"
         onSubmit={handleSavePayment}
         onDelete={editingPayment ? () => handleDeletePayment(editingPayment) : undefined}
       />
 
-      <Dialog
-        open={paymentDetailOpen}
-        onOpenChange={(open) => {
-          setPaymentDetailOpen(open);
-          if (!open) setSelectedPayment(null);
+      <Sheet
+        open={Boolean(selectedPayment)}
+        onOpenChange={(next) => {
+          if (!next) setSelectedPayment(null);
         }}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Payment details</DialogTitle>
-          </DialogHeader>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+          <SheetHeader className="px-0">
+            <SheetTitle>Payment details</SheetTitle>
+          </SheetHeader>
           {selectedPayment ? (
-            <div className="space-y-4">
+            <div className="mt-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="text-sm font-semibold">Payment {selectedPayment.id}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {selectedPayment.method ?? "Payment"} · {formatDate(selectedPayment.paidAt)}
+                  <div className="text-sm font-semibold text-gray-900">Payment {selectedPayment.id}</div>
+                  <div className="text-xs text-gray-500">
+                    {selectedPayment.method ?? "Payment"} · {formatDateWithTime(selectedPayment.paidAt)}
                   </div>
-                  <div className="text-sm font-semibold">
+                  <div className="text-sm font-semibold text-gray-900">
                     {formatCurrencyFromCents(selectedPayment.amountCents)}
                   </div>
                 </div>
@@ -645,7 +676,14 @@ export default function FamilyInvoices({
                     size="sm"
                     variant="outline"
                   />
-                  <Button size="sm" onClick={() => handleEditPayment(selectedPayment)}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedPayment(null);
+                      setEditingPayment(selectedPayment);
+                      setPaymentFormOpen(true);
+                    }}
+                  >
                     Edit payment
                   </Button>
                 </div>
@@ -658,16 +696,16 @@ export default function FamilyInvoices({
               </div>
 
               {selectedPayment.note ? (
-                <div className="rounded-lg border bg-muted/10 p-3 text-sm">
-                  <div className="text-xs text-muted-foreground">Note</div>
-                  <div className="mt-1 font-medium">{selectedPayment.note}</div>
+                <div className="rounded-lg border bg-gray-50 p-3 text-sm">
+                  <div className="text-xs text-gray-500">Note</div>
+                  <div className="mt-1 font-medium text-gray-900">{selectedPayment.note}</div>
                 </div>
               ) : null}
 
-              <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold">Allocations</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs font-semibold text-gray-900">Allocations</div>
+                  <div className="text-xs text-gray-500">
                     {selectedPayment.allocations?.length
                       ? `${selectedPayment.allocations.length} allocation(s)`
                       : "None yet"}
@@ -678,55 +716,48 @@ export default function FamilyInvoices({
                     {selectedPayment.allocations.map((allocation) => (
                       <div
                         key={`${selectedPayment.id}-${allocation.invoiceId}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-xs"
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="outline">Invoice {allocation.invoiceId}</Badge>
-                          <span className="text-muted-foreground">
+                          <span className="text-gray-500">
                             {allocation.invoice?.status ?? "—"}
                           </span>
                         </div>
-                        <div className="font-semibold">
+                        <div className="font-semibold text-gray-900">
                           {formatCurrencyFromCents(allocation.amountCents)}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    No allocations recorded for this payment.
-                  </p>
+                  <p className="mt-2 text-xs text-gray-500">No allocations recorded for this payment.</p>
                 )}
               </div>
             </div>
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
-      <Dialog
-        open={invoiceDetailOpen}
-        onOpenChange={(open) => {
-          setInvoiceDetailOpen(open);
-          if (!open) setSelectedInvoice(null);
+      <Sheet
+        open={Boolean(selectedInvoice)}
+        onOpenChange={(next) => {
+          if (!next) setSelectedInvoice(null);
         }}
       >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Invoice details</DialogTitle>
-          </DialogHeader>
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+          <SheetHeader className="px-0">
+            <SheetTitle>Invoice details</SheetTitle>
+          </SheetHeader>
           {selectedInvoice ? (
-            <div className="space-y-4">
+            <div className="mt-4 space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="text-sm font-semibold">Invoice {selectedInvoice.id}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {resolveCoverageLabel(selectedInvoice)}
-                  </div>
+                  <div className="text-sm font-semibold text-gray-900">Invoice {selectedInvoice.id}</div>
+                  <div className="text-xs text-gray-500">{resolveCoverageLabel(selectedInvoice)}</div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={invoiceVariant(selectedInvoice.status)}>
-                      {selectedInvoice.status}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    <Badge variant={statusBadgeVariant(selectedInvoice.status)}>{selectedInvoice.status}</Badge>
+                    <span className="text-xs text-gray-500">
                       Issued {formatDate(selectedInvoice.issuedAt)}
                     </span>
                   </div>
@@ -738,7 +769,14 @@ export default function FamilyInvoices({
                     size="sm"
                     variant="outline"
                   />
-                  <Button size="sm" onClick={() => handleEditInvoice(selectedInvoice)}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSelectedInvoice(null);
+                      setEditingInvoice(selectedInvoice);
+                      setInvoiceFormOpen(true);
+                    }}
+                  >
                     Edit invoice
                   </Button>
                 </div>
@@ -750,10 +788,10 @@ export default function FamilyInvoices({
                 <Meta label="Coverage" value={resolveCoverageLabel(selectedInvoice)} />
               </div>
 
-              <div className="rounded-lg border bg-muted/10 p-3">
+              <div className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold">Line items</div>
-                  <div className="text-xs text-muted-foreground">Totals derive from items</div>
+                  <div className="text-xs font-semibold text-gray-900">Line items</div>
+                  <div className="text-xs text-gray-500">Totals derive from items</div>
                 </div>
                 {selectedInvoice.lineItems?.length ? (
                   <Table className="mt-2">
@@ -766,55 +804,53 @@ export default function FamilyInvoices({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedInvoice.lineItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="text-sm">{item.description}</TableCell>
-                          <TableCell className="text-sm">{item.quantity}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{item.kind}</TableCell>
+                      {selectedInvoice.lineItems.map((lineItem) => (
+                        <TableRow key={lineItem.id}>
+                          <TableCell className="text-sm">{lineItem.description}</TableCell>
+                          <TableCell className="text-sm">{lineItem.quantity}</TableCell>
+                          <TableCell className="text-xs text-gray-500">{lineItem.kind}</TableCell>
                           <TableCell className="text-right font-medium">
-                            {formatCurrencyFromCents(item.amountCents)}
+                            {formatCurrencyFromCents(lineItem.amountCents)}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">No line items recorded.</p>
+                  <p className="mt-2 text-xs text-gray-500">No line items recorded.</p>
                 )}
               </div>
 
-              <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold">Payments applied</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs font-semibold text-gray-900">Payments applied</div>
+                  <div className="text-xs text-gray-500">
                     {selectedInvoiceAllocations.length
                       ? `${selectedInvoiceAllocations.length} allocation(s)`
                       : "None yet"}
                   </div>
                 </div>
                 {selectedInvoiceAllocations.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    No payments have been allocated to this invoice.
-                  </p>
+                  <p className="mt-2 text-xs text-gray-500">No payments have been allocated to this invoice.</p>
                 ) : (
                   <div className="mt-2 space-y-2">
                     {selectedInvoiceAllocations.map((allocation) => (
                       <div
                         key={`${selectedInvoice.id}-${allocation.paymentId}-${allocation.amountCents}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-xs"
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-xs"
                       >
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="outline">Payment {allocation.paymentId}</Badge>
-                          <span className="text-muted-foreground">{formatDate(allocation.paidAt)}</span>
+                          <span className="text-gray-500">{formatDate(allocation.paidAt)}</span>
                           {allocation.method ? (
                             <>
-                              <span className="text-muted-foreground">•</span>
-                              <span className="text-muted-foreground">{allocation.method}</span>
+                              <span className="text-gray-400">•</span>
+                              <span className="text-gray-500">{allocation.method}</span>
                             </>
                           ) : null}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold">
+                          <span className="font-semibold text-gray-900">
                             {formatCurrencyFromCents(allocation.amountCents)}
                           </span>
                           <PrintReceiptButton
@@ -825,9 +861,7 @@ export default function FamilyInvoices({
                             className="h-7 px-2 text-xs"
                           />
                         </div>
-                        {allocation.note ? (
-                          <div className="w-full text-muted-foreground">{allocation.note}</div>
-                        ) : null}
+                        {allocation.note ? <div className="w-full text-gray-500">{allocation.note}</div> : null}
                       </div>
                     ))}
                   </div>
@@ -835,17 +869,37 @@ export default function FamilyInvoices({
               </div>
             </div>
           ) : null}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  detail,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
+      <div className={cn("mt-1 text-xl font-semibold text-gray-900", valueClassName)}>{value}</div>
+      <div className="mt-1 text-xs text-gray-500">{detail}</div>
     </div>
   );
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-background p-3">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-medium">{value}</div>
+    <div className="rounded-lg border bg-white p-3">
+      <div className="text-[11px] text-gray-500">{label}</div>
+      <div className="mt-0.5 text-sm font-medium text-gray-900">{value}</div>
     </div>
   );
 }
@@ -853,6 +907,7 @@ function Meta({ label, value }: { label: string; value: string }) {
 function InvoiceActions({
   invoice,
   onView,
+  onEdit,
   onDelete,
   onMarkSent,
   onMarkPaid,
@@ -860,6 +915,7 @@ function InvoiceActions({
 }: {
   invoice: InvoiceRow;
   onView: (invoice: InvoiceRow) => void;
+  onEdit: (invoice: InvoiceRow) => void;
   onDelete: (invoice: InvoiceRow) => Promise<void>;
   onMarkSent: (invoice: InvoiceRow) => Promise<void>;
   onMarkPaid: (invoice: InvoiceRow) => Promise<void>;
@@ -867,7 +923,7 @@ function InvoiceActions({
 }) {
   const [pending, setPending] = React.useState<string | null>(null);
 
-  const handle = async (fn: (invoice: InvoiceRow) => Promise<void>, key: string) => {
+  const run = async (fn: (invoice: InvoiceRow) => Promise<void>, key: string) => {
     setPending(key);
     try {
       await fn(invoice);
@@ -879,26 +935,14 @@ function InvoiceActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Invoice actions"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <Button variant="ghost" size="icon" aria-label="Invoice actions">
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Invoice</DropdownMenuLabel>
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onView(invoice);
-          }}
-        >
-          View / Edit
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onView(invoice)}>View details</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onEdit(invoice)}>Edit invoice</DropdownMenuItem>
         <DropdownMenuItem asChild>
           <PrintReceiptButton
             asChild
@@ -908,47 +952,16 @@ function InvoiceActions({
           />
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={pending === "sent"}
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            handle(onMarkSent, "sent");
-          }}
-        >
-          Mark sent
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={pending === "paid"}
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            handle(onMarkPaid, "paid");
-          }}
-        >
-          Mark paid
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={pending === "void"}
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            handle(onMarkVoid, "void");
-          }}
-        >
-          Void invoice
-        </DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "sent"} onSelect={() => void run(onMarkSent, "sent")}>Mark sent</DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "paid"} onSelect={() => void run(onMarkPaid, "paid")}>Mark paid</DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "void"} onSelect={() => void run(onMarkVoid, "void")}>Void invoice</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
           disabled={pending === "delete"}
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            handle(onDelete, "delete");
-          }}
+          onSelect={() => void run(onDelete, "delete")}
         >
-          Delete
+          Delete invoice
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -958,6 +971,7 @@ function InvoiceActions({
 function PaymentActions({
   payment,
   onView,
+  onEdit,
   onDelete,
   onUndo,
   undoingId,
@@ -965,6 +979,7 @@ function PaymentActions({
 }: {
   payment: BillingPayment;
   onView: (payment: BillingPayment) => void;
+  onEdit: (payment: BillingPayment) => void;
   onDelete: (payment: BillingPayment) => Promise<void>;
   onUndo: (paymentId: string) => void;
   undoingId: string | null;
@@ -973,13 +988,7 @@ function PaymentActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Payment actions"
-          onClick={(event) => event.stopPropagation()}
-          disabled={isUndoing && undoingId === payment.id}
-        >
+        <Button variant="ghost" size="icon" aria-label="Payment actions" disabled={isUndoing && undoingId === payment.id}>
           {isUndoing && undoingId === payment.id ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -989,15 +998,8 @@ function PaymentActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Payment</DropdownMenuLabel>
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onView(payment);
-          }}
-        >
-          View / Edit
-        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onView(payment)}>View details</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onEdit(payment)}>Edit payment</DropdownMenuItem>
         <DropdownMenuItem asChild>
           <PrintReceiptButton
             asChild
@@ -1007,24 +1009,12 @@ function PaymentActions({
           />
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onUndo(payment.id);
-          }}
-        >
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => onUndo(payment.id)}>
+          <Undo2 className="mr-2 h-4 w-4" />
           Undo payment
         </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onDelete(payment);
-          }}
-        >
+        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => void onDelete(payment)}>
+          <AlertCircle className="mr-2 h-4 w-4" />
           Delete payment
         </DropdownMenuItem>
       </DropdownMenuContent>
