@@ -525,7 +525,8 @@ model AwayPeriodImpact {
   enrolment   Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
 
   missedOccurrences    Int
-  paidThroughDeltaDays Int
+  consumedOccurrences  Int @default(0)
+  paidThroughDeltaDays Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

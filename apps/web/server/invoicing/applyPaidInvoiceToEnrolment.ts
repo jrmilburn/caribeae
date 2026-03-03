@@ -23,6 +23,7 @@ import {
   resolveBlockCatchUpCoverage,
   resolveWeeklyCatchUpCoverage,
 } from "@/server/billing/catchUpPaymentUtils";
+import { applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -251,6 +252,9 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
         }
 
         await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
+        if (plan.billingType === BillingType.PER_WEEK) {
+          await applyEligibleAwayCreditsForEnrolment(tx, { enrolmentId: enrolment.id, actorId: null });
+        }
         await getEnrolmentBillingStatus(enrolment.id, { client: tx });
       }
 
@@ -372,6 +376,9 @@ export async function applyPaidInvoiceToEnrolment(invoiceId: string, options?: A
     }
 
     await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
+    if (plan.billingType === BillingType.PER_WEEK) {
+      await applyEligibleAwayCreditsForEnrolment(tx, { enrolmentId: enrolment.id, actorId: null });
+    }
 
     const updatedInvoice = await tx.invoice.update({
       where: { id: invoice.id },

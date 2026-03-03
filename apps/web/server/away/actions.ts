@@ -1,26 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addDays, isAfter, isBefore } from "date-fns";
+import { isAfter, isBefore } from "date-fns";
 import { EnrolmentAdjustmentType, EnrolmentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import {
-  adjustCreditsForManualPaidThroughDate,
-  getEnrolmentBillingStatus,
-} from "@/server/billing/enrolmentBilling";
 import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
-import {
-  applyAwayDeltaDays,
-  calculateAwayDeltaDays,
-  listAwayOccurrences,
-  resolveSessionsPerWeek,
-} from "@/server/away/awayMath";
+import { listAwayOccurrences, resolveSessionsPerWeek } from "@/server/away/awayMath";
 import { assertNoMakeupCreditsInAwayRange } from "@/server/makeup/guards";
+import { applyAwayPaidThroughDelta, applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
 
 const awayScopeSchema = z.enum(["FAMILY", "STUDENT"]);
 
@@ -80,7 +72,6 @@ type CoverageData = {
 type ComputedAwayImpact = {
   enrolmentId: string;
   missedOccurrences: number;
-  paidThroughDeltaDays: number;
 };
 
 function normalizeAwayInput(
@@ -280,12 +271,6 @@ async function computeAwayImpactForEnrolment(
   awayStart: Date,
   awayEnd: Date
 ): Promise<ComputedAwayImpact | null> {
-  const basePaidThrough =
-    (enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null) ??
-    (enrolment.paidThroughDateComputed ? brisbaneStartOfDay(enrolment.paidThroughDateComputed) : null);
-
-  if (!basePaidThrough) return null;
-
   const templates = resolveEnrolmentTemplates(enrolment);
   if (!templates.length) return null;
 
@@ -297,18 +282,11 @@ async function computeAwayImpactForEnrolment(
   if (isAfter(rangeStart, rangeEnd)) return null;
 
   const sessionsPerWeek = resolveSessionsPerWeek(templates);
-  const extensionStart = brisbaneStartOfDay(addDays(basePaidThrough, 1));
-
-  const coverageRangeStart = minDate(rangeStart, extensionStart);
-  const coverageRangeEnd = enrolmentEnd
-    ? maxDate(rangeEnd, enrolmentEnd)
-    : maxDate(rangeEnd, brisbaneStartOfDay(addDays(basePaidThrough, 365)));
-
   const coverage = await loadCoverageData(tx, {
     enrolmentId: enrolment.id,
     templates,
-    rangeStart: coverageRangeStart,
-    rangeEnd: coverageRangeEnd,
+    rangeStart,
+    rangeEnd,
   });
 
   const missedOccurrences = listAwayOccurrences({
@@ -322,60 +300,10 @@ async function computeAwayImpactForEnrolment(
 
   if (missedOccurrences <= 0) return null;
 
-  const paidThroughDeltaDays = calculateAwayDeltaDays({
-    currentPaidThroughDate: basePaidThrough,
-    missedOccurrences,
-    sessionsPerWeek,
-    templates,
-    enrolmentEndDate: enrolmentEnd,
-    coverage,
-  });
-
-  if (paidThroughDeltaDays <= 0) return null;
-
   return {
     enrolmentId: enrolment.id,
     missedOccurrences,
-    paidThroughDeltaDays,
   };
-}
-
-async function applyPaidThroughDelta(
-  tx: Prisma.TransactionClient,
-  params: {
-    enrolment: AwayEnrolmentRecord;
-    deltaDays: number;
-    actorId: string | null;
-  }
-) {
-  const previousPaidThrough =
-    (params.enrolment.paidThroughDate ? brisbaneStartOfDay(params.enrolment.paidThroughDate) : null) ??
-    (params.enrolment.paidThroughDateComputed ? brisbaneStartOfDay(params.enrolment.paidThroughDateComputed) : null);
-
-  if (!previousPaidThrough || params.deltaDays === 0) return;
-
-  const nextPaidThrough = applyAwayDeltaDays(previousPaidThrough, params.deltaDays);
-
-  await tx.enrolment.update({
-    where: { id: params.enrolment.id },
-    data: {
-      paidThroughDate: nextPaidThrough,
-      paidThroughDateComputed: nextPaidThrough,
-    },
-  });
-
-  await adjustCreditsForManualPaidThroughDate(tx, params.enrolment, nextPaidThrough);
-  await getEnrolmentBillingStatus(params.enrolment.id, { client: tx });
-
-  await tx.enrolmentCoverageAudit.create({
-    data: {
-      enrolmentId: params.enrolment.id,
-      reason: "PAIDTHROUGH_MANUAL_EDIT",
-      previousPaidThroughDate: previousPaidThrough,
-      nextPaidThroughDate: nextPaidThrough,
-      actorId: params.actorId,
-    },
-  });
 }
 
 async function applyAwayPeriodImpacts(
@@ -400,30 +328,35 @@ async function applyAwayPeriodImpacts(
     awayPeriodId: string;
     enrolmentId: string;
     missedOccurrences: number;
+    consumedOccurrences: number;
     paidThroughDeltaDays: number;
   }> = [];
+  const touchedEnrolmentIds = new Set<string>();
 
   for (const enrolment of enrolments) {
     const impact = await computeAwayImpactForEnrolment(tx, enrolment, params.startDate, params.endDate);
     if (!impact) continue;
 
-    await applyPaidThroughDelta(tx, {
-      enrolment,
-      deltaDays: impact.paidThroughDeltaDays,
-      actorId: params.actorId,
-    });
-
     impacts.push({
       awayPeriodId: params.awayPeriodId,
       enrolmentId: impact.enrolmentId,
       missedOccurrences: impact.missedOccurrences,
-      paidThroughDeltaDays: impact.paidThroughDeltaDays,
+      consumedOccurrences: 0,
+      paidThroughDeltaDays: 0,
     });
+    touchedEnrolmentIds.add(impact.enrolmentId);
   }
 
   if (impacts.length > 0) {
     await tx.awayPeriodImpact.createMany({
       data: impacts,
+    });
+  }
+
+  for (const enrolmentId of touchedEnrolmentIds) {
+    await applyEligibleAwayCreditsForEnrolment(tx, {
+      enrolmentId,
+      actorId: params.actorId,
     });
   }
 }
@@ -437,16 +370,15 @@ async function revertAwayPeriodImpacts(
 ) {
   const impacts = await tx.awayPeriodImpact.findMany({
     where: { awayPeriodId: params.awayPeriodId },
-    include: {
-      enrolment: {
-        include: awayEnrolmentInclude,
-      },
+    select: {
+      enrolmentId: true,
+      paidThroughDeltaDays: true,
     },
   });
 
   for (const impact of impacts) {
-    await applyPaidThroughDelta(tx, {
-      enrolment: impact.enrolment,
+    await applyAwayPaidThroughDelta(tx, {
+      enrolmentId: impact.enrolmentId,
       deltaDays: impact.paidThroughDeltaDays * -1,
       actorId: params.actorId,
     });

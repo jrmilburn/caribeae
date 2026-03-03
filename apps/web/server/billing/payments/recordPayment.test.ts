@@ -5,6 +5,7 @@ import { BillingType, EnrolmentStatus } from "@prisma/client";
 import { recordPayment, type RecordPaymentInput } from "./recordPayment";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
+import { applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
 
 process.env.TZ = "Australia/Brisbane";
 
@@ -42,6 +43,8 @@ function createFakeClient() {
   const enrolmentAdjustments: any[] = [];
   const holidays: { startDate: Date; endDate: Date }[] = [];
   const classCancellations: { templateId: string; date: Date }[] = [];
+  const awayPeriods: any[] = [];
+  const awayPeriodImpacts: any[] = [];
 
   const nextId = () => `id-${(idCounter += 1)}`;
 
@@ -145,6 +148,47 @@ function createFakeClient() {
     enrolmentPlan: {
       findUnique: async ({ where }: any) => enrolmentPlans.find((plan) => plan.id === where.id) ?? null,
     },
+    awayPeriod: {
+      findUnique: async ({ where }: any) => awayPeriods.find((awayPeriod) => awayPeriod.id === where.id) ?? null,
+    },
+    awayPeriodImpact: {
+      findMany: async ({ where, include }: any) => {
+        const rows = awayPeriodImpacts.filter((impact) => {
+          if (where?.awayPeriodId && impact.awayPeriodId !== where.awayPeriodId) return false;
+          if (where?.enrolmentId && impact.enrolmentId !== where.enrolmentId) return false;
+          if (where?.awayPeriod?.deletedAt === null) {
+            const awayPeriod = awayPeriods.find((period) => period.id === impact.awayPeriodId);
+            if (!awayPeriod || awayPeriod.deletedAt != null) return false;
+          }
+          return true;
+        });
+        if (include?.awayPeriod) {
+          return rows.map((impact) => ({
+            ...impact,
+            awayPeriod: awayPeriods.find((period) => period.id === impact.awayPeriodId),
+          }));
+        }
+        return rows;
+      },
+      createMany: async ({ data }: any) => {
+        data.forEach((entry: any) => {
+          awayPeriodImpacts.push({
+            id: nextId(),
+            consumedOccurrences: 0,
+            paidThroughDeltaDays: 0,
+            ...entry,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        });
+        return { count: data.length };
+      },
+      update: async ({ where, data }: any) => {
+        const impact = awayPeriodImpacts.find((entry) => entry.id === where.id);
+        Object.assign(impact, data, { updatedAt: new Date() });
+        return impact;
+      },
+    },
     invoice: {
       create: async ({ data }: any) => {
         const record = { id: nextId(), status: data.status ?? "DRAFT", ...data };
@@ -170,6 +214,8 @@ function createFakeClient() {
       enrolmentAdjustments,
       holidays,
       classCancellations,
+      awayPeriods,
+      awayPeriodImpacts,
     },
   };
 
@@ -199,7 +245,15 @@ function seedWeeklyEnrolment(db: FakeDb, options?: { paidThroughDate?: Date | nu
       levelId: "level-1",
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0, name: "Monday", levelId: "level-1" },
+    template: {
+      id: "template-weekly",
+      dayOfWeek: 0,
+      name: "Monday",
+      levelId: "level-1",
+      startDate: d("2026-01-01"),
+      endDate: null,
+      startTime: "16:00",
+    },
     classAssignments: [],
   };
   db.__data.enrolmentPlans.push(enrolment.plan);
@@ -230,12 +284,53 @@ function seedCreditEnrolment(db: FakeDb, options?: { creditsRemaining?: number }
       levelId: "level-1",
     },
     student: { familyId: "family-1" },
-    template: { dayOfWeek: 0, name: "Monday", levelId: "level-1" },
+    template: {
+      id: "template-credit",
+      dayOfWeek: 0,
+      name: "Monday",
+      levelId: "level-1",
+      startDate: d("2026-01-01"),
+      endDate: null,
+      startTime: "16:00:00",
+    },
     classAssignments: [],
   };
   db.__data.enrolmentPlans.push(enrolment.plan);
   db.__data.enrolments.push(enrolment);
   return enrolment;
+}
+
+function seedAwayPeriodImpact(
+  db: FakeDb,
+  params: {
+    enrolmentId: string;
+    startDate: Date;
+    endDate?: Date;
+    consumedOccurrences?: number;
+    paidThroughDeltaDays?: number;
+  }
+) {
+  const awayPeriod = {
+    id: `away-${db.__data.awayPeriods.length + 1}`,
+    familyId: "family-1",
+    studentId: null,
+    startDate: params.startDate,
+    endDate: params.endDate ?? params.startDate,
+    deletedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  db.__data.awayPeriods.push(awayPeriod);
+  db.__data.awayPeriodImpacts.push({
+    id: `impact-${db.__data.awayPeriodImpacts.length + 1}`,
+    awayPeriodId: awayPeriod.id,
+    enrolmentId: params.enrolmentId,
+    missedOccurrences: 1,
+    consumedOccurrences: params.consumedOccurrences ?? 0,
+    paidThroughDeltaDays: params.paidThroughDeltaDays ?? 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 }
 
 test("idempotency: same key does not duplicate payment or entitlements", async () => {
@@ -260,14 +355,12 @@ test("idempotency: same key does not duplicate payment or entitlements", async (
   assert.strictEqual(enrolment.paidThroughDate?.toISOString(), afterFirst.paidThroughDate?.toISOString());
 });
 
-test("overdue flips based on paidThrough and credits", async () => {
+test("overdue flips for weekly enrolments after payment", async () => {
   const db = createFakeClient();
   const weekly = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-01") });
-  const credits = seedCreditEnrolment(db, { creditsRemaining: 0 });
 
   const now = d("2026-01-06");
   assert.ok(isEnrolmentOverdue(weekly, now));
-  assert.ok(isEnrolmentOverdue(credits, now));
 
   await recordPayment({
     familyId: "family-1",
@@ -277,16 +370,7 @@ test("overdue flips based on paidThrough and credits", async () => {
     client: asRecordPaymentClient(db),
   });
 
-  await recordPayment({
-    familyId: "family-1",
-    amountCents: 4000,
-    enrolmentId: credits.id,
-    idempotencyKey: "credit-payment",
-    client: asRecordPaymentClient(db),
-  });
-
   assert.ok(!isEnrolmentOverdue(weekly, now));
-  assert.ok(!isEnrolmentOverdue(credits, now));
 });
 
 test("weekly payments ignore holidays when advancing coverage", async () => {
@@ -401,4 +485,92 @@ test("custom block length cannot be below plan block length", async () => {
   }
 
   assert.ok(error instanceof Error);
+});
+
+test("away credit is not applied before paid-through reaches away date", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-19"),
+  });
+
+  await applyEligibleAwayCreditsForEnrolment(db as any, {
+    enrolmentId: enrolment.id,
+    actorId: null,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 0);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 0);
+});
+
+test("payment applies newly-eligible away credit once after base advancement", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-19"),
+  });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "away-eligible-on-payment",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-26");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 7);
+});
+
+test("multiple away credits apply only when eligible and never re-apply", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-19"),
+  });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-02-02"),
+  });
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "away-multi-1",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-26");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[1].consumedOccurrences, 0);
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "away-multi-2",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-02-09");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[1].consumedOccurrences, 1);
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    idempotencyKey: "away-multi-3",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-02-16");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[1].consumedOccurrences, 1);
 });

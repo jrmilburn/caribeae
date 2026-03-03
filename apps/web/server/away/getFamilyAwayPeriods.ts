@@ -39,6 +39,7 @@ export async function getFamilyAwayPeriods(familyId: string) {
           id: true,
           enrolmentId: true,
           missedOccurrences: true,
+          consumedOccurrences: true,
           paidThroughDeltaDays: true,
         },
       },
