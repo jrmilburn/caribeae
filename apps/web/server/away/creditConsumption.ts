@@ -223,7 +223,7 @@ export async function applyEligibleAwayCreditsForEnrolment(
   if (!enrolment || !enrolment.plan) {
     return { appliedOccurrences: 0, appliedDeltaDays: 0 };
   }
-  if (![EnrolmentStatus.ACTIVE, EnrolmentStatus.CHANGEOVER].includes(enrolment.status)) {
+  if (enrolment.status !== EnrolmentStatus.ACTIVE && enrolment.status !== EnrolmentStatus.CHANGEOVER) {
     return { appliedOccurrences: 0, appliedDeltaDays: 0 };
   }
   if (enrolment.plan.billingType !== BillingType.PER_WEEK) {
