@@ -21,7 +21,6 @@ export default function TemplateListItem({
 
   const router = useRouter();
 
-  const schedule = formatSchedule(template.dayOfWeek, template.startTime, template.endTime);
   const level = template.level?.name ?? "—";
   const teacherName = template.teacher?.name?.trim() || "Teacher TBD";
 
@@ -35,14 +34,9 @@ export default function TemplateListItem({
         className="flex w-full items-center justify-between gap-4 rounded-t-lg p-6 text-left transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-foreground">{name}</h3>
-            <span className="inline-flex shrink-0 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-              {level}
-            </span>
-          </div>
+          <h3 className="truncate text-sm font-semibold text-foreground">{name}</h3>
 
-          <p className="mt-1 truncate text-sm text-muted-foreground">{schedule}</p>
+          <p className="mt-1 truncate text-sm text-muted-foreground">{level}</p>
           <p className="mt-1 truncate text-sm text-muted-foreground">{teacherName}</p>
           {!template.active ? <p className="mt-2 text-xs font-medium text-muted-foreground">Inactive</p> : null}
         </div>
@@ -82,34 +76,4 @@ export default function TemplateListItem({
       </div>
     </li>
   );
-}
-
-function formatSchedule(
-  dayOfWeek?: number | null,
-  startMin?: number | null,
-  endMin?: number | null
-) {
-  const day = formatDay(dayOfWeek) ?? "—";
-  const start = typeof startMin === "number" ? minTo12h(startMin) : "—";
-  const end = typeof endMin === "number" ? minTo12h(endMin) : "—";
-
-  if (day === "—" && start === "—" && end === "—") return "—";
-  return `${day} ${start}–${end}`;
-}
-
-function formatDay(dayOfWeek?: number | null) {
-  if (dayOfWeek === null || dayOfWeek === undefined) return null;
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return days[dayOfWeek] ?? null;
-}
-
-function minTo12h(totalMin: number) {
-  const h24 = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  const h12raw = h24 % 12;
-  const h12 = h12raw === 0 ? 12 : h12raw;
-
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
