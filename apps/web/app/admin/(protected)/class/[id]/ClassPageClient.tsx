@@ -38,7 +38,6 @@ import { cancelClassOccurrence } from "@/server/class/cancelClassOccurrence";
 import { uncancelClassOccurrence } from "@/server/class/uncancelClassOccurrence";
 import { brisbaneCompare, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { parseReturnContext } from "@/lib/returnContext";
-import { scheduleDateKey } from "@/packages/schedule";
 
 const DAY_NAMES = [
   "Monday",
@@ -80,23 +79,10 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
 
   const returnTo = parseReturnContext(searchParams);
   const todayDateKey = React.useMemo(() => toBrisbaneDayKey(new Date()), []);
-  const fallbackSchedule = React.useMemo(() => {
-    const params = new URLSearchParams({
-      view: "week",
-      date: scheduleDateKey(new Date()),
-    });
-    return `/admin/schedule?${params.toString()}`;
-  }, []);
-  const scheduleHref = returnTo ?? fallbackSchedule;
-  const handleBackToSchedule = React.useCallback(
-    (event: React.MouseEvent<HTMLAnchorElement>) => {
-      if (typeof window !== "undefined" && window.history.length > 1) {
-        event.preventDefault();
-        router.back();
-      }
-    },
-    [router]
-  );
+  const fromSchedule = returnTo?.startsWith("/admin/schedule") ?? false;
+  const fromClassList = returnTo === "/admin/class" || returnTo?.startsWith("/admin/class?") || false;
+  const breadcrumbHref = fromSchedule || fromClassList ? returnTo : "/admin/class";
+  const breadcrumbLabel = fromSchedule ? "Schedule" : "Classes";
 
   React.useEffect(() => {
     setEffectiveTeacher(data.effectiveTeacher);
@@ -232,8 +218,8 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
           selectedDateKey={selectedDateKey}
           teacherName={effectiveTeacher?.name ?? null}
           teacherSubstitution={Boolean(teacherSubstitution)}
-          scheduleHref={scheduleHref}
-          onBackToSchedule={handleBackToSchedule}
+          breadcrumbHref={breadcrumbHref}
+          breadcrumbLabel={breadcrumbLabel}
           availableDateKeys={data.availableDateKeys}
           onDateChange={handleDateChange}
           autoSelectDateKey={!data.requestedDateValid ? data.selectedDateKey : null}
@@ -353,8 +339,8 @@ type ClassOccurrenceHeaderProps = {
   selectedDateKey: string | null;
   teacherName: string | null;
   teacherSubstitution: boolean;
-  scheduleHref: string;
-  onBackToSchedule: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  breadcrumbHref: string;
+  breadcrumbLabel: string;
   availableDateKeys: string[];
   onDateChange: (nextDateKey: string) => void;
   autoSelectDateKey: string | null;
@@ -375,8 +361,8 @@ function ClassOccurrenceHeader({
   selectedDateKey,
   teacherName,
   teacherSubstitution,
-  scheduleHref,
-  onBackToSchedule,
+  breadcrumbHref,
+  breadcrumbLabel,
   availableDateKeys,
   onDateChange,
   autoSelectDateKey,
@@ -395,11 +381,10 @@ function ClassOccurrenceHeader({
           <div className="space-y-1">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <Link
-                href={scheduleHref}
-                onClick={onBackToSchedule}
+                href={breadcrumbHref}
                 className="inline-flex items-center rounded-sm py-0.5 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                Schedule
+                {breadcrumbLabel}
               </Link>
               <ChevronRight className="h-3 w-3" aria-hidden="true" />
               <span className="font-medium text-foreground" aria-current="page">
