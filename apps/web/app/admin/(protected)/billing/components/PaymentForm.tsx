@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -420,11 +421,33 @@ export function PaymentForm({
                 </TableHeader>
                 <TableBody>
                   {invoiceOptions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-muted-foreground">
-                        {loadingInvoices ? "Loading invoices..." : "No open invoices for this family."}
-                      </TableCell>
-                    </TableRow>
+                    loadingInvoices ? (
+                      <>
+                        {Array.from({ length: 3 }).map((_, index) => (
+                          <TableRow key={`loading-${index}`}>
+                            <TableCell>
+                              <Skeleton className="h-4 w-4 rounded-sm" />
+                            </TableCell>
+                            <TableCell>
+                              <Skeleton className="h-3.5 w-40" />
+                              <Skeleton className="mt-2 h-3.5 w-48" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Skeleton className="ml-auto h-3.5 w-16" />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Skeleton className="ml-auto h-9 w-24" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                          No open invoices for this family.
+                        </TableCell>
+                      </TableRow>
+                    )
                   ) : (
                     invoiceOptions.map((invoice) => {
                       const selected = allocations[invoice.id] != null;

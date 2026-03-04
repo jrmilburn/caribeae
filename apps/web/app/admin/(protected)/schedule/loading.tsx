@@ -1,4 +1,4 @@
-// app/(protected)/admin/schedule/loading.tsx
+import { LoadingRegion } from "@/components/loading/LoadingSystem";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -19,7 +19,7 @@ function DayColumnSkeleton() {
 
 export default function Loading() {
   return (
-    <div className="flex min-h-[100dvh] w-full flex-col">
+    <LoadingRegion className="flex min-h-[100dvh] w-full flex-col" label="Loading schedule">
       {/* Header (matches ScheduleView header bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2">
@@ -100,6 +100,6 @@ export default function Loading() {
           className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-b from-transparent to-background"
         />
       </div>
-    </div>
+    </LoadingRegion>
   );
 }

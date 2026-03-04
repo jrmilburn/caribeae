@@ -9,6 +9,7 @@ import {
   subDays,
 } from "date-fns";
 
+import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -164,7 +165,9 @@ export default function AuditFilters({
             </Button>
             <Button type="button" size="sm" onClick={onApply} disabled={isPending}>
               <Filter className="mr-2 h-4 w-4" />
-              {isPending ? "Loading" : "Apply"}
+              <PendingLabelSwap pending={isPending} pendingLabel="Applying filters" lineClassName="w-12">
+                Apply
+              </PendingLabelSwap>
             </Button>
           </div>
         </div>

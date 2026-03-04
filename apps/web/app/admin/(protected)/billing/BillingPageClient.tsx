@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { BillingMonthSummary } from "@/server/billing/actions";
@@ -35,7 +36,19 @@ export default function BillingPageClient({ months, currentMonthKey }: Props) {
   const selected = months[resolvedIndex] ?? months[0];
 
   if (!months.length || !selected) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading billing data...</div>;
+    return (
+      <div className="space-y-4 p-6" aria-busy="true" aria-live="polite" role="status">
+        <span className="sr-only">Loading billing data</span>
+        <div className="rounded-lg border bg-card p-4">
+          <Skeleton className="h-5 w-36" />
+          <div className="mt-3 space-y-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-9 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const previousMonth = months[resolvedIndex + 1];

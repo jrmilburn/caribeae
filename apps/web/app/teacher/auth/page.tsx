@@ -7,6 +7,7 @@ import { useAuth, useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AuthShell, InlineErrorSlot, LoadingButton } from "@/components/auth/AuthShell";
 import {
   detectIdentifierType,
@@ -23,11 +24,18 @@ export default function TeacherAuthPage() {
     <Suspense
       fallback={
         <AuthShell mode="teacher">
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Teacher access
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Loading sign in</h1>
+          <div className="space-y-8 w-full" aria-busy="true" aria-live="polite">
+            <div className="space-y-3 w-full">
+              <Skeleton className="h-3.5 w-36" />
+              <Skeleton className="h-10 w-56" />
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Skeleton className="h-3.5 w-64" />
+                <Skeleton className="h-11 w-full" />
+              </div>
+              <Skeleton className="h-11 w-full" />
+            </div>
           </div>
         </AuthShell>
       }

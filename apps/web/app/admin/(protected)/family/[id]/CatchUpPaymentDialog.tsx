@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
+import { PendingDot, PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import type { CatchUpPreview } from "@/server/billing/catchUpPayment";
@@ -158,9 +159,18 @@ export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
           </div>
 
           {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading catch-up preview...
+            <div className="space-y-3" aria-busy="true" aria-live="polite" role="status">
+              <span className="sr-only">Loading catch-up preview</span>
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="rounded-lg border p-4">
+                  <Skeleton className="h-4 w-48" />
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    {Array.from({ length: 4 }).map((__, blockIndex) => (
+                      <Skeleton key={blockIndex} className="h-10 w-full" />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : rows.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nothing to pay.</div>
@@ -238,8 +248,10 @@ export function CatchUpPaymentDialog({ familyId, familyName, trigger }: Props) {
             disabled={submitting || loading || rows.length === 0 || totalCents <= 0}
             className={cn(submitting && "opacity-70")}
           >
-            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Confirm catch-up payment
+            {submitting ? <PendingDot className="h-3.5 w-3.5" /> : null}
+            <PendingLabelSwap pending={submitting} pendingLabel="Confirming catch-up payment" lineClassName="w-28">
+              Confirm catch-up payment
+            </PendingLabelSwap>
           </Button>
         </SheetFooter>
       </SheetContent>

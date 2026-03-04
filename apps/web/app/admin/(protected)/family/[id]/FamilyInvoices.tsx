@@ -6,7 +6,6 @@ import { InvoiceStatus } from "@prisma/client";
 import {
   AlertCircle,
   FileText,
-  Loader2,
   MoreHorizontal,
   Receipt,
   Undo2,
@@ -14,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { PendingDot } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -990,7 +990,7 @@ function PaymentActions({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label="Payment actions" disabled={isUndoing && undoingId === payment.id}>
           {isUndoing && undoingId === payment.id ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <PendingDot className="h-3.5 w-3.5" />
           ) : (
             <MoreHorizontal className="h-4 w-4" />
           )}

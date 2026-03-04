@@ -1,31 +1,55 @@
+import { LoadingRegion } from "@/components/loading/LoadingSystem";
+import { Skeleton } from "@/components/ui/skeleton";
+
 export default function PortalLoading() {
   return (
-    <div className="space-y-8 animate-pulse" aria-live="polite" aria-busy="true">
+    <LoadingRegion className="space-y-8" label="Loading portal dashboard">
       <section className="space-y-4">
-        <div className="h-8 w-56 rounded bg-gray-200" />
-        <div className="h-4 w-72 rounded bg-gray-200" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="overflow-hidden rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-200">
-              <div className="h-4 w-32 rounded bg-gray-200" />
-              <div className="mt-4 h-8 w-24 rounded bg-gray-200" />
-              <div className="mt-4 h-3 w-40 rounded bg-gray-200" />
+            <div
+              key={index}
+              className="relative overflow-hidden rounded-lg border bg-white px-4 pb-12 pt-5 shadow-sm ring-1 ring-gray-200 sm:px-6 sm:pt-6"
+            >
+              <Skeleton className="h-10 w-10 rounded-md" />
+              <div className="mt-3 space-y-3">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-3.5 w-40" />
+              </div>
             </div>
           ))}
         </div>
       </section>
 
       <section className="space-y-4">
-        <div className="h-6 w-24 rounded bg-gray-200" />
-        <div className="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
-          <div className="h-16 border-b border-gray-200 px-6" />
-          <div className="space-y-4 px-6 py-5">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-28" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+
+        <div className="overflow-hidden rounded-lg border bg-white shadow-sm ring-1 ring-gray-200">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+            <Skeleton className="h-5 w-40" />
+          </div>
+          <div className="space-y-3 px-4 py-5 sm:px-6">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-24 rounded-lg border border-gray-200 bg-gray-50" />
+              <div key={index} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-3.5 w-64" />
+                  <Skeleton className="h-3.5 w-52" />
+                </div>
+              </div>
             ))}
           </div>
         </div>
       </section>
-    </div>
+    </LoadingRegion>
   );
 }

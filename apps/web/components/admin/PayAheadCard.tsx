@@ -4,9 +4,10 @@
 
 import * as React from "react";
 import { format } from "date-fns";
-import { Loader2, PlusCircle } from "lucide-react";
+import { PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 
+import { PendingDot, PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -571,8 +572,10 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                 Clear note
               </Button>
               <Button type="button" onClick={handleSubmit} disabled={submitting || totalCents <= 0}>
-                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {submitting ? "Processing..." : "Charge & mark paid"}
+                {submitting ? <PendingDot className="h-3.5 w-3.5" /> : null}
+                <PendingLabelSwap pending={submitting} pendingLabel="Processing payment" lineClassName="w-24">
+                  Charge & mark paid
+                </PendingLabelSwap>
               </Button>
             </div>
           </>

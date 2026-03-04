@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 
 import { AdminPagination } from "@/components/admin/AdminPagination";
+import { PendingLine } from "@/components/loading/LoadingSystem";
 import { RequestListHeader } from "@/components/admin/RequestListHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -606,7 +607,12 @@ function AcceptOnboardingDialog({
                 <p className="text-sm font-medium">Potential matches</p>
                 <p className="text-xs text-muted-foreground">Attach to an existing family if it already exists.</p>
               </div>
-              {loadingMatches ? <Badge variant="secondary">Checking...</Badge> : null}
+              {loadingMatches ? (
+                <span role="status" aria-live="polite" aria-busy="true" className="inline-flex items-center">
+                  <span className="sr-only">Checking for matching families</span>
+                  <PendingLine className="w-16" />
+                </span>
+              ) : null}
             </div>
             {matches.length ? (
               <div className="mt-3 space-y-3">

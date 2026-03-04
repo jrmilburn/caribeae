@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Search, Users, UserRound, X } from "lucide-react";
+import { Search, Users, UserRound, X } from "lucide-react";
 
+import { PendingDot } from "@/components/loading/LoadingSystem";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -169,7 +170,7 @@ export function ReceptionSearch({
           className="pl-9 pr-20"
         />
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-2">
-          {searching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          {searching ? <PendingDot className="h-3.5 w-3.5" /> : null}
           {hasQuery ? (
             <Button
               type="button"

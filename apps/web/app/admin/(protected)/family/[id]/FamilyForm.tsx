@@ -11,7 +11,6 @@ import {
   ChevronRight,
   GraduationCap,
   Info,
-  Loader2,
   MoreVertical,
   RefreshCcw,
 } from "lucide-react";
@@ -30,6 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
@@ -826,9 +826,12 @@ export default function FamilyForm({
                         </div>
 
                         {isLoadingStudent && !studentDetails ? (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading student details...
+                          <div className="space-y-2" aria-busy="true" aria-live="polite" role="status">
+                            <span className="sr-only">Loading student details</span>
+                            <Skeleton className="h-4 w-44" />
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
                           </div>
                         ) : studentDetails ? (
                           <StudentEnrolmentsSection

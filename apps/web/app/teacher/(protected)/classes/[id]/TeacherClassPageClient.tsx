@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
 import { AttendanceStatus } from "@prisma/client";
 
+import { PendingDot } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
@@ -149,7 +149,7 @@ export default function TeacherClassPageClient({
                       onClick={() => handleUpdate(row.studentId, AttendanceStatus.PRESENT)}
                       disabled={isLoading || row.awayLocked || cancelled}
                     >
-                      {isLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                      {isLoading ? <PendingDot className="h-3 w-3" /> : null}
                       Present
                     </Button>
                     <Button

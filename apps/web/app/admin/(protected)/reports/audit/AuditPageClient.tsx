@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, FileText, Loader2, Receipt, Wallet } from "lucide-react";
+import { CalendarClock, FileText, Receipt, Wallet } from "lucide-react";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 
+import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -84,9 +85,11 @@ export default function AuditPageClient({ report }: { report: AuditReport }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.refresh()} disabled={isPending}>
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarClock className="mr-2 h-4 w-4" />}
-            Refresh
+          <Button variant="outline" size="sm" onClick={() => router.refresh()} disabled={isPending} aria-busy={isPending}>
+            <CalendarClock className="mr-2 h-4 w-4" />
+            <PendingLabelSwap pending={isPending} pendingLabel="Refreshing report" lineClassName="w-16">
+              Refresh
+            </PendingLabelSwap>
           </Button>
         </div>
       </div>
@@ -140,7 +143,7 @@ export default function AuditPageClient({ report }: { report: AuditReport }) {
             <CardContent className="grid gap-4 sm:grid-cols-3">
               <SummaryCard label="Total received" value={formatCurrencyFromCents(report.cash.summary.totalReceivedCents)} icon={<Wallet className="h-4 w-4 text-muted-foreground" />} />
               <SummaryCard label="Allocated" value={formatCurrencyFromCents(report.cash.summary.allocatedCents)} icon={<FileText className="h-4 w-4 text-muted-foreground" />} />
-              <SummaryCard label="Unallocated" value={formatCurrencyFromCents(report.cash.summary.unallocatedCents)} icon={<Loader2 className="h-4 w-4 text-muted-foreground" />} />
+              <SummaryCard label="Unallocated" value={formatCurrencyFromCents(report.cash.summary.unallocatedCents)} icon={<Receipt className="h-4 w-4 text-muted-foreground" />} />
             </CardContent>
           </Card>
 

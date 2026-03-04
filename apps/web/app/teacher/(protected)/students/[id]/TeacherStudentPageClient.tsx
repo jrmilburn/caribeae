@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
 
+import { PendingDot } from "@/components/loading/LoadingSystem";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TeacherHistoryFeed } from "@/components/teacher/TeacherHistoryFeed";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
@@ -108,7 +108,7 @@ export default function TeacherStudentPageClient({
                       <span className="mt-1 block text-xs text-gray-500">{skill.description}</span>
                     ) : null}
                   </span>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" /> : null}
+                  {loading ? <PendingDot className="h-3.5 w-3.5" /> : null}
                 </label>
               );
             })

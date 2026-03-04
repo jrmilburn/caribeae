@@ -4,6 +4,7 @@ import * as React from "react";
 import type { Family, Level, InvoiceStatus } from "@prisma/client";
 import type { ClassFilterOption } from "@/server/communication/getClassFilterOptions";
 
+import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -573,8 +574,16 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
               : "Use the builder to craft your email."}
           </span>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={previewBroadcast} disabled={broadcastBusy}>
-              {broadcastBusy ? "Loading…" : "Preview"}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={previewBroadcast}
+              disabled={broadcastBusy}
+              aria-busy={broadcastBusy}
+            >
+              <PendingLabelSwap pending={broadcastBusy} pendingLabel="Loading preview" lineClassName="w-14">
+                Preview
+              </PendingLabelSwap>
             </Button>
             <Button
               type="button"
@@ -585,8 +594,11 @@ const exportEmailHtml = async (editor: React.RefObject<EmailBuilderHandle | null
                   ? !broadcastSmsMessage.trim()
                   : !broadcastEmailReady)
               }
+              aria-busy={broadcastBusy}
             >
-              {broadcastBusy ? "Sending…" : "Send broadcast"}
+              <PendingLabelSwap pending={broadcastBusy} pendingLabel="Sending broadcast" lineClassName="w-24">
+                Send broadcast
+              </PendingLabelSwap>
             </Button>
           </div>
         </div>

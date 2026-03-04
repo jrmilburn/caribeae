@@ -3,6 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type UnlayerEditor = {
   init: (options: Record<string, unknown>) => void;
@@ -116,8 +117,13 @@ export const EmailBuilder = React.forwardRef<EmailBuilderHandle, EmailBuilderPro
           style={{ height, minHeight: height }}
         >
           {!initialized ? (
-            <div className="flex h-full w-full items-center justify-center p-4 text-sm text-muted-foreground">
-              Loading email builder…
+            <div className="flex h-full w-full items-center justify-center p-4" aria-busy="true" role="status" aria-live="polite">
+              <span className="sr-only">Loading email builder</span>
+              <div className="w-full max-w-xl space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-40 w-full" />
+                <Skeleton className="h-10 w-36" />
+              </div>
             </div>
           ) : null}
         </div>

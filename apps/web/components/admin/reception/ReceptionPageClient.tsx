@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import type { EnrolmentPlan, Level } from "@prisma/client";
-import { Mail, Phone, Loader2, ShoppingBag } from "lucide-react";
+import { Mail, Phone, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 
+import { PendingDot } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -591,9 +592,11 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
               ) : null}
 
               {selectedStudentId && isLoadingStudent ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading student...
+                <div className="space-y-2 rounded-lg border border-border/80 p-3" aria-busy="true" aria-live="polite" role="status">
+                  <span className="sr-only">Loading student</span>
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
                 </div>
               ) : null}
             </div>
@@ -671,8 +674,8 @@ export function ReceptionPageClient({ levels, enrolmentPlans }: { levels: Level[
             <div className="max-h-64 overflow-y-auto rounded-md border">
               {familyPickerSearching ? (
                 <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Searching...
+                  <PendingDot className="h-3.5 w-3.5" />
+                  <Skeleton className="h-2.5 w-20" />
                 </div>
               ) : familyPickerResults.length === 0 ? (
                 <div className="p-3 text-sm text-muted-foreground">No families found.</div>

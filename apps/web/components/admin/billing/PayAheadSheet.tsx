@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
 
@@ -67,9 +67,20 @@ export function PayAheadSheet({ familyId, open, onOpenChange, trigger, onUpdated
         </SheetHeader>
         <div className="mt-4 space-y-4">
           {isLoading && !summary ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading pay-ahead details...
+            <div className="space-y-4" aria-busy="true" aria-live="polite" role="status">
+              <span className="sr-only">Loading pay-ahead details</span>
+              <div className="rounded-lg border p-4">
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
             </div>
           ) : (
             <PayAheadCard summary={summary} onRefresh={handleRefresh} />

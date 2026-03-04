@@ -81,7 +81,7 @@ export default function ClassPageClient({ data, requestedDateKey, initialTab }: 
   const todayDateKey = React.useMemo(() => toBrisbaneDayKey(new Date()), []);
   const fromSchedule = returnTo?.startsWith("/admin/schedule") ?? false;
   const fromClassList = returnTo === "/admin/class" || returnTo?.startsWith("/admin/class?") || false;
-  const breadcrumbHref = fromSchedule || fromClassList ? returnTo : "/admin/class";
+  const breadcrumbHref = fromSchedule || fromClassList ? (returnTo ?? "/admin/class") : "/admin/class";
   const breadcrumbLabel = fromSchedule ? "Schedule" : "Classes";
 
   React.useEffect(() => {

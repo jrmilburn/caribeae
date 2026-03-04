@@ -12,6 +12,7 @@ import {
   Receipt,
 } from "lucide-react";
 
+import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -144,8 +145,10 @@ export default function PortalBillingClient(props: PortalBillingClientProps) {
         </div>
       ) : null}
 
-      <Button className="h-11 w-full" onClick={handleProceed} disabled={submitting}>
-        {submitting ? "Redirecting..." : "Proceed to secure payment"}
+      <Button className="h-11 w-full" onClick={handleProceed} disabled={submitting} aria-busy={submitting}>
+        <PendingLabelSwap pending={submitting} pendingLabel="Redirecting to checkout" lineClassName="w-32">
+          Proceed to secure payment
+        </PendingLabelSwap>
       </Button>
     </div>
   );

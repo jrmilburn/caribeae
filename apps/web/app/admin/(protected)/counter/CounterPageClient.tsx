@@ -7,7 +7,6 @@ import {
   CalendarClock,
   CheckCircle2,
   CreditCard,
-  Loader2,
   Search,
   ShoppingBag,
   Sparkles,
@@ -16,6 +15,7 @@ import {
 import type { Product } from "@prisma/client";
 import { toast } from "sonner";
 
+import { PendingDot, PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -485,7 +485,7 @@ export default function CounterPageClient({ products, counterFamily }: CounterPa
                   className="pr-10"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  {searching ? <PendingDot className="h-3.5 w-3.5" /> : <Search className="h-4 w-4" />}
                 </div>
               </div>
 
@@ -736,8 +736,10 @@ function BillingTab({
           </div>
           {loadingSummary ? (
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Refreshing…
+              <PendingDot className="h-3.5 w-3.5" />
+              <PendingLabelSwap pending={loadingSummary} pendingLabel="Refreshing invoices" lineClassName="w-16">
+                Refreshing
+              </PendingLabelSwap>
             </span>
           ) : null}
         </div>
@@ -1173,9 +1175,11 @@ function CounterActionSheet({
                 ) : null}
 
                 <div className="flex justify-end gap-2 pt-1">
-                  <Button type="submit" disabled={submittingPayment}>
-                    {submittingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    {submittingPayment ? "Saving..." : "Record payment"}
+                  <Button type="submit" disabled={submittingPayment} aria-busy={submittingPayment}>
+                    {submittingPayment ? <PendingDot className="h-3.5 w-3.5" /> : null}
+                    <PendingLabelSwap pending={submittingPayment} pendingLabel="Saving payment" lineClassName="w-20">
+                      Record payment
+                    </PendingLabelSwap>
                   </Button>
                 </div>
               </form>
@@ -1197,11 +1201,18 @@ function CounterActionSheet({
                       variant="ghost"
                       onClick={() => onUndoPayment(payment.id)}
                       disabled={isUndoing && undoingPaymentId === payment.id}
+                      aria-busy={isUndoing && undoingPaymentId === payment.id}
                     >
                       {isUndoing && undoingPaymentId === payment.id ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <PendingDot className="h-3.5 w-3.5" />
                       ) : null}
-                      Undo
+                      <PendingLabelSwap
+                        pending={isUndoing && undoingPaymentId === payment.id}
+                        pendingLabel="Undoing payment"
+                        lineClassName="w-10"
+                      >
+                        Undo
+                      </PendingLabelSwap>
                     </Button>
                   </div>
                 ))}
@@ -1345,9 +1356,15 @@ function CounterActionSheet({
               </div>
 
               <div className="flex flex-col gap-2">
-                <Button type="button" onClick={onCheckout} disabled={checkingOut || cartItems.length === 0}>
-                  {checkingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {checkoutMode === "PAY_NOW" ? "Checkout & pay" : "Create invoice"}
+                <Button type="button" onClick={onCheckout} disabled={checkingOut || cartItems.length === 0} aria-busy={checkingOut}>
+                  {checkingOut ? <PendingDot className="h-3.5 w-3.5" /> : null}
+                  <PendingLabelSwap
+                    pending={checkingOut}
+                    pendingLabel={checkoutMode === "PAY_NOW" ? "Checking out" : "Creating invoice"}
+                    lineClassName="w-24"
+                  >
+                    {checkoutMode === "PAY_NOW" ? "Checkout & pay" : "Create invoice"}
+                  </PendingLabelSwap>
                 </Button>
                 {cartItems.length > 0 ? (
                   <Button type="button" variant="ghost" onClick={clearCart} disabled={checkingOut}>

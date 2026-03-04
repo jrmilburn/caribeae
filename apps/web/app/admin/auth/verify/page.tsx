@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { useClerk, useSignIn } from "@clerk/nextjs";
 
+import { PendingDot, PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthShell } from "@/components/auth/AuthShell";
@@ -282,8 +282,10 @@ export default function AdminVerifyPage() {
             disabled={isSubmitting}
             aria-busy={isSubmitting}
           >
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            <span>{isSubmitting ? "Verifying" : "Verify"}</span>
+            {isSubmitting ? <PendingDot className="h-3.5 w-3.5" /> : null}
+            <PendingLabelSwap pending={isSubmitting} pendingLabel="Verifying code" lineClassName="w-16">
+              Verify
+            </PendingLabelSwap>
           </Button>
 
           <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">

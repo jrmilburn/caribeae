@@ -4,6 +4,7 @@ import * as React from "react";
 import { MakeupCreditStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
 
+import { PendingLabelSwap, PendingLine } from "@/components/loading/LoadingSystem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -256,9 +257,7 @@ export default function PortalMakeupsClient({ summary }: { summary: MakeupSummar
                 disabled={loadingSessions || sessions.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={loadingSessions ? "Loading sessions..." : "Select a session"}
-                  />
+                  <SelectValue placeholder="Select a session" />
                 </SelectTrigger>
                 <SelectContent>
                   {sessions.map((session) => (
@@ -268,6 +267,12 @@ export default function PortalMakeupsClient({ summary }: { summary: MakeupSummar
                   ))}
                 </SelectContent>
               </Select>
+              {loadingSessions ? (
+                <div className="inline-flex items-center" role="status" aria-live="polite" aria-busy="true">
+                  <span className="sr-only">Loading sessions</span>
+                  <PendingLine className="w-20" />
+                </div>
+              ) : null}
               {!loadingSessions && sessions.length === 0 ? (
                 <p className="text-xs text-gray-500">No eligible sessions are currently available for this credit.</p>
               ) : null}
@@ -278,8 +283,10 @@ export default function PortalMakeupsClient({ summary }: { summary: MakeupSummar
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
               Close
             </Button>
-            <Button onClick={handleBook} disabled={!canBook}>
-              {saving ? "Booking..." : "Confirm booking"}
+            <Button onClick={handleBook} disabled={!canBook} aria-busy={saving}>
+              <PendingLabelSwap pending={saving} pendingLabel="Booking makeup" lineClassName="w-20">
+                Confirm booking
+              </PendingLabelSwap>
             </Button>
           </DialogFooter>
         </DialogContent>

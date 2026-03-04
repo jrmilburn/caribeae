@@ -4,8 +4,10 @@ import * as React from "react";
 import type { InboxConversation, ConversationMessage } from "@/server/messages/actions";
 import { loadConversation, sendToConversation, linkConversationToFamily } from "@/server/messages/actions";
 
+import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -211,7 +213,9 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
                 ))}
               </select>
               <Button variant="secondary" disabled={!selectedFamily || linking} onClick={handleLink}>
-                {linking ? "Linking…" : "Link"}
+                <PendingLabelSwap pending={linking} pendingLabel="Linking family" lineClassName="w-12">
+                  Link
+                </PendingLabelSwap>
               </Button>
             </div>
           )}
@@ -224,7 +228,22 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
               Choose a conversation to view messages.
             </div>
           ) : loading ? (
-            <div className="text-sm text-muted-foreground">Loading conversation…</div>
+            <div className="space-y-3" aria-busy="true" aria-live="polite" role="status">
+              <span className="sr-only">Loading conversation</span>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "max-w-[85%] rounded-2xl border px-3 py-3",
+                    index % 2 ? "ml-auto" : "mr-auto"
+                  )}
+                >
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="mt-2 h-3.5 w-64 max-w-[75vw]" />
+                  <Skeleton className="mt-1 h-3.5 w-48 max-w-[55vw]" />
+                </div>
+              ))}
+            </div>
           ) : messages.length === 0 ? (
             <div className="text-sm text-muted-foreground">No messages yet.</div>
           ) : (
@@ -283,8 +302,11 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
             <Button
               onClick={handleSend}
               disabled={!activeConversation || sending || !reply.trim()}
+              aria-busy={sending}
             >
-              {sending ? "Sending…" : "Send SMS"}
+              <PendingLabelSwap pending={sending} pendingLabel="Sending SMS" lineClassName="w-16">
+                Send SMS
+              </PendingLabelSwap>
             </Button>
           </div>
         </div>

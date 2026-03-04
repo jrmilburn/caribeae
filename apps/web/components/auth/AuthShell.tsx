@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
 
+import { PendingDot, PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -213,8 +213,10 @@ export function LoadingButton({
       disabled={disabled || isLoading}
       aria-busy={isLoading}
     >
-      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-      <span>{isLoading ? loadingText : children}</span>
+      {isLoading ? <PendingDot className="h-3.5 w-3.5" /> : null}
+      <PendingLabelSwap pending={isLoading} pendingLabel={loadingText} lineClassName="w-24">
+        {children}
+      </PendingLabelSwap>
     </Button>
   );
 }
