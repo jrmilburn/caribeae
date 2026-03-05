@@ -13,7 +13,7 @@ import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPr
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
 import { assertWeeklyPlanSelection, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
-import { applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
+import { recalculateAwayAdjustedPaidThroughForEnrolment } from "@/server/away/creditConsumption";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -210,7 +210,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       });
 
       await recalculateEnrolmentCoverage(enrolment.id, "INVOICE_APPLIED", { tx, actorId: undefined });
-      await applyEligibleAwayCreditsForEnrolment(tx, { enrolmentId: enrolment.id, actorId: null });
+      await recalculateAwayAdjustedPaidThroughForEnrolment(tx, { enrolmentId: enrolment.id, actorId: null });
     } else if (plan.billingType === BillingType.PER_CLASS) {
       const creditsToAdd = customBlockLength ?? planBlockLength;
       if (creditsToAdd <= 0) {

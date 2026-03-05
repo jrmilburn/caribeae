@@ -5,7 +5,10 @@ import { BillingType, EnrolmentStatus } from "@prisma/client";
 import { recordPayment, type RecordPaymentInput } from "./recordPayment";
 import { isEnrolmentOverdue } from "@/server/billing/overdue";
 import { toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
-import { applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
+import {
+  applyEligibleAwayCreditsForEnrolment,
+  recalculateAwayAdjustedPaidThroughForEnrolment,
+} from "@/server/away/creditConsumption";
 
 process.env.TZ = "Australia/Brisbane";
 
@@ -182,6 +185,15 @@ function createFakeClient() {
           });
         });
         return { count: data.length };
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0;
+        awayPeriodImpacts.forEach((impact) => {
+          if (where?.enrolmentId && impact.enrolmentId !== where.enrolmentId) return;
+          Object.assign(impact, data, { updatedAt: new Date() });
+          count += 1;
+        });
+        return { count };
       },
       update: async ({ where, data }: any) => {
         const impact = awayPeriodImpacts.find((entry) => entry.id === where.id);
@@ -573,4 +585,47 @@ test("multiple away credits apply only when eligible and never re-apply", async 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-02-16");
   assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
   assert.strictEqual(db.__data.awayPeriodImpacts[1].consumedOccurrences, 1);
+});
+
+test("recalculation removes previously applied away extension when away no longer overlaps paid classes", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-19") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-26"),
+    consumedOccurrences: 1,
+    paidThroughDeltaDays: 7,
+  });
+
+  await recalculateAwayAdjustedPaidThroughForEnrolment(db as any, {
+    enrolmentId: enrolment.id,
+    actorId: null,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-12");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 0);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 0);
+});
+
+test("recalculation applies away extension when away is moved into already-paid coverage", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-19") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-26"),
+    consumedOccurrences: 1,
+    paidThroughDeltaDays: 7,
+  });
+
+  db.__data.awayPeriods[0].startDate = d("2026-01-12");
+  db.__data.awayPeriods[0].endDate = d("2026-01-12");
+
+  await recalculateAwayAdjustedPaidThroughForEnrolment(db as any, {
+    enrolmentId: enrolment.id,
+    actorId: null,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-19");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 7);
 });

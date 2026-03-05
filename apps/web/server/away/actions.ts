@@ -12,7 +12,7 @@ import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { listAwayOccurrences, resolveSessionsPerWeek } from "@/server/away/awayMath";
 import { assertNoMakeupCreditsInAwayRange } from "@/server/makeup/guards";
-import { applyAwayPaidThroughDelta, applyEligibleAwayCreditsForEnrolment } from "@/server/away/creditConsumption";
+import { recalculateAwayAdjustedPaidThroughForEnrolment } from "@/server/away/creditConsumption";
 
 const awayScopeSchema = z.enum(["FAMILY", "STUDENT"]);
 
@@ -314,9 +314,8 @@ async function applyAwayPeriodImpacts(
     studentId: string | null;
     startDate: Date;
     endDate: Date;
-    actorId: string | null;
   }
-) {
+): Promise<string[]> {
   const enrolments = await findImpactedEnrolments(tx, {
     familyId: params.familyId,
     studentId: params.studentId,
@@ -353,34 +352,23 @@ async function applyAwayPeriodImpacts(
     });
   }
 
-  for (const enrolmentId of touchedEnrolmentIds) {
-    await applyEligibleAwayCreditsForEnrolment(tx, {
-      enrolmentId,
-      actorId: params.actorId,
-    });
-  }
+  return Array.from(touchedEnrolmentIds);
 }
 
-async function revertAwayPeriodImpacts(
+async function recalculateAwayForEnrolments(
   tx: Prisma.TransactionClient,
   params: {
-    awayPeriodId: string;
+    enrolmentIds: Iterable<string>;
     actorId: string | null;
+    extraRemovedDeltaDaysByEnrolmentId?: Map<string, number>;
   }
 ) {
-  const impacts = await tx.awayPeriodImpact.findMany({
-    where: { awayPeriodId: params.awayPeriodId },
-    select: {
-      enrolmentId: true,
-      paidThroughDeltaDays: true,
-    },
-  });
-
-  for (const impact of impacts) {
-    await applyAwayPaidThroughDelta(tx, {
-      enrolmentId: impact.enrolmentId,
-      deltaDays: impact.paidThroughDeltaDays * -1,
+  const uniqueEnrolmentIds = Array.from(new Set(Array.from(params.enrolmentIds).filter(Boolean)));
+  for (const enrolmentId of uniqueEnrolmentIds) {
+    await recalculateAwayAdjustedPaidThroughForEnrolment(tx, {
+      enrolmentId,
       actorId: params.actorId,
+      additionalDeltaDaysToRemove: params.extraRemovedDeltaDaysByEnrolmentId?.get(enrolmentId) ?? 0,
     });
   }
 }
@@ -413,12 +401,16 @@ export async function createAwayPeriod(input: z.input<typeof createAwayPeriodSch
         },
       });
 
-      await applyAwayPeriodImpacts(tx, {
+      const touchedEnrolmentIds = await applyAwayPeriodImpacts(tx, {
         awayPeriodId: awayPeriod.id,
         familyId: normalized.familyId,
         studentId: normalized.studentId,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
+      });
+
+      await recalculateAwayForEnrolments(tx, {
+        enrolmentIds: touchedEnrolmentIds,
         actorId: user.id,
       });
 
@@ -464,9 +456,9 @@ export async function updateAwayPeriod(input: z.input<typeof updateAwayPeriodSch
       await assertNoOverlappingAwayPeriod(tx, { ...normalized, excludeId: parsed.id });
       await assertNoMakeupCreditsInAwayRange(tx, normalized);
 
-      await revertAwayPeriodImpacts(tx, {
-        awayPeriodId: parsed.id,
-        actorId: user.id,
+      const previousImpacts = await tx.awayPeriodImpact.findMany({
+        where: { awayPeriodId: parsed.id },
+        select: { enrolmentId: true, paidThroughDeltaDays: true },
       });
 
       await tx.awayPeriodImpact.deleteMany({
@@ -483,13 +475,24 @@ export async function updateAwayPeriod(input: z.input<typeof updateAwayPeriodSch
         },
       });
 
-      await applyAwayPeriodImpacts(tx, {
+      const touchedEnrolmentIds = await applyAwayPeriodImpacts(tx, {
         awayPeriodId: awayPeriod.id,
         familyId: awayPeriod.familyId,
         studentId: normalized.studentId,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
+      });
+
+      await recalculateAwayForEnrolments(tx, {
+        enrolmentIds: [
+          ...previousImpacts.map((impact) => impact.enrolmentId),
+          ...touchedEnrolmentIds,
+        ],
         actorId: user.id,
+        extraRemovedDeltaDaysByEnrolmentId: previousImpacts.reduce((map, impact) => {
+          map.set(impact.enrolmentId, (map.get(impact.enrolmentId) ?? 0) + impact.paidThroughDeltaDays);
+          return map;
+        }, new Map<string, number>()),
       });
 
       return {
@@ -525,9 +528,9 @@ export async function deleteAwayPeriod(input: z.input<typeof deleteAwayPeriodSch
         throw new Error("Away period not found.");
       }
 
-      await revertAwayPeriodImpacts(tx, {
-        awayPeriodId: existing.id,
-        actorId: user.id,
+      const impacts = await tx.awayPeriodImpact.findMany({
+        where: { awayPeriodId: existing.id },
+        select: { enrolmentId: true },
       });
 
       await tx.awayPeriod.update({
@@ -535,6 +538,11 @@ export async function deleteAwayPeriod(input: z.input<typeof deleteAwayPeriodSch
         data: {
           deletedAt: new Date(),
         },
+      });
+
+      await recalculateAwayForEnrolments(tx, {
+        enrolmentIds: impacts.map((impact) => impact.enrolmentId),
+        actorId: user.id,
       });
 
       return {

@@ -213,7 +213,7 @@ export function resolveAwayCreditEligibility(params: {
 
 export async function applyEligibleAwayCreditsForEnrolment(
   tx: Prisma.TransactionClient,
-  params: { enrolmentId: string; actorId: string | null }
+  params: { enrolmentId: string; actorId: string | null; eligibilityCutoffDate?: Date | null }
 ) {
   const enrolment = await tx.enrolment.findUnique({
     where: { id: params.enrolmentId },
@@ -235,12 +235,22 @@ export async function applyEligibleAwayCreditsForEnrolment(
     return { appliedOccurrences: 0, appliedDeltaDays: 0 };
   }
 
-  const cutoffPaidThrough = resolveCurrentPaidThrough(enrolment);
-  if (!cutoffPaidThrough) {
+  const currentPaidThrough = resolveCurrentPaidThrough(enrolment);
+  if (!currentPaidThrough) {
+    return { appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+  const eligibilityCutoff =
+    params.eligibilityCutoffDate === undefined
+      ? currentPaidThrough
+      : params.eligibilityCutoffDate
+        ? brisbaneStartOfDay(params.eligibilityCutoffDate)
+        : null;
+
+  if (!eligibilityCutoff) {
     return { appliedOccurrences: 0, appliedDeltaDays: 0 };
   }
 
-  let runningPaidThrough = cutoffPaidThrough;
+  let runningPaidThrough = currentPaidThrough;
   let appliedOccurrences = 0;
   let appliedDeltaDays = 0;
 
@@ -268,7 +278,6 @@ export async function applyEligibleAwayCreditsForEnrolment(
   const sessionsPerWeek = resolveSessionsPerWeek(templates);
   const enrolmentStart = brisbaneStartOfDay(enrolment.startDate);
   const enrolmentEnd = enrolment.endDate ? brisbaneStartOfDay(enrolment.endDate) : null;
-  const eligibilityCutoff = cutoffPaidThrough;
 
   for (const impact of impacts) {
     const awayStart = brisbaneStartOfDay(impact.awayPeriod.startDate);
@@ -364,4 +373,74 @@ export async function applyEligibleAwayCreditsForEnrolment(
   }
 
   return { appliedOccurrences, appliedDeltaDays };
+}
+
+export async function recalculateAwayAdjustedPaidThroughForEnrolment(
+  tx: Prisma.TransactionClient,
+  params: { enrolmentId: string; actorId: string | null; additionalDeltaDaysToRemove?: number }
+) {
+  const enrolment = await tx.enrolment.findUnique({
+    where: { id: params.enrolmentId },
+    include: {
+      plan: true,
+    },
+  });
+
+  if (!enrolment || !enrolment.plan) {
+    return { removedDeltaDays: 0, appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+  if (enrolment.status !== EnrolmentStatus.ACTIVE && enrolment.status !== EnrolmentStatus.CHANGEOVER) {
+    return { removedDeltaDays: 0, appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+  if (enrolment.plan.billingType !== BillingType.PER_WEEK) {
+    return { removedDeltaDays: 0, appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+
+  const eligibilityCutoff = resolveCurrentPaidThrough(enrolment);
+  if (!eligibilityCutoff) {
+    return { removedDeltaDays: 0, appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+
+  const impacts = await tx.awayPeriodImpact.findMany({
+    where: { enrolmentId: params.enrolmentId },
+    select: {
+      id: true,
+      paidThroughDeltaDays: true,
+    },
+  });
+
+  if (impacts.length === 0) {
+    return { removedDeltaDays: 0, appliedOccurrences: 0, appliedDeltaDays: 0 };
+  }
+
+  const removedDeltaDays =
+    impacts.reduce((sum, impact) => sum + impact.paidThroughDeltaDays, 0) + (params.additionalDeltaDaysToRemove ?? 0);
+
+  if (removedDeltaDays !== 0) {
+    await applyAwayPaidThroughDelta(tx, {
+      enrolmentId: params.enrolmentId,
+      deltaDays: removedDeltaDays * -1,
+      actorId: params.actorId,
+    });
+  }
+
+  await tx.awayPeriodImpact.updateMany({
+    where: { enrolmentId: params.enrolmentId },
+    data: {
+      consumedOccurrences: 0,
+      paidThroughDeltaDays: 0,
+    },
+  });
+
+  const applied = await applyEligibleAwayCreditsForEnrolment(tx, {
+    enrolmentId: params.enrolmentId,
+    actorId: params.actorId,
+    eligibilityCutoffDate: eligibilityCutoff,
+  });
+
+  return {
+    removedDeltaDays,
+    appliedOccurrences: applied.appliedOccurrences,
+    appliedDeltaDays: applied.appliedDeltaDays,
+  };
 }
