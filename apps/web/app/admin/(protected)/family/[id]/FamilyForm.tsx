@@ -807,51 +807,32 @@ export default function FamilyForm({
                 </Card>
 
                 <div className="space-y-4">
-                  <section className="rounded-lg border border-gray-200 bg-white p-4">
-                    {selectedStudentRow ? (
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                              Selected student
-                            </div>
-                            <div className="text-lg font-semibold text-gray-900">{selectedStudentRow.name}</div>
-                            <div className="text-xs text-gray-500">
-                              {selectedStudentRow.levelName ?? "Level not set"}
-                            </div>
-                          </div>
-                          <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
-                            {selectedStudentRow.status.label}
-                          </Badge>
-                        </div>
-
-                        {isLoadingStudent && !studentDetails ? (
-                          <div className="space-y-2" aria-busy="true" aria-live="polite" role="status">
-                            <span className="sr-only">Loading student details</span>
-                            <Skeleton className="h-4 w-44" />
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                          </div>
-                        ) : studentDetails ? (
-                          <StudentEnrolmentsSection
-                            student={studentDetails}
-                            levels={levels}
-                            enrolmentPlans={enrolmentPlans}
-                            onUpdated={() => {
-                              refreshStudentDetails(selectedStudentId);
-                              router.refresh();
-                            }}
-                            editContextSource="family"
-                          />
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Unable to load student details.</div>
-                        )}
+                  {selectedStudentRow ? (
+                    isLoadingStudent && !studentDetails ? (
+                      <div className="space-y-2" aria-busy="true" aria-live="polite" role="status">
+                        <span className="sr-only">Loading student details</span>
+                        <Skeleton className="h-4 w-44" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
                       </div>
+                    ) : studentDetails ? (
+                      <StudentEnrolmentsSection
+                        student={studentDetails}
+                        levels={levels}
+                        enrolmentPlans={enrolmentPlans}
+                        onUpdated={() => {
+                          refreshStudentDetails(selectedStudentId);
+                          router.refresh();
+                        }}
+                        editContextSource="family"
+                      />
                     ) : (
-                      <StudentSelectionEmptyState />
-                    )}
-                  </section>
+                      <div className="text-sm text-muted-foreground">Unable to load student details.</div>
+                    )
+                  ) : (
+                    <StudentSelectionEmptyState />
+                  )}
 
                   <AwaySection
                     familyId={family.id}
