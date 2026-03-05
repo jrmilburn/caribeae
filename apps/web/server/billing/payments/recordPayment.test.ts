@@ -517,6 +517,24 @@ test("away credit is not applied before paid-through reaches away date", async (
   assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 0);
 });
 
+test("away on paid-through class day is treated as inclusive and extends coverage", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-12"),
+  });
+
+  await recalculateAwayAdjustedPaidThroughForEnrolment(db as any, {
+    enrolmentId: enrolment.id,
+    actorId: null,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-19");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 7);
+});
+
 test("payment applies newly-eligible away credit once after base advancement", async () => {
   const db = createFakeClient();
   const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-01-12") });
@@ -626,6 +644,31 @@ test("recalculation applies away extension when away is moved into already-paid 
   });
 
   assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-19");
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
+  assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 7);
+});
+
+test("recalculation lowers paid-through when edited away now misses fewer paid classes", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db, { paidThroughDate: d("2026-02-02") });
+
+  // Existing active away still applies one class worth.
+  seedAwayPeriodImpact(db, {
+    enrolmentId: enrolment.id,
+    startDate: d("2026-01-19"),
+    consumedOccurrences: 1,
+    paidThroughDeltaDays: 7,
+  });
+
+  // Simulate an edited/removed away impact that had previously added +7 days.
+  // In update flow this deleted impact's delta is passed through additionalDeltaDaysToRemove.
+  await recalculateAwayAdjustedPaidThroughForEnrolment(db as any, {
+    enrolmentId: enrolment.id,
+    actorId: null,
+    additionalDeltaDaysToRemove: 7,
+  });
+
+  assert.strictEqual(toBrisbaneDayKey(enrolment.paidThroughDate!), "2026-01-26");
   assert.strictEqual(db.__data.awayPeriodImpacts[0].consumedOccurrences, 1);
   assert.strictEqual(db.__data.awayPeriodImpacts[0].paidThroughDeltaDays, 7);
 });
