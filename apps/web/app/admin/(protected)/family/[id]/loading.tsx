@@ -7,7 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Loading() {
   return (
-    <PageLoading label="Loading family details" header={<PageHeaderLoading withMeta withAction />}>
+    <PageLoading
+      label="Loading family details"
+      header={<PageHeaderLoading withMeta withAction />}
+      contentMaxWidthClassName="max-w-7xl"
+    >
       <div className="space-y-4">
         <StatsGridLoading cards={4} />
 

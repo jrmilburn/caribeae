@@ -93,6 +93,7 @@ type PageLoadingProps = {
   className?: string;
   header?: ReactNode;
   label?: string;
+  contentMaxWidthClassName?: string;
 };
 
 export function PageLoading({
@@ -100,30 +101,33 @@ export function PageLoading({
   className,
   header,
   label = "Loading page",
+  contentMaxWidthClassName,
 }: PageLoadingProps) {
   return (
     <LoadingRegion className={cn("flex h-full min-h-0 flex-col", className)} label={label}>
       {header ?? <PageHeaderLoading />}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
-        {children ?? (
-          <div className="space-y-4">
-            <div className="rounded-xl border bg-card p-6">
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-44" />
-                <Skeleton className="h-4 w-full max-w-2xl" />
-                <Skeleton className="h-4 w-3/4 max-w-xl" />
+        <div className={cn("mx-auto w-full", contentMaxWidthClassName)}>
+          {children ?? (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-card p-6">
+                <div className="space-y-3">
+                  <Skeleton className="h-5 w-44" />
+                  <Skeleton className="h-4 w-full max-w-2xl" />
+                  <Skeleton className="h-4 w-3/4 max-w-xl" />
+                </div>
+              </div>
+              <div className="rounded-xl border bg-card p-6">
+                <div className="space-y-3">
+                  <Skeleton className="h-5 w-52" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-11/12" />
+                  <Skeleton className="h-4 w-5/6" />
+                </div>
               </div>
             </div>
-            <div className="rounded-xl border bg-card p-6">
-              <div className="space-y-3">
-                <Skeleton className="h-5 w-52" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-11/12" />
-                <Skeleton className="h-4 w-5/6" />
-              </div>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </LoadingRegion>
   );
@@ -186,6 +190,7 @@ type TableLoadingProps = {
   withPagination?: boolean;
   showSearch?: boolean;
   showActions?: boolean;
+  contentMaxWidthClassName?: string;
 };
 
 export function TableLoading({
@@ -196,6 +201,7 @@ export function TableLoading({
   withPagination = true,
   showSearch = true,
   showActions = true,
+  contentMaxWidthClassName,
 }: TableLoadingProps) {
   return (
     <LoadingRegion className={cn("flex h-full min-h-0 flex-col", className)} label="Loading table">
@@ -214,35 +220,37 @@ export function TableLoading({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border">
-              <thead>
-                <tr>
-                  {Array.from({ length: columns }).map((_, columnIndex) => (
-                    <th key={columnIndex} className="px-4 py-3 text-left">
-                      <Skeleton className="h-3.5 w-16" />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {Array.from({ length: rows }).map((_, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {Array.from({ length: columns }).map((__, columnIndex) => (
-                      <td key={`${rowIndex}-${columnIndex}`} className="px-4 py-4">
-                        <Skeleton
-                          className={cn(
-                            "h-3.5",
-                            columnIndex === columns - 1 ? "w-10" : "w-[min(100%,12rem)]"
-                          )}
-                        />
-                      </td>
+        <div className={cn("mx-auto w-full", contentMaxWidthClassName)}>
+          <div className="overflow-hidden rounded-xl border bg-card">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-border">
+                <thead>
+                  <tr>
+                    {Array.from({ length: columns }).map((_, columnIndex) => (
+                      <th key={columnIndex} className="px-4 py-3 text-left">
+                        <Skeleton className="h-3.5 w-16" />
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border bg-card">
+                  {Array.from({ length: rows }).map((_, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {Array.from({ length: columns }).map((__, columnIndex) => (
+                        <td key={`${rowIndex}-${columnIndex}`} className="px-4 py-4">
+                          <Skeleton
+                            className={cn(
+                              "h-3.5",
+                              columnIndex === columns - 1 ? "w-10" : "w-[min(100%,12rem)]"
+                            )}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

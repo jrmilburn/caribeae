@@ -3,7 +3,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Loading() {
   return (
-    <PageLoading label="Loading enrolment plans" header={<PageHeaderLoading withMeta withAction />}>
+    <PageLoading
+      label="Loading enrolment plans"
+      header={<PageHeaderLoading withMeta withAction />}
+      contentMaxWidthClassName="max-w-5xl"
+    >
       <div className="rounded-xl border bg-card p-4 sm:p-6">
         <Skeleton className="h-5 w-28" />
         <div className="mt-4 overflow-hidden rounded-lg border">

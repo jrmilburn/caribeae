@@ -1,5 +1,5 @@
 import { TableLoading } from "@/components/loading/LoadingSystem";
 
 export default function Loading() {
-  return <TableLoading columns={6} rows={10} />;
+  return <TableLoading columns={6} rows={10} contentMaxWidthClassName="max-w-5xl" />;
 }

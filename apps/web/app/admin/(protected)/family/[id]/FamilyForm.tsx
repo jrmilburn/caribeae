@@ -492,7 +492,7 @@ export default function FamilyForm({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-scroll">
         <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
           <header className="border-b border-gray-200 pb-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
