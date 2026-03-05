@@ -196,6 +196,7 @@ export default function FamilyList({
       <AdminListHeader
         title={isStudentView ? "Students" : "Families"}
         totalCount={totalCount}
+        countLabel={isStudentView ? "total students" : "total families"}
         searchPlaceholder={isStudentView ? "Search students…" : "Search families…"}
         onNew={() => {
           setEditFamilyModalOpen(false);

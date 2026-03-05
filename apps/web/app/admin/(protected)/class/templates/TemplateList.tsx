@@ -175,6 +175,7 @@ export default function TemplateList({
       <AdminListHeader
         title="Templates"
         totalCount={totalCount}
+        countLabel="total templates"
         searchPlaceholder="Search templates…"
         onNew={() => {
           setSelectedTemplate(null);

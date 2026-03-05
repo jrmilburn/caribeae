@@ -4,7 +4,6 @@ import * as React from "react";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +13,7 @@ import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from "@/server/pagination";
 type AdminListHeaderProps = {
   title: string;
   totalCount: number;
+  countLabel?: string;
   searchPlaceholder: string;
   newLabel?: string;
   onNew: () => void;
@@ -27,6 +27,7 @@ type AdminListHeaderProps = {
 export function AdminListHeader({
   title,
   totalCount,
+  countLabel,
   searchPlaceholder,
   newLabel = "New",
   onNew,
@@ -82,11 +83,9 @@ export function AdminListHeader({
         sticky && "sticky top-0 z-10"
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        <Badge variant="secondary" className="rounded-full px-2">
-          {totalCount}
-        </Badge>
+      <div className="min-w-0">
+        <div className="text-base font-semibold text-foreground">{title}</div>
+        <div className="text-xs text-muted-foreground">{totalCount} {countLabel ?? "total"}</div>
       </div>
 
       <div className="w-full sm:flex-1 sm:px-4">
