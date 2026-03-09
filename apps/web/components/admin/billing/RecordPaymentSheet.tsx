@@ -18,6 +18,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -157,8 +158,9 @@ export function RecordPaymentSheet({
   const weeklyPlanOptions: WeeklyPlanOption[] =
     selectedEnrolment?.plan?.billingType === "PER_WEEK" ? selectedEnrolment.weeklyPlanOptions : [];
   const activePlanId = selectedPlanId ?? selectedEnrolment?.plan?.id ?? null;
+  const selectedWeeklyPlan = weeklyPlanOptions.find((plan) => plan.id === activePlanId) ?? null;
   const selectedPlan =
-    weeklyPlanOptions?.find((plan) => plan.id === activePlanId) ??
+    selectedWeeklyPlan ??
     (selectedEnrolment?.plan
       ? {
           id: selectedEnrolment.plan.id,
@@ -167,6 +169,7 @@ export function RecordPaymentSheet({
           durationWeeks: selectedEnrolment.plan.durationWeeks ?? null,
         }
       : null);
+  const selectedPlanPriceCents = selectedPlan?.priceCents ?? null;
   const isBlockPlan = selectedEnrolment?.plan?.billingType === "PER_CLASS";
   const isWeeklyPlan = selectedEnrolment?.plan?.billingType === "PER_WEEK";
   const planBlockLength = selectedEnrolment?.plan ? resolveBlockLength(selectedEnrolment.plan.blockClassCount) : 1;
@@ -213,10 +216,10 @@ export function RecordPaymentSheet({
 
   React.useEffect(() => {
     if (!sheetOpen) return;
-    if (isWeeklyPlan && selectedPlan) {
-      setAmount(centsToDollarString(selectedPlan.priceCents));
+    if (isWeeklyPlan && selectedPlanPriceCents != null) {
+      setAmount(centsToDollarString(selectedPlanPriceCents));
     }
-  }, [sheetOpen, isWeeklyPlan, selectedPlan?.id, selectedPlan?.priceCents]);
+  }, [sheetOpen, isWeeklyPlan, selectedPlanPriceCents]);
 
   const toggleSelection = (invoiceId: string) => {
     setSelected((prev) => (prev.includes(invoiceId) ? prev.filter((id) => id !== invoiceId) : [...prev, invoiceId]));
@@ -298,19 +301,31 @@ export function RecordPaymentSheet({
 
       <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
-          <SheetTitle>Payment</SheetTitle>
+          <SheetTitle>Take payment</SheetTitle>
+          <SheetDescription>
+            Use this for payments due now. Use pay ahead when you need to prepay future coverage.
+          </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+            <div className="text-sm font-medium text-foreground">Payment summary</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              {normalizedOpenInvoices.filter((invoice) => invoice.balanceCents > 0).length} open invoice
+              {normalizedOpenInvoices.filter((invoice) => invoice.balanceCents > 0).length === 1 ? "" : "s"} ready to
+              allocate.
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label>Apply to</Label>
+            <Label>Payment applies to</Label>
             <Select value={applyTarget} onValueChange={setApplyTarget}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select apply target" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALLOCATE_INVOICES">Allocate to invoices</SelectItem>
-                <SelectItem value="UNALLOCATED">Unallocated credit</SelectItem>
+                <SelectItem value="ALLOCATE_INVOICES">Open invoices</SelectItem>
+                <SelectItem value="UNALLOCATED">Family credit</SelectItem>
                 {enrolmentOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
                     {option.label}
@@ -404,7 +419,7 @@ export function RecordPaymentSheet({
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount</Label>
+              <Label htmlFor="amount">Amount to record</Label>
               <Input
                 id="amount"
                 type="number"
@@ -496,7 +511,7 @@ export function RecordPaymentSheet({
               id="note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Add any admin notes"
+              placeholder="Visible to admins only"
             />
           </div>
 

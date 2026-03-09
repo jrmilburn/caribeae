@@ -67,6 +67,30 @@ function minutesToDate(minutes: number) {
   return d;
 }
 
+function formatStatusLabel(status: string) {
+  switch (status) {
+    case "ACTIVE":
+      return "Active";
+    case "CHANGEOVER":
+      return "Changing";
+    default:
+      return status.replaceAll("_", " ").toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+  }
+}
+
+function resolveStatusVariant(status: string) {
+  switch (status) {
+    case "ACTIVE":
+      return "secondary" as const;
+    case "CHANGEOVER":
+      return "outline" as const;
+    case "CANCELLED":
+      return "destructive" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
 export function StudentEnrolmentsTable({
   enrolments,
   levels,
@@ -131,7 +155,14 @@ export function StudentEnrolmentsTable({
   }, [action, onActionHandled, rows, showPaidThroughAction]);
 
   if (!rows.length) {
-    return <p className="text-sm text-muted-foreground">No enrolments yet.</p>;
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-muted/20 px-5 py-8 text-center">
+        <div className="text-sm font-medium text-foreground">No enrolments yet</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Add an enrolment to assign this student to a class and start billing.
+        </p>
+      </div>
+    );
   }
 
   const parseDayKey = (value: string) => {
@@ -205,10 +236,10 @@ export function StudentEnrolmentsTable({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border/80 bg-background">
         <Table className="min-w-full">
-          <TableHeader className="bg-muted/40">
-            <TableRow className="hover:bg-muted/40">
+          <TableHeader className="bg-muted/30">
+            <TableRow className="hover:bg-muted/30">
               <TableHead className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Class/template
               </TableHead>
@@ -249,7 +280,7 @@ export function StudentEnrolmentsTable({
                 : ["—"];
 
               return (
-                <TableRow key={enrolment.id} className="hover:bg-muted/30">
+                <TableRow key={enrolment.id} className="hover:bg-muted/20">
                   <TableCell className="px-4 py-3 align-top font-medium whitespace-normal">
                     <div className="space-y-1">
                       {assignments.length
@@ -257,15 +288,18 @@ export function StudentEnrolmentsTable({
                             <Link
                               key={template?.id ?? index}
                               href={`/admin/class/${template?.id ?? enrolment.templateId}`}
-                              className="block underline"
+                              className="block text-foreground underline-offset-4 hover:underline"
                             >
                               {classLabels[index]}
                             </Link>
                           ))
                         : "—"}
+                      {enrolment.plan?.name ? (
+                        <div className="text-xs font-normal text-muted-foreground">{enrolment.plan.name}</div>
+                      ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="px-4 py-3 whitespace-nowrap">
+                  <TableCell className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground">
                     <div className="space-y-1">
                       {scheduleLabels.map((label, index) => (
                         <div key={`${enrolment.id}-schedule-${index}`}>{label}</div>
@@ -273,23 +307,23 @@ export function StudentEnrolmentsTable({
                     </div>
                   </TableCell>
                   <TableCell className="px-4 py-3">
-                    <Badge variant={enrolment.status === "CHANGEOVER" ? "outline" : "secondary"}>
-                      {enrolment.status === "CHANGEOVER" ? "Changeover" : enrolment.status}
+                    <Badge variant={resolveStatusVariant(enrolment.status)} className="font-medium">
+                      {formatStatusLabel(enrolment.status)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="px-4 py-3">{fmtDate(enrolment.startDate)}</TableCell>
-                  <TableCell className="px-4 py-3">{fmtDate(enrolment.endDate ?? null)}</TableCell>
+                  <TableCell className="px-4 py-3 text-sm">{fmtDate(enrolment.startDate)}</TableCell>
+                  <TableCell className="px-4 py-3 text-sm">{fmtDate(enrolment.endDate ?? null)}</TableCell>
                   <TableCell className="px-4 py-3 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon-sm">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => setEditingEnrolmentId(enrolment.id)}>
-                          Edit
+                          Edit enrolment
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!enrolment.plan}
@@ -301,7 +335,7 @@ export function StudentEnrolmentsTable({
                             setEditing(enrolment);
                           }}
                         >
-                          Change
+                          Change class
                         </DropdownMenuItem>
                         {showPaidThroughAction ? (
                           <DropdownMenuItem onClick={() => setEditingPaidThrough(enrolment)}>
@@ -351,6 +385,7 @@ export function StudentEnrolmentsTable({
           enrolmentId={editingPaidThrough.id}
           currentPaidThrough={editingPaidThrough.paidThroughDate ?? null}
           open={Boolean(editingPaidThrough)}
+          presentation="sheet"
           onOpenChange={(open) => !open && setEditingPaidThrough(null)}
           onUpdated={() => {
             setEditingPaidThrough(null);

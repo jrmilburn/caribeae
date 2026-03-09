@@ -2,21 +2,10 @@
 
 import * as React from "react";
 import type { EnrolmentPlan, Level } from "@prisma/client";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { formatCurrencyFromCents } from "@/lib/currency";
@@ -43,24 +32,23 @@ import {
   scheduleDayOfWeekIndex,
   scheduleMinutesSinceMidnight,
 } from "@/packages/schedule";
+import { StudentHeader, type StudentHeaderStatus } from "./StudentHeader";
+import { StudentSummaryRow } from "./StudentSummaryRow";
 
-type TabKey = "enrolment" | "billing" | "details";
+type TabKey = "enrolments" | "billing" | "details";
 
-type StudentStatus = {
-  label: string;
-  variant: "default" | "secondary" | "outline" | "destructive";
-};
-
-function resolveStudentStatus(enrolments: Array<{ entitlementStatus?: string }> | undefined): StudentStatus {
+function resolveStudentStatus(
+  enrolments: Array<{ entitlementStatus?: string }> | undefined
+): StudentHeaderStatus {
   if (!enrolments || enrolments.length === 0) {
     return { label: "Not enrolled", variant: "outline" };
   }
 
   const statuses = enrolments.map((enrolment) => enrolment.entitlementStatus ?? "UNKNOWN");
-  if (statuses.includes("OVERDUE")) return { label: "Overdue", variant: "destructive" };
-  if (statuses.includes("DUE_SOON")) return { label: "Due soon", variant: "secondary" };
-  if (statuses.includes("AHEAD")) return { label: "Ahead", variant: "outline" };
-  return { label: "Unknown", variant: "outline" };
+  if (statuses.includes("OVERDUE")) return { label: "Payment overdue", variant: "destructive" };
+  if (statuses.includes("DUE_SOON")) return { label: "Payment due soon", variant: "secondary" };
+  if (statuses.includes("AHEAD")) return { label: "Paid ahead", variant: "outline" };
+  return { label: "Billing pending", variant: "outline" };
 }
 
 function resolveStudentPaidThrough(
@@ -175,18 +163,21 @@ export default function StudentPageClient({
   const returnTo = parseReturnContext(searchParams);
 
   const [activeTab, setActiveTab] = useSyncedQueryState<TabKey>("tab", {
-    defaultValue: "enrolment",
+    defaultValue: "enrolments",
     parse: (value) => {
+      if (value === "enrolment" || value === "enrolments") return "enrolments";
       if (value === "billing") return "billing";
       if (value === "details") return "details";
-      return "enrolment";
+      return "enrolments";
     },
-    serialize: (value) => (value === "enrolment" ? null : value),
+    serialize: (value) => (value === "enrolments" ? null : value),
   });
 
   const [enrolmentAction, setEnrolmentAction] = React.useState<
     "add-enrolment" | "change-enrolment" | null
   >(null);
+  const [paymentSheetOpen, setPaymentSheetOpen] = React.useState(false);
+  const [payAheadSheetOpen, setPayAheadSheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [paidThroughTarget, setPaidThroughTarget] = React.useState<{
     enrolmentId: string;
@@ -215,11 +206,6 @@ export default function StudentPageClient({
     };
   }, [student.enrolments]);
 
-  const handleEnrolmentAction = (action: "add-enrolment" | "change-enrolment") => {
-    setActiveTab("enrolment");
-    setEnrolmentAction(action);
-  };
-
   const handleSaveStudent = async (payload: ClientStudent & { familyId: string; id?: string }) => {
     try {
       await updateStudent({ ...payload, id: student.id, familyId: student.familyId });
@@ -233,136 +219,98 @@ export default function StudentPageClient({
   };
 
   const paidThroughOptions = billingStudent?.enrolments ?? [];
-  type BillingEnrolment = FamilyBillingPosition["students"][number]["enrolments"][number];
   const paidThroughDetail = paidThroughOptions.length
-    ? `${paidThroughOptions.length} billing enrolment${paidThroughOptions.length === 1 ? "" : "s"}`
-    : "No billing enrolments yet";
+    ? `${paidThroughOptions.length} active billing plan${paidThroughOptions.length === 1 ? "" : "s"}`
+    : "No billing plan yet";
   const enrolmentLabel = enrolmentSnapshot?.classLabel ?? "Not enrolled";
   const enrolmentDetail = enrolmentSnapshot?.scheduleLabel ?? "No active class schedule yet";
   const nextSessionLabel = enrolmentSnapshot?.nextSessionLabel ?? "Not scheduled";
   const nextSessionDetail = enrolmentSnapshot
     ? "Based on assigned class schedule"
     : "No upcoming session for this student";
-  const familyBalanceLabel = formatCurrencyFromCents(billingPosition.outstandingCents);
+  const familyBalanceValue =
+    billingPosition.outstandingCents > 0
+      ? formatCurrencyFromCents(billingPosition.outstandingCents)
+      : billingPosition.unallocatedCents > 0
+        ? formatCurrencyFromCents(billingPosition.unallocatedCents)
+        : "Settled";
+  const familyBalanceLabel =
+    billingPosition.outstandingCents > 0
+      ? "Outstanding"
+      : billingPosition.unallocatedCents > 0
+        ? "Credit available"
+        : "Balance";
   const familyBalanceDetail =
     billingPosition.outstandingCents > 0
-      ? "Outstanding across the family account"
-      : "Family account is currently settled or in credit";
+      ? "Shared across the whole family account."
+      : billingPosition.unallocatedCents > 0
+        ? "Family credit can be used across siblings."
+        : "No balance due across the family account.";
   const breadcrumbHref = returnTo?.startsWith("/admin/family")
     ? returnTo
     : "/admin/family?view=students";
+  const breadcrumbLabel = returnTo?.startsWith("/admin/family")
+    ? student.family?.name ?? "Family"
+    : "Students";
+  const subtitleParts = [student.level?.name ? `Level ${student.level.name}` : null, student.family?.name]
+    .filter(Boolean)
+    .join(" • ");
+  const familyMeta = billingPosition.nextDueInvoice?.dueAt
+    ? `Next family invoice due ${formatBrisbaneDate(billingPosition.nextDueInvoice.dueAt)}`
+    : billingPosition.unallocatedCents > 0
+      ? "Family credit is available."
+      : "Family billing is up to date.";
+  type BillingEnrolment = FamilyBillingPosition["students"][number]["enrolments"][number];
+  const paidThroughMenuOptions = paidThroughOptions.map((enrolment: BillingEnrolment) => {
+    const currentPaidThrough =
+      enrolment.projectedCoverageEnd ??
+      enrolment.paidThroughDate ??
+      enrolment.latestCoverageEnd ??
+      null;
+    const label = enrolment.templateName
+      ? `${enrolment.planName} • ${enrolment.templateName}`
+      : enrolment.planName;
+    return {
+      id: enrolment.id,
+      label,
+      currentPaidThrough,
+    };
+  });
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-scroll">
-        <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-          <header className="border-b border-gray-200 pb-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                  <Link href={breadcrumbHref} className="hover:text-gray-900">
-                    Students
-                  </Link>
-                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                  <span className="font-medium text-gray-900">{student.name}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{student.name}</h1>
-                  <Badge variant={status.variant} className="text-[11px]">
-                    {status.label}
-                  </Badge>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Manage enrolments, billing, and profile details for this student.
-                </p>
-              </div>
+        <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+          <StudentHeader
+            breadcrumbHref={breadcrumbHref}
+            breadcrumbLabel={breadcrumbLabel}
+            title={student.name}
+            subtitle={subtitleParts || null}
+            status={status}
+            familyHref={`/admin/family/${familyId}`}
+            paidThroughOptions={paidThroughMenuOptions}
+            onOpenPayment={() => setPaymentSheetOpen(true)}
+            onOpenPayAhead={() => setPayAheadSheetOpen(true)}
+            onEditStudent={() => setStudentSheetOpen(true)}
+            onEditPaidThrough={(option) =>
+              setPaidThroughTarget({
+                enrolmentId: option.id,
+                currentPaidThrough: option.currentPaidThrough,
+              })
+            }
+          />
 
-              <div className="flex flex-wrap items-center gap-2">
-                <RecordPaymentSheet
-                  familyId={familyId}
-                  enrolments={billingPosition.enrolments}
-                  openInvoices={billingPosition.openInvoices ?? []}
-                  trigger={<Button size="sm">Take payment</Button>}
-                />
-                <PayAheadSheet
-                  familyId={familyId}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      Pay ahead
-                    </Button>
-                  }
-                />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="secondary">
-                      Enrol / change class
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Enrolment actions</DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => handleEnrolmentAction("add-enrolment")}>
-                      Add enrolment
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleEnrolmentAction("change-enrolment")}>
-                      Change enrolment
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={paidThroughOptions.length === 0}>
-                      Edit paid-through
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Select enrolment</DropdownMenuLabel>
-                    {paidThroughOptions.length === 0 ? (
-                      <DropdownMenuItem disabled>No enrolments available</DropdownMenuItem>
-                    ) : (
-                      paidThroughOptions.map((enrolment: BillingEnrolment) => {
-                        const paidThrough =
-                          enrolment.projectedCoverageEnd ??
-                          enrolment.paidThroughDate ??
-                          enrolment.latestCoverageEnd ??
-                          null;
-                        const label = enrolment.templateName
-                          ? `${enrolment.planName} - ${enrolment.templateName}`
-                          : enrolment.planName;
-                        return (
-                          <DropdownMenuItem
-                            key={enrolment.id}
-                            onSelect={() =>
-                              setPaidThroughTarget({
-                                enrolmentId: enrolment.id,
-                                currentPaidThrough: paidThrough,
-                              })
-                            }
-                          >
-                            {label}
-                          </DropdownMenuItem>
-                        );
-                      })
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button size="sm" variant="outline" onClick={() => setStudentSheetOpen(true)}>
-                  Edit student
-                </Button>
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/admin/family/${familyId}`}>Open family</Link>
-                </Button>
-              </div>
-            </div>
-          </header>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Paid through" value={paidThroughLabel} detail={paidThroughDetail} />
-            <SummaryCard label="Current class" value={enrolmentLabel} detail={enrolmentDetail} />
-            <SummaryCard label="Next session" value={nextSessionLabel} detail={nextSessionDetail} />
-            <SummaryCard label="Family balance" value={familyBalanceLabel} detail={familyBalanceDetail} />
-          </div>
+          <StudentSummaryRow
+            items={[
+              { label: "Paid through", value: paidThroughLabel, detail: paidThroughDetail },
+              { label: "Current class", value: enrolmentLabel, detail: enrolmentDetail },
+              { label: "Next session", value: nextSessionLabel, detail: nextSessionDetail },
+            ]}
+            familyBalanceLabel={familyBalanceLabel}
+            familyBalanceValue={familyBalanceValue}
+            familyBalanceDetail={familyBalanceDetail}
+            familyMeta={familyMeta}
+          />
 
           <Tabs
             value={activeTab}
@@ -370,36 +318,36 @@ export default function StudentPageClient({
               if (value === "billing" || value === "details") {
                 setActiveTab(value);
               } else {
-                setActiveTab("enrolment");
+                setActiveTab("enrolments");
               }
             }}
             className="space-y-4"
           >
-            <div className="border-b border-gray-200">
-              <TabsList className="h-auto w-full justify-start gap-6 rounded-none bg-transparent p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <TabsList className="h-auto w-fit justify-start rounded-lg bg-muted/60 p-1">
                 <TabsTrigger
-                  value="enrolment"
-                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  value="enrolments"
+                  className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
-                  Enrolment
+                  Enrolments
                 </TabsTrigger>
                 <TabsTrigger
                   value="billing"
-                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
                   Billing
                 </TabsTrigger>
                 <TabsTrigger
                   value="details"
-                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
                   Details
                 </TabsTrigger>
               </TabsList>
             </div>
 
-            <TabsContent value="enrolment" className="m-0 space-y-3">
-              {activeTab === "enrolment" ? (
+            <TabsContent value="enrolments" className="m-0">
+              {activeTab === "enrolments" ? (
                 <StudentEnrolmentsSection
                   student={student}
                   levels={levels}
@@ -416,7 +364,7 @@ export default function StudentPageClient({
                 />
               ) : null}
             </TabsContent>
-            <TabsContent value="billing" className="m-0 space-y-3">
+            <TabsContent value="billing" className="m-0">
               {activeTab === "billing" ? (
                 <StudentBillingPanel
                   billing={billingPosition}
@@ -426,12 +374,34 @@ export default function StudentPageClient({
                 />
               ) : null}
             </TabsContent>
-            <TabsContent value="details" className="m-0 space-y-3">
-              {activeTab === "details" ? <StudentDetailsPanel student={student} layout="plain" /> : null}
+            <TabsContent value="details" className="m-0">
+              {activeTab === "details" ? (
+                <StudentDetailsPanel
+                  student={student}
+                  layout="plain"
+                  onEdit={() => setStudentSheetOpen(true)}
+                />
+              ) : null}
             </TabsContent>
           </Tabs>
         </div>
       </div>
+
+      <RecordPaymentSheet
+        familyId={familyId}
+        enrolments={billingPosition.enrolments}
+        openInvoices={billingPosition.openInvoices ?? []}
+        open={paymentSheetOpen}
+        onOpenChange={setPaymentSheetOpen}
+        trigger={null}
+      />
+
+      <PayAheadSheet
+        familyId={familyId}
+        open={payAheadSheetOpen}
+        onOpenChange={setPayAheadSheetOpen}
+        trigger={null}
+      />
 
       <StudentModal
         open={studentSheetOpen}
@@ -447,29 +417,12 @@ export default function StudentPageClient({
           enrolmentId={paidThroughTarget.enrolmentId}
           currentPaidThrough={paidThroughTarget.currentPaidThrough}
           open={Boolean(paidThroughTarget)}
+          presentation="sheet"
           onOpenChange={(open) => {
             if (!open) setPaidThroughTarget(null);
           }}
         />
       ) : null}
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-2 text-xl font-semibold text-gray-900">{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{detail}</div>
     </div>
   );
 }

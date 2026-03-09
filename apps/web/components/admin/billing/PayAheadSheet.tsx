@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PayAheadCard } from "@/components/admin/PayAheadCard";
 import { getFamilyBillingSummary, type FamilyBillingSummary } from "@/server/billing/getFamilyBillingSummary";
@@ -56,14 +63,17 @@ export function PayAheadSheet({ familyId, open, onOpenChange, trigger, onUpdated
         <SheetTrigger asChild>
           {trigger ?? (
             <Button variant="outline" size="sm">
-              Pay next block
+              Pay ahead
             </Button>
           )}
         </SheetTrigger>
       )}
       <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
-          <SheetTitle>Pay next block</SheetTitle>
+          <SheetTitle>Pay ahead</SheetTitle>
+          <SheetDescription>
+            Prepay future coverage for selected enrolments and take payment in the same flow.
+          </SheetDescription>
         </SheetHeader>
         <div className="mt-4 space-y-4">
           {isLoading && !summary ? (

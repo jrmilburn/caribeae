@@ -188,7 +188,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         return acc;
       }, {})
     );
-  }, [summary, enrolments]);
+  }, [summary, enrolments, paymentEligibleEnrolments]);
 
   const handleToggle = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -235,7 +235,6 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         const qty = quantities[id] ?? 1;
         const parsedCustom = Number(customBlockLengths[id]);
         const customLength = Number.isInteger(parsedCustom) ? parsedCustom : null;
-        const enrolment = enrolments.find((entry) => entry.id === id);
         const selectedPlanId = selectedPlans[id];
         return {
           enrolmentId: id,
@@ -299,7 +298,10 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <CardTitle className="text-base">Pay next block</CardTitle>
+          <CardTitle className="text-base">Pay ahead</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Select the enrolments to prepay, then confirm the amount and coverage.
+          </p>
         </div>
         <Badge variant="secondary" className="gap-1">
           <PlusCircle className="h-4 w-4" />
@@ -310,7 +312,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
         {!summary ? (
           <p className="text-sm text-muted-foreground">Select a family to start.</p>
         ) : paymentEligibleEnrolments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No enrolments eligible for pay-ahead.</p>
+          <p className="text-sm text-muted-foreground">No enrolments are currently eligible for pay-ahead.</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -392,7 +394,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                   <div
                     key={enrolment.id}
                     className={cn(
-                      "rounded-md border p-3",
+                      "rounded-xl border p-4",
                       selected.includes(enrolment.id) ? "border-primary" : "border-muted"
                     )}
                   >
@@ -413,14 +415,19 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
                               </Badge>
                             ) : null}
                           </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {planLabel}
+                          </div>
                           <div className="text-xs text-muted-foreground">
-                            {planLabel} · {currentLabel} {projectedLabel}
+                            {currentLabel} {projectedLabel}
                           </div>
                         </div>
                       </label>
 
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground">Blocks</Label>
+                        <Label className="text-xs text-muted-foreground">
+                          {isWeekly ? "Periods" : "Blocks"}
+                        </Label>
                         <Input
                           type="number"
                           min="1"
@@ -558,7 +565,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
               </div>
               <div className="space-y-2">
                 <Label>Note (optional)</Label>
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
+                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Visible to admins only" />
               </div>
             </div>
 
@@ -574,7 +581,7 @@ export function PayAheadCard({ summary, onRefresh }: Props) {
               <Button type="button" onClick={handleSubmit} disabled={submitting || totalCents <= 0}>
                 {submitting ? <PendingDot className="h-3.5 w-3.5" /> : null}
                 <PendingLabelSwap pending={submitting} pendingLabel="Processing payment" lineClassName="w-24">
-                  Charge & mark paid
+                  Take payment
                 </PendingLabelSwap>
               </Button>
             </div>

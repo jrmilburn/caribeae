@@ -327,17 +327,25 @@ export function AddEnrolmentDialog({
   };
 
   const content = (
-    <div className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Plan
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <section className="rounded-xl border border-border/80 bg-background p-4">
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  1. Plan
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Choose the enrolment plan first, then select matching classes.
+                </p>
               </div>
+
               <Select value={planId} onValueChange={setPlanId}>
-                <SelectTrigger className="min-w-[220px]">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select plan" />
                 </SelectTrigger>
-            <SelectContent>
+                <SelectContent>
                   {availablePlans.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
                       <span className="flex items-center gap-2">
@@ -354,6 +362,9 @@ export function AddEnrolmentDialog({
                   ))}
                 </SelectContent>
               </Select>
+
+              <p className="text-sm text-muted-foreground">{selectionRequirement.helper}</p>
+
               {availablePlans.length === 0 ? (
                 <p className="text-xs text-destructive">
                   {selectionDayType === "saturday"
@@ -363,15 +374,16 @@ export function AddEnrolmentDialog({
                       : "No enrolment plans are available for the selected level."}
                 </p>
               ) : null}
+
               {planIsBlock && selectedPlan ? (
-                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-sm text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
                     <span>
                       {planBlockLength} classes · {formatCurrencyFromCents(selectedPlan.priceCents)}
                     </span>
                     <button
                       type="button"
-                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                      className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
                       onClick={() => {
                         if (!customBlockEnabled) {
                           setCustomBlockLength(String(planBlockLength));
@@ -382,6 +394,7 @@ export function AddEnrolmentDialog({
                       {customBlockEnabled ? "Use default" : "Customize"}
                     </button>
                   </div>
+
                   {customBlockEnabled ? (
                     <div className="mt-3 space-y-2">
                       <div className="space-y-1">
@@ -406,13 +419,22 @@ export function AddEnrolmentDialog({
                 </div>
               ) : null}
             </div>
-            <div className="space-y-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Start date
+          </section>
+
+          <section className="rounded-xl border border-border/80 bg-background p-4">
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  2. Start date
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This becomes the enrolment start date for the selected classes.
+                </p>
               </div>
+
               <input
                 type="date"
-                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 value={startDate}
                 onChange={(e) => {
                   setStartDateTouched(true);
@@ -420,76 +442,88 @@ export function AddEnrolmentDialog({
                 }}
                 placeholder="YYYY-MM-DD"
               />
+
               <p className="text-xs text-muted-foreground">
-                Defaults to the earliest selected class if left blank.
+                Defaults to the earliest selected class when unchanged.
               </p>
             </div>
-          </div>
-
-          <div className="flex h-[520px] min-h-0 flex-col overflow-hidden rounded border">
-            <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2 text-xs uppercase tracking-wide text-muted-foreground">
-              <div className="flex items-center gap-2 text-[11px] font-semibold leading-none">
-                <Badge variant="secondary" className="font-semibold">
-                  Showing classes for {effectiveLevel?.name ?? "—"}
-                </Badge>
-              </div>
-              {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
-            </div>
-            {scheduleBlocked ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                Set student level first.
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0">
-                <ScheduleView
-                  levels={levels}
-                  onClassClick={onClassClick}
-                  allowTemplateMoves={false}
-                  defaultViewMode="week"
-                  selectedTemplateIds={selectedTemplateIds}
-                  filters={{ levelId: effectiveLevelId, teacherId: null }}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border bg-muted/40 px-4 py-3 text-sm">
-            <div className="space-y-1">
-              <div className="font-medium">{selectionRequirement.helper}</div>
-              <div className="text-muted-foreground">
-                {selectionRequirement.requiredCount === 0
-                  ? `${selectedTemplateIds.length}/${selectionRequirement.maxCount} selected (optional)`
-                  : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount} selected`}{" "}
-                •{" "}
-                {startDate ? `Start date ${startDate}` : "Start date will follow the first class"}
-              </div>
-              {selectedTemplateIds.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {selectedTemplateIds.map((id) => {
-                    const entry = selectedTemplates[id];
-                    return (
-                      <span key={id} className="rounded border bg-background px-2 py-1 text-xs">
-                        {entry?.template?.name ?? entry?.level?.name ?? "Class"} ·{" "}
-                        {entry ? formatScheduleWeekdayTime(entry.startTime) : ""}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-muted-foreground">Select class templates on the schedule.</div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => void handleCreate()} disabled={!canSubmit}>
-                {saving ? "Enrolling..." : "Add enrolment"}
-              </Button>
-            </div>
-          </div>
+          </section>
         </div>
+
+        <section className="rounded-xl border border-border/80 bg-background">
+          <div className="flex items-center justify-between border-b border-border/80 px-4 py-3">
+            <div className="space-y-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                3. Class selection
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Pick the classes that belong to this enrolment.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">
+                {selectionRequirement.requiredCount === 0
+                  ? `${selectedTemplateIds.length}/${selectionRequirement.maxCount}`
+                  : `${selectedTemplateIds.length}/${selectionRequirement.requiredCount}`}{" "}
+                selected
+              </Badge>
+              <Badge variant="secondary">Level {effectiveLevel?.name ?? "—"}</Badge>
+            </div>
+          </div>
+
+          {scheduleBlocked ? (
+            <div className="flex min-h-[420px] items-center justify-center px-6 text-sm text-muted-foreground">
+              Set the student level before selecting classes.
+            </div>
+          ) : (
+            <div className="h-[420px] min-h-0">
+              <ScheduleView
+                levels={levels}
+                onClassClick={onClassClick}
+                allowTemplateMoves={false}
+                defaultViewMode="week"
+                selectedTemplateIds={selectedTemplateIds}
+                filters={{ levelId: effectiveLevelId, teacherId: null }}
+              />
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-xl border border-border/80 bg-muted/30 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-foreground">4. Review and confirm</div>
+          <div className="text-sm text-muted-foreground">
+            {startDate ? `Start date ${startDate}` : "Start date will follow the first class"} •{" "}
+            {selectedTemplateIds.length ? "Classes selected below." : "Select at least one class to continue."}
+          </div>
+          {selectedTemplateIds.length ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedTemplateIds.map((id) => {
+                const entry = selectedTemplates[id];
+                return (
+                  <span key={id} className="rounded-full border border-border/80 bg-background px-3 py-1 text-xs">
+                    {entry?.template?.name ?? entry?.level?.name ?? "Class"} ·{" "}
+                    {entry ? formatScheduleWeekdayTime(entry.startTime) : ""}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No classes selected yet.</div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 self-end lg:self-auto">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleCreate()} disabled={!canSubmit}>
+            {saving ? "Enrolling..." : "Add enrolment"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 
   return (

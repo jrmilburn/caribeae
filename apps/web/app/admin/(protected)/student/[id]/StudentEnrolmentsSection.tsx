@@ -36,6 +36,7 @@ export function StudentEnrolmentsSection({
 }) {
   const [open, setOpen] = React.useState(false);
   const [mergeOpen, setMergeOpen] = React.useState(false);
+  const [localAction, setLocalAction] = React.useState<"change-enrolment" | null>(null);
   const levelPlans = React.useMemo(
     () => enrolmentPlans.filter((plan) => plan.levelId === student.levelId),
     [enrolmentPlans, student.levelId]
@@ -47,35 +48,58 @@ export function StudentEnrolmentsSection({
       student.enrolments.find((enrolment) => enrolment.plan);
     return withPlan ?? student.enrolments.find((enrolment) => !enrolment.endDate) ?? student.enrolments[0] ?? null;
   }, [student.enrolments]);
+  const canChangeClass = Boolean(primaryEnrolment?.plan);
+  const canMergeEnrolments = student.enrolments.length > 1;
+  const resolvedAction = localAction ?? action ?? null;
 
   React.useEffect(() => {
-    if (!action) return;
-    if (action === "add-enrolment") {
+    if (!resolvedAction) return;
+    if (resolvedAction === "add-enrolment") {
       setOpen(true);
-      onActionHandled?.();
+      if (localAction) {
+        setLocalAction(null);
+      } else {
+        onActionHandled?.();
+      }
       return;
     }
 
     if (!primaryEnrolment) {
-      if (action === "change-enrolment") {
+      if (resolvedAction === "change-enrolment") {
         setOpen(true);
       } else {
         toast.error("No enrolment yet. Add an enrolment first.");
       }
-      onActionHandled?.();
+      if (localAction) {
+        setLocalAction(null);
+      } else {
+        onActionHandled?.();
+      }
     }
-  }, [action, onActionHandled, primaryEnrolment]);
+  }, [localAction, onActionHandled, primaryEnrolment, resolvedAction]);
 
   return (
     <>
       {layout === "card" ? (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle className="text-base">Student enrolments</CardTitle>
+            <div className="space-y-1">
+              <CardTitle className="text-base">Enrolments</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Manage this student&apos;s current classes and historical enrolments.
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => setMergeOpen(true)}>
-                Merge enrolments
-              </Button>
+              {canMergeEnrolments ? (
+                <Button variant="outline" onClick={() => setMergeOpen(true)}>
+                  Merge enrolments
+                </Button>
+              ) : null}
+              {canChangeClass ? (
+                <Button variant="outline" onClick={() => setLocalAction("change-enrolment")}>
+                  Change class
+                </Button>
+              ) : null}
               <Button onClick={() => setOpen(true)}>Add enrolment</Button>
             </div>
           </CardHeader>
@@ -89,25 +113,45 @@ export function StudentEnrolmentsSection({
               showPaidThroughAction={showPaidThroughAction}
               editContextSource={editContextSource}
               action={
-                action === "change-enrolment" || action === "edit-paid-through"
+                resolvedAction === "change-enrolment" || resolvedAction === "edit-paid-through"
                   ? primaryEnrolment
-                    ? { type: action, enrolmentId: primaryEnrolment.id }
+                    ? { type: resolvedAction, enrolmentId: primaryEnrolment.id }
                     : null
                   : null
               }
-              onActionHandled={onActionHandled}
+              onActionHandled={() => {
+                if (localAction) {
+                  setLocalAction(null);
+                } else {
+                  onActionHandled?.();
+                }
+              }}
             />
           </CardContent>
         </Card>
       ) : (
         <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">Student enrolments</h2>
+          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold">Enrolments</h2>
+              <p className="text-sm text-muted-foreground">
+                Add new enrolments here and keep class changes within the same workflow.
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => setMergeOpen(true)}>
-                Merge enrolments
+              {canMergeEnrolments ? (
+                <Button size="sm" variant="outline" onClick={() => setMergeOpen(true)}>
+                  Merge enrolments
+                </Button>
+              ) : null}
+              {canChangeClass ? (
+                <Button size="sm" variant="outline" onClick={() => setLocalAction("change-enrolment")}>
+                  Change class
+                </Button>
+              ) : null}
+              <Button size="sm" onClick={() => setOpen(true)}>
+                Add enrolment
               </Button>
-              <Button onClick={() => setOpen(true)}>Add enrolment</Button>
             </div>
           </div>
           <StudentEnrolmentsTable
@@ -119,13 +163,19 @@ export function StudentEnrolmentsSection({
             showPaidThroughAction={showPaidThroughAction}
             editContextSource={editContextSource}
             action={
-              action === "change-enrolment" || action === "edit-paid-through"
+              resolvedAction === "change-enrolment" || resolvedAction === "edit-paid-through"
                 ? primaryEnrolment
-                  ? { type: action, enrolmentId: primaryEnrolment.id }
+                  ? { type: resolvedAction, enrolmentId: primaryEnrolment.id }
                   : null
                 : null
             }
-            onActionHandled={onActionHandled}
+            onActionHandled={() => {
+              if (localAction) {
+                setLocalAction(null);
+              } else {
+                onActionHandled?.();
+              }
+            }}
           />
         </section>
       )}

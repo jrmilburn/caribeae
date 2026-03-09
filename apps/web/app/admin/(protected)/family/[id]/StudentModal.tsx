@@ -4,12 +4,14 @@ import * as React from "react";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
 
 import type { Student, Level } from "@prisma/client";
 import type { ClientStudent } from "@/server/student/types";
@@ -23,24 +25,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-function FieldRow({
+function FieldGroup({
   label,
+  description,
   children,
 }: {
   label: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3 sm:items-center">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="sm:col-span-2">{children}</div>
+    <div className="space-y-2">
+      <div className="space-y-1">
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      {children}
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
       {children}
     </div>
   );
@@ -178,72 +185,91 @@ export function StudentModal({
       <SheetContent side="right" className="w-full space-y-6 overflow-y-auto p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
           <SheetTitle>{mode === "create" ? "New student" : "Edit student"}</SheetTitle>
+          <SheetDescription>
+            Keep student details current without changing any of the existing enrolment or billing logic.
+          </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6">
-          <div className="space-y-3">
-            <SectionTitle>Student</SectionTitle>
+          <div className="rounded-xl border border-border/80 bg-background p-4">
+            <div className="space-y-4">
+              <SectionTitle>Student</SectionTitle>
 
-            <FieldRow label="Student name">
-              <div className="space-y-1">
-                <Input
-                  value={form.name ?? ""}
-                  onChange={(e) => setField("name", e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                  placeholder="e.g. Olivia Smith"
-                  className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
-                />
-                {nameError ? (
-                  <p className="text-xs text-destructive">{nameError}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">This is what appears in the student list.</p>
-                )}
-              </div>
-            </FieldRow>
-
-            <FieldRow label="Level">
-              <div className="space-y-1">
-                <Select
-                  value={currentLevelId}
-                  onValueChange={(v) => {
-                    setField("levelId", v);
-                    setTouched((t) => ({ ...t, levelId: true }));
-                  }}
+              <div className="grid gap-4 md:grid-cols-2">
+                <FieldGroup
+                  label="Student name"
+                  description="This is what appears in student lists and class rosters."
                 >
-                  <SelectTrigger className={cn(levelError && "border-destructive focus-visible:ring-destructive")}>
-                    <SelectValue placeholder="Select level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {levels.map((lvl) => (
-                      <SelectItem key={lvl.id} value={lvl.id}>
-                        {lvl.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <div className="space-y-1">
+                    <Input
+                      value={form.name ?? ""}
+                      onChange={(e) => setField("name", e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                      placeholder="e.g. Olivia Smith"
+                      className={cn(nameError && "border-destructive focus-visible:ring-destructive")}
+                    />
+                    {nameError ? (
+                      <p className="text-xs text-destructive">{nameError}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Required</p>
+                    )}
+                  </div>
+                </FieldGroup>
 
-                <p className="text-xs text-muted-foreground">
-                  For proper level progression/history use the Level Change workflow.
-                </p>
+                <FieldGroup
+                  label="Level"
+                  description="Use the level change workflow when you need to preserve progression history."
+                >
+                  <div className="space-y-1">
+                    <Select
+                      value={currentLevelId}
+                      onValueChange={(v) => {
+                        setField("levelId", v);
+                        setTouched((t) => ({ ...t, levelId: true }));
+                      }}
+                    >
+                      <SelectTrigger className={cn(levelError && "border-destructive focus-visible:ring-destructive")}>
+                        <SelectValue placeholder="Select level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {levels.map((lvl) => (
+                          <SelectItem key={lvl.id} value={lvl.id}>
+                            {lvl.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-                {levelError && <p className="text-xs text-destructive">{levelError}</p>}
+                    {levelError && <p className="text-xs text-destructive">{levelError}</p>}
+                  </div>
+                </FieldGroup>
+
+                <FieldGroup label="Date of birth" description="Optional">
+                  <Input
+                    type="date"
+                    value={form.dateOfBirth ?? ""}
+                    onChange={(e) => setField("dateOfBirth", e.target.value)}
+                  />
+                </FieldGroup>
               </div>
-            </FieldRow>
-
-            <FieldRow label="Date of birth (optional)">
-              <Input type="date" value={form.dateOfBirth ?? ""} onChange={(e) => setField("dateOfBirth", e.target.value)} />
-            </FieldRow>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            <SectionTitle>Medical notes (optional)</SectionTitle>
-            <FieldRow label="Notes">
-              <Input
-                value={form.medicalNotes ?? ""}
-                onChange={(e) => setField("medicalNotes", e.target.value)}
-                placeholder="Allergies, conditions, important info…"
-              />
-            </FieldRow>
+          <div className="rounded-xl border border-border/80 bg-background p-4">
+            <div className="space-y-4">
+              <SectionTitle>Medical notes (optional)</SectionTitle>
+              <FieldGroup
+                label="Notes"
+                description="Use this for allergies, medical conditions, or anything staff should notice quickly."
+              >
+                <Textarea
+                  value={form.medicalNotes ?? ""}
+                  onChange={(e) => setField("medicalNotes", e.target.value)}
+                  placeholder="Allergies, conditions, important info…"
+                  className="min-h-28 resize-y"
+                />
+              </FieldGroup>
+            </div>
           </div>
         </div>
 
