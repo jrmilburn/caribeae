@@ -311,8 +311,12 @@ export default function FamilyForm({
       return;
     }
 
+    setStudentDetails(null);
     void loadStudentDetails(selectedStudentId);
   }, [loadStudentDetails, selectedStudentId]);
+
+  const selectedStudentDetails =
+    studentDetails && studentDetails.id === selectedStudentId ? studentDetails : null;
 
   const refreshStudentDetails = React.useCallback(
     (id?: string | null) => {
@@ -626,7 +630,7 @@ export default function FamilyForm({
                               Add student
                             </Button>
                           </div>
-                        ) : isLoadingStudent && !studentDetails ? (
+                        ) : isLoadingStudent && !selectedStudentDetails ? (
                           <div className="space-y-3" aria-busy="true" aria-live="polite" role="status">
                             <span className="sr-only">Loading student details</span>
                             <Skeleton className="h-5 w-44" />
@@ -634,9 +638,9 @@ export default function FamilyForm({
                             <Skeleton className="h-10 w-full" />
                             <Skeleton className="h-10 w-full" />
                           </div>
-                        ) : studentDetails ? (
+                        ) : selectedStudentDetails ? (
                           <StudentEnrolmentsSection
-                            student={studentDetails}
+                            student={selectedStudentDetails}
                             levels={levels}
                             enrolmentPlans={enrolmentPlans}
                             onUpdated={() => {
