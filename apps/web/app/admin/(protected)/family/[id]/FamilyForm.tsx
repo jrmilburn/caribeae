@@ -200,10 +200,12 @@ export default function FamilyForm({
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initialTab = React.useRef<FamilyTabKey>(parseTabParam(searchParams.get("tab")));
+  const initialStudentId = React.useRef<string>(searchParams.get("student") ?? "");
 
-  const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(() => parseTabParam(searchParams.get("tab")));
+  const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(initialTab.current);
   const [visitedTabs, setVisitedTabs] = React.useState<Set<FamilyTabKey>>(() => new Set([activeTab]));
-  const [selectedStudentId, setSelectedStudentId] = React.useState<string>(() => searchParams.get("student") ?? "");
+  const [selectedStudentId, setSelectedStudentId] = React.useState<string>(initialStudentId.current);
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
@@ -234,6 +236,10 @@ export default function FamilyForm({
   const syncQueryParam = React.useCallback((key: string, value: string | null) => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    const current = params.get(key);
+    const normalizedValue = value || null;
+    if (current === normalizedValue) return;
+
     if (!value) {
       params.delete(key);
     } else {
@@ -241,6 +247,7 @@ export default function FamilyForm({
     }
     const qs = params.toString();
     const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    if (`${window.location.pathname}${window.location.search}` === next) return;
     window.history.replaceState(null, "", next);
   }, []);
 
