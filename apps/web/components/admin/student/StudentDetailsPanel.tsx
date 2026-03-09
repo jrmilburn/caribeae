@@ -24,7 +24,6 @@ export function StudentDetailsPanel({ student }: StudentDetailsPanelProps) {
         <CardTitle className="text-base">Student details</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
-        <DetailRow label="Student name" value={student.name ?? "-"} />
         <DetailRow label="Level" value={student.level?.name ?? "Level not set"} />
         <DetailRow label="Date of birth" value={formatBrisbaneDate(student.dateOfBirth ?? null)} />
         <div className="sm:col-span-2">

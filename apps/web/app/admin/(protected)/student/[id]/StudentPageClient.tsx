@@ -3,14 +3,13 @@
 import * as React from "react";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
-import { parseReturnContext } from "@/lib/returnContext";
 import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 
 import type { ClientStudentWithRelations } from "./types";
@@ -171,8 +170,6 @@ export default function StudentPageClient({
   billingPosition: FamilyBillingPosition;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const returnTo = parseReturnContext(searchParams);
 
   const [activeTab, setActiveTab] = useSyncedQueryState<TabKey>("tab", {
     defaultValue: "enrolment",
@@ -194,7 +191,6 @@ export default function StudentPageClient({
   } | null>(null);
 
   const familyId = student.family?.id ?? student.familyId;
-  const familyName = student.family?.name ?? "Family";
 
   const billingStudent = billingPosition.students.find((entry) => entry.id === student.id) ?? null;
   const status = resolveStudentStatus(billingStudent?.enrolments);
@@ -216,9 +212,6 @@ export default function StudentPageClient({
     };
   }, [student.enrolments]);
 
-  const backHref = returnTo ?? `/admin/family/${familyId}`;
-  const backLabel = returnTo?.startsWith("/admin/reception") ? "Back to Reception" : "Back";
-
   const handleEnrolmentAction = (action: "add-enrolment" | "change-enrolment") => {
     setActiveTab("enrolment");
     setEnrolmentAction(action);
@@ -238,158 +231,167 @@ export default function StudentPageClient({
 
   const paidThroughOptions = billingStudent?.enrolments ?? [];
   type BillingEnrolment = FamilyBillingPosition["students"][number]["enrolments"][number];
+  const paidThroughDetail = paidThroughOptions.length
+    ? `${paidThroughOptions.length} billing enrolment${paidThroughOptions.length === 1 ? "" : "s"}`
+    : "No billing enrolments yet";
+  const enrolmentLabel = enrolmentSnapshot?.classLabel ?? "Not enrolled";
+  const enrolmentDetail = enrolmentSnapshot?.scheduleLabel ?? "No active class schedule yet";
+  const nextSessionLabel = enrolmentSnapshot?.nextSessionLabel ?? "Not scheduled";
+  const nextSessionDetail = enrolmentSnapshot
+    ? "Based on assigned class schedule"
+    : "No upcoming session for this student";
+  const familyBalanceLabel = formatCurrencyFromCents(billingPosition.outstandingCents);
+  const familyBalanceDetail =
+    billingPosition.outstandingCents > 0
+      ? "Outstanding across the family account"
+      : "Family account is currently settled or in credit";
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Student</div>
-              <div className="text-2xl font-semibold leading-tight">{student.name}</div>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <span>{student.level?.name ?? "Level not set"}</span>
-                <Badge variant={status.variant} className="text-[11px]">
-                  {status.label}
-                </Badge>
-              </div>
-              {enrolmentSnapshot ? (
-                <div className="rounded-lg border bg-muted/20 p-3 text-sm">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Enrolment snapshot
-                  </div>
-                  <div className="mt-1 font-medium text-foreground">{enrolmentSnapshot.classLabel}</div>
-                  {enrolmentSnapshot.scheduleLabel ? (
-                    <div className="text-xs text-muted-foreground">{enrolmentSnapshot.scheduleLabel}</div>
-                  ) : null}
-                  {enrolmentSnapshot.nextSessionLabel ? (
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      Next session {enrolmentSnapshot.nextSessionLabel}
-                    </div>
-                  ) : null}
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-scroll">
+        <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+          <header className="border-b border-gray-200 pb-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                  <Link href="/admin/students" className="hover:text-gray-900">
+                    Students
+                  </Link>
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                  <span className="font-medium text-gray-900">{student.name}</span>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">No current enrolment snapshot yet.</div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 sm:items-end">
-              <div className="rounded-lg border bg-muted/30 p-4 text-right">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paid through</div>
-                <div className="mt-1 text-xl font-semibold">{paidThroughLabel}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{student.name}</h1>
+                  <Badge variant={status.variant} className="text-[11px]">
+                    {status.label}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Manage enrolments, billing, and profile details for this student.
+                </p>
               </div>
-              <div className="rounded-lg border bg-muted/20 p-3 text-right">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Family</div>
-                <div className="mt-1 text-sm font-semibold">{familyName}</div>
-                <Button size="sm" variant="outline" asChild className="mt-2">
-                  <Link href={`/admin/family/${familyId}`}>Go to family</Link>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <RecordPaymentSheet
+                  familyId={familyId}
+                  enrolments={billingPosition.enrolments}
+                  openInvoices={billingPosition.openInvoices ?? []}
+                  trigger={<Button size="sm">Take payment</Button>}
+                />
+                <PayAheadSheet
+                  familyId={familyId}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      Pay ahead
+                    </Button>
+                  }
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="secondary">
+                      Enrol / change class
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Enrolment actions</DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => handleEnrolmentAction("add-enrolment")}>
+                      Add enrolment
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleEnrolmentAction("change-enrolment")}>
+                      Change enrolment
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={paidThroughOptions.length === 0}>
+                      Edit paid-through
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Select enrolment</DropdownMenuLabel>
+                    {paidThroughOptions.length === 0 ? (
+                      <DropdownMenuItem disabled>No enrolments available</DropdownMenuItem>
+                    ) : (
+                      paidThroughOptions.map((enrolment: BillingEnrolment) => {
+                        const paidThrough =
+                          enrolment.projectedCoverageEnd ??
+                          enrolment.paidThroughDate ??
+                          enrolment.latestCoverageEnd ??
+                          null;
+                        const label = enrolment.templateName
+                          ? `${enrolment.planName} - ${enrolment.templateName}`
+                          : enrolment.planName;
+                        return (
+                          <DropdownMenuItem
+                            key={enrolment.id}
+                            onSelect={() =>
+                              setPaidThroughTarget({
+                                enrolmentId: enrolment.id,
+                                currentPaidThrough: paidThrough,
+                              })
+                            }
+                          >
+                            {label}
+                          </DropdownMenuItem>
+                        );
+                      })
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button size="sm" variant="outline" onClick={() => setStudentSheetOpen(true)}>
+                  Edit student
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/admin/family/${familyId}`}>Open family</Link>
                 </Button>
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" asChild>
-            <Link href={backHref}>{backLabel}</Link>
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setStudentSheetOpen(true)}>
-            Edit student
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary">
-                Enrol / change class
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Enrolment actions</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => handleEnrolmentAction("add-enrolment")}>
-                Add enrolment
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => handleEnrolmentAction("change-enrolment")}>
-                Change enrolment
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" disabled={paidThroughOptions.length === 0}>
-                Edit paid-through
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuLabel>Select enrolment</DropdownMenuLabel>
-              {paidThroughOptions.length === 0 ? (
-                <DropdownMenuItem disabled>No enrolments available</DropdownMenuItem>
-              ) : (
-                paidThroughOptions.map((enrolment: BillingEnrolment) => {
-                  const paidThrough =
-                    enrolment.projectedCoverageEnd ??
-                    enrolment.paidThroughDate ??
-                    enrolment.latestCoverageEnd ??
-                    null;
-                  const label = enrolment.templateName
-                    ? `${enrolment.planName} - ${enrolment.templateName}`
-                    : enrolment.planName;
-                  return (
-                    <DropdownMenuItem
-                      key={enrolment.id}
-                      onSelect={() =>
-                        setPaidThroughTarget({
-                          enrolmentId: enrolment.id,
-                          currentPaidThrough: paidThrough,
-                        })
-                      }
-                    >
-                      {label}
-                    </DropdownMenuItem>
-                  );
-                })
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <RecordPaymentSheet
-            familyId={familyId}
-            enrolments={billingPosition.enrolments}
-            openInvoices={billingPosition.openInvoices ?? []}
-            trigger={<Button size="sm">Take payment</Button>}
-          />
-          <PayAheadSheet
-            familyId={familyId}
-            trigger={
-              <Button size="sm" variant="outline">
-                Pay ahead
-              </Button>
-            }
-          />
-        </CardContent>
-      </Card>
+          </header>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => {
-          if (value === "billing" || value === "details") {
-            setActiveTab(value);
-          } else {
-            setActiveTab("enrolment");
-          }
-        }}
-        className="space-y-4"
-      >
-        <Card>
-          <CardHeader className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-base">Action workspace</CardTitle>
-              <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
-                <TabsTrigger value="enrolment">Enrolment</TabsTrigger>
-                <TabsTrigger value="billing">Billing</TabsTrigger>
-                <TabsTrigger value="details">Details</TabsTrigger>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard label="Paid through" value={paidThroughLabel} detail={paidThroughDetail} />
+            <SummaryCard label="Current class" value={enrolmentLabel} detail={enrolmentDetail} />
+            <SummaryCard label="Next session" value={nextSessionLabel} detail={nextSessionDetail} />
+            <SummaryCard label="Family balance" value={familyBalanceLabel} detail={familyBalanceDetail} />
+          </div>
+
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value === "billing" || value === "details") {
+                setActiveTab(value);
+              } else {
+                setActiveTab("enrolment");
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="border-b border-gray-200">
+              <TabsList className="h-auto w-full justify-start gap-6 rounded-none bg-transparent p-0">
+                <TabsTrigger
+                  value="enrolment"
+                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                >
+                  Enrolment
+                </TabsTrigger>
+                <TabsTrigger
+                  value="billing"
+                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                >
+                  Billing
+                </TabsTrigger>
+                <TabsTrigger
+                  value="details"
+                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                >
+                  Details
+                </TabsTrigger>
               </TabsList>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
+
             <TabsContent value="enrolment" className="m-0 space-y-3">
               {activeTab === "enrolment" ? (
                 <StudentEnrolmentsSection
@@ -415,9 +417,9 @@ export default function StudentPageClient({
             <TabsContent value="details" className="m-0 space-y-3">
               {activeTab === "details" ? <StudentDetailsPanel student={student} /> : null}
             </TabsContent>
-          </CardContent>
-        </Card>
-      </Tabs>
+          </Tabs>
+        </div>
+      </div>
 
       <StudentModal
         open={studentSheetOpen}
@@ -438,6 +440,24 @@ export default function StudentPageClient({
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-2 text-xl font-semibold text-gray-900">{value}</div>
+      <div className="mt-1 text-xs text-gray-500">{detail}</div>
     </div>
   );
 }

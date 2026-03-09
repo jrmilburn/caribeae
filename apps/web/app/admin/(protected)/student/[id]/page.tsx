@@ -22,7 +22,7 @@ export default async function StudentPage({ params }: PageProps) {
   ]);
 
   return (
-    <div className="max-h-screen overflow-y-auto">
+    <div className="h-full min-h-0 overflow-hidden">
       <StudentPageClient
         student={student}
         levels={levels}
