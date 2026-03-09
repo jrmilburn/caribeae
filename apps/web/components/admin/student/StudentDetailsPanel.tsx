@@ -15,9 +15,25 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export type StudentDetailsPanelProps = {
   student: ClientStudentWithRelations;
+  layout?: "card" | "plain";
 };
 
-export function StudentDetailsPanel({ student }: StudentDetailsPanelProps) {
+export function StudentDetailsPanel({ student, layout = "card" }: StudentDetailsPanelProps) {
+  if (layout === "plain") {
+    return (
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold">Student details</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <DetailRow label="Level" value={student.level?.name ?? "Level not set"} />
+          <DetailRow label="Date of birth" value={formatBrisbaneDate(student.dateOfBirth ?? null)} />
+          <div className="sm:col-span-2">
+            <DetailRow label="Medical notes" value={student.medicalNotes?.trim() || "-"} />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>

@@ -379,19 +379,19 @@ export default function StudentPageClient({
               <TabsList className="h-auto w-full justify-start gap-6 rounded-none bg-transparent p-0">
                 <TabsTrigger
                   value="enrolment"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
                 >
                   Enrolment
                 </TabsTrigger>
                 <TabsTrigger
                   value="billing"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
                 >
                   Billing
                 </TabsTrigger>
                 <TabsTrigger
                   value="details"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
+                  className="h-11 flex-none cursor-pointer rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
                 >
                   Details
                 </TabsTrigger>
@@ -404,6 +404,7 @@ export default function StudentPageClient({
                   student={student}
                   levels={levels}
                   enrolmentPlans={enrolmentPlans}
+                  layout="plain"
                   onUpdated={() => {
                     setEnrolmentAction(null);
                     router.refresh();
@@ -417,11 +418,16 @@ export default function StudentPageClient({
             </TabsContent>
             <TabsContent value="billing" className="m-0 space-y-3">
               {activeTab === "billing" ? (
-                <StudentBillingPanel billing={billingPosition} studentId={student.id} familyId={familyId} />
+                <StudentBillingPanel
+                  billing={billingPosition}
+                  studentId={student.id}
+                  familyId={familyId}
+                  layout="plain"
+                />
               ) : null}
             </TabsContent>
             <TabsContent value="details" className="m-0 space-y-3">
-              {activeTab === "details" ? <StudentDetailsPanel student={student} /> : null}
+              {activeTab === "details" ? <StudentDetailsPanel student={student} layout="plain" /> : null}
             </TabsContent>
           </Tabs>
         </div>

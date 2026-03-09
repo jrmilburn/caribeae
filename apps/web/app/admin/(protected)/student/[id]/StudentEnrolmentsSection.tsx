@@ -22,6 +22,7 @@ export function StudentEnrolmentsSection({
   action,
   onActionHandled,
   editContextSource = "student",
+  layout = "card",
 }: {
   student: ClientStudentWithRelations;
   levels: Level[];
@@ -31,6 +32,7 @@ export function StudentEnrolmentsSection({
   action?: "add-enrolment" | "change-enrolment" | "edit-paid-through" | null;
   onActionHandled?: () => void;
   editContextSource?: EnrolmentEditContextSource;
+  layout?: "card" | "plain";
 }) {
   const [open, setOpen] = React.useState(false);
   const [mergeOpen, setMergeOpen] = React.useState(false);
@@ -65,51 +67,84 @@ export function StudentEnrolmentsSection({
   }, [action, onActionHandled, primaryEnrolment]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle className="text-base">Student enrolments</CardTitle>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setMergeOpen(true)}>
-            Merge enrolments
-          </Button>
-          <Button onClick={() => setOpen(true)}>Add enrolment</Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <StudentEnrolmentsTable
-          enrolments={student.enrolments}
-          levels={levels}
-          studentLevelId={student.levelId}
-          enrolmentPlans={enrolmentPlans}
-          onUpdated={onUpdated}
-          showPaidThroughAction={showPaidThroughAction}
-          editContextSource={editContextSource}
-          action={
-            action === "change-enrolment" || action === "edit-paid-through"
-              ? primaryEnrolment
-                ? { type: action, enrolmentId: primaryEnrolment.id }
+    <>
+      {layout === "card" ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="text-base">Student enrolments</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => setMergeOpen(true)}>
+                Merge enrolments
+              </Button>
+              <Button onClick={() => setOpen(true)}>Add enrolment</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <StudentEnrolmentsTable
+              enrolments={student.enrolments}
+              levels={levels}
+              studentLevelId={student.levelId}
+              enrolmentPlans={enrolmentPlans}
+              onUpdated={onUpdated}
+              showPaidThroughAction={showPaidThroughAction}
+              editContextSource={editContextSource}
+              action={
+                action === "change-enrolment" || action === "edit-paid-through"
+                  ? primaryEnrolment
+                    ? { type: action, enrolmentId: primaryEnrolment.id }
+                    : null
+                  : null
+              }
+              onActionHandled={onActionHandled}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">Student enrolments</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => setMergeOpen(true)}>
+                Merge enrolments
+              </Button>
+              <Button onClick={() => setOpen(true)}>Add enrolment</Button>
+            </div>
+          </div>
+          <StudentEnrolmentsTable
+            enrolments={student.enrolments}
+            levels={levels}
+            studentLevelId={student.levelId}
+            enrolmentPlans={enrolmentPlans}
+            onUpdated={onUpdated}
+            showPaidThroughAction={showPaidThroughAction}
+            editContextSource={editContextSource}
+            action={
+              action === "change-enrolment" || action === "edit-paid-through"
+                ? primaryEnrolment
+                  ? { type: action, enrolmentId: primaryEnrolment.id }
+                  : null
                 : null
-              : null
-          }
-          onActionHandled={onActionHandled}
-        />
-        <AddEnrolmentDialog
-          open={open}
-          onOpenChange={setOpen}
-          studentId={student.id}
-          levels={levels}
-          enrolmentPlans={levelPlans}
-          studentLevelId={student.levelId}
-          onCreated={onUpdated}
-        />
-        <MergeEnrolmentsDialog
-          open={mergeOpen}
-          onOpenChange={setMergeOpen}
-          enrolments={student.enrolments}
-          enrolmentPlans={enrolmentPlans}
-          onMerged={onUpdated}
-        />
-      </CardContent>
-    </Card>
+            }
+            onActionHandled={onActionHandled}
+          />
+        </section>
+      )}
+      <AddEnrolmentDialog
+        open={open}
+        onOpenChange={setOpen}
+        studentId={student.id}
+        levels={levels}
+        enrolmentPlans={levelPlans}
+        studentLevelId={student.levelId}
+        onCreated={onUpdated}
+      />
+      <MergeEnrolmentsDialog
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        enrolments={student.enrolments}
+        enrolmentPlans={enrolmentPlans}
+        onMerged={onUpdated}
+      />
+    </>
   );
 }
