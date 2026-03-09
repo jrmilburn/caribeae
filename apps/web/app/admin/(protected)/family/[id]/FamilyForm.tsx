@@ -134,6 +134,12 @@ type StudentStatus = {
   variant: "default" | "secondary" | "outline" | "destructive";
 };
 
+type StudentPaidThroughOption = {
+  id: string;
+  label: string;
+  currentPaidThrough: Date | null;
+};
+
 type StudentListRow = {
   id: string;
   name: string;
@@ -334,7 +340,7 @@ export default function FamilyForm({
   );
 
   const selectedStudentRow = studentRows.find((row) => row.id === selectedStudentId) ?? null;
-  const paidThroughOptions = selectedStudentRow?.enrolments.map((enrolment) => ({
+  const paidThroughOptions: StudentPaidThroughOption[] = selectedStudentRow?.enrolments.map((enrolment: StudentListRow["enrolments"][number]) => ({
     id: enrolment.id,
     label: enrolment.templateName ? `${enrolment.planName} • ${enrolment.templateName}` : enrolment.planName,
     currentPaidThrough:
@@ -608,7 +614,7 @@ export default function FamilyForm({
                                   Change level
                                 </DropdownMenuItem>
                                 {paidThroughOptions.length > 1 ? (
-                                  paidThroughOptions.map((option) => (
+                                  paidThroughOptions.map((option: StudentPaidThroughOption) => (
                                     <DropdownMenuItem
                                       key={option.id}
                                       onSelect={() =>
