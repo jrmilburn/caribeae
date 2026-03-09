@@ -5,15 +5,14 @@ import { format } from "date-fns";
 import { InvoiceStatus } from "@prisma/client";
 import {
   AlertCircle,
-  FileText,
   MoreHorizontal,
-  Receipt,
   Undo2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { PendingDot } from "@/components/loading/LoadingSystem";
+import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +30,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PrintReceiptButton } from "@/components/PrintReceiptButton";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -58,8 +56,6 @@ type Props = {
   family: FamilyWithStudentsAndInvoices;
   billing: BillingData;
   billingPosition: FamilyBillingPosition;
-  onOpenPayment?: () => void;
-  onOpenPayAhead?: () => void;
   onUpdated?: () => void;
 };
 
@@ -100,9 +96,12 @@ function formatDateWithTime(value?: Date | null) {
 function statusBadgeVariant(status: string) {
   switch (status) {
     case "OVERDUE":
+    case "Void":
+    case "Voided":
       return "destructive" as const;
     case "PARTIALLY_PAID":
-      return "outline" as const;
+    case "Due soon":
+      return "secondary" as const;
     case "PAID":
       return "secondary" as const;
     default:
@@ -129,18 +128,127 @@ function getInvoiceBalanceCents(invoice: { amountCents: number; amountPaidCents:
   return Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
 }
 
-function resolveCoverageLabel(invoice: FamilyWithStudentsAndInvoices["invoices"][number]) {
+function formatSentenceCase(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
+
+function resolveCoverageLabel(invoice: {
+  coverageStart?: Date | null;
+  coverageEnd?: Date | null;
+  creditsPurchased?: number | null;
+}) {
   if (invoice.coverageStart && invoice.coverageEnd) {
-    return `${formatDate(invoice.coverageStart)} → ${formatDate(invoice.coverageEnd)}`;
+    return `${formatDate(invoice.coverageStart)} to ${formatDate(invoice.coverageEnd)}`;
   }
   if (invoice.creditsPurchased) {
-    return `${invoice.creditsPurchased} credits`;
+    return `${invoice.creditsPurchased} credits purchased`;
   }
-  return "No coverage window";
+  return null;
 }
 
 function nullToUndefined<T>(value: T | null | undefined): T | undefined {
   return value === null ? undefined : value;
+}
+
+function formatPaymentMethod(method?: string | null) {
+  if (!method) return null;
+  const normalized = method.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "direct debit") return "Direct debit";
+  if (normalized === "client portal") return "Client portal";
+  if (normalized === "credit") return "Account credit";
+  return normalized.replace(/^\w/, (char) => char.toUpperCase());
+}
+
+function looksTechnicalText(value: string) {
+  return (
+    /[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value) ||
+    /\([^)_:]{12,}:[^)]+\)/.test(value) ||
+    value.includes("class-change:") ||
+    value.includes("settlement (")
+  );
+}
+
+function cleanText(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed || looksTechnicalText(trimmed)) return null;
+  return trimmed;
+}
+
+function describePayment(payment: BillingPayment) {
+  const note = payment.note?.trim() ?? "";
+  const lower = note.toLowerCase();
+
+  if (lower.startsWith("class change settlement")) return "Class change credit";
+  if (lower === "merge enrolments credit transfer") return "Merge enrolments credit";
+  if (lower === "class move") return "Class move adjustment";
+  if (lower === "opening credits") return "Opening credit";
+  if (lower === "manual paid-through adjustment") return "Paid-through adjustment";
+  if (lower === "block payment") return "Block payment";
+  if (lower && !looksTechnicalText(note) && lower !== "invoice paid" && lower !== "payment recorded") {
+    return note;
+  }
+
+  const method = formatPaymentMethod(payment.method);
+  return method ? `${method} payment` : "Payment";
+}
+
+function describePaymentNote(payment: BillingPayment) {
+  const note = cleanText(payment.note);
+  if (!note) return null;
+  const lower = note.toLowerCase();
+  if (lower === "invoice paid" || lower === "payment recorded") return null;
+  const description = describePayment(payment).toLowerCase();
+  if (lower === description) return null;
+  return note;
+}
+
+function describeInvoice(invoice: InvoiceRow) {
+  const visibleDescriptions = invoice.lineItems
+    .map((lineItem) => cleanText(lineItem.description))
+    .filter((value): value is string => Boolean(value));
+
+  if (visibleDescriptions.length === 1) {
+    return visibleDescriptions[0];
+  }
+
+  if (visibleDescriptions.length > 1) {
+    const [first, ...rest] = visibleDescriptions;
+    return `${first} +${rest.length} more`;
+  }
+
+  if (invoice.creditsPurchased) return "Block payment invoice";
+  if (invoice.coverageStart || invoice.coverageEnd) return "Tuition invoice";
+  return "Manual invoice";
+}
+
+function describeInvoiceSubtitle(invoice: InvoiceRow) {
+  const coverage = resolveCoverageLabel(invoice);
+  const parts = [coverage, invoice.dueAt ? `Due ${formatDate(invoice.dueAt)}` : null].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Family account invoice";
+}
+
+function describeInvoiceDetail(invoice: InvoiceRow) {
+  if (invoice.amountOwingCents > 0) {
+    return `${formatCurrencyFromCents(invoice.amountOwingCents)} outstanding`;
+  }
+  return "Paid in full";
+}
+
+function describeAllocationInvoice(allocation: BillingPayment["allocations"][number]["invoice"]) {
+  const dueLabel = allocation.dueAt ? `Due ${formatDate(allocation.dueAt)}` : "No due date";
+  return `Invoice · ${dueLabel}`;
+}
+
+function describeAllocationNote(note?: string | null) {
+  const cleaned = cleanText(note);
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower === "invoice paid" || lower === "payment recorded") return null;
+  return cleaned;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,8 +279,6 @@ export default function FamilyInvoices({
   family,
   billing,
   billingPosition,
-  onOpenPayment,
-  onOpenPayAhead,
   onUpdated,
 }: Props) {
   const router = useRouter();
@@ -207,8 +313,6 @@ export default function FamilyInvoices({
     [invoices]
   );
 
-  const nextDue = billingPosition.nextDueInvoice ?? null;
-
   const billingActivity = React.useMemo<BillingActivityItem[]>(() => {
     const invoiceItems = invoices.map((invoice) => {
       const displayStatus = resolveInvoiceDisplayStatus(invoice.status);
@@ -225,10 +329,10 @@ export default function FamilyInvoices({
         id: `invoice-${invoice.id}`,
         kind: "invoice" as const,
         when: invoice.issuedAt ?? invoice.dueAt ?? null,
-        title: `Invoice ${invoice.id}`,
-        description: `${resolveCoverageLabel(invoice)}${invoice.dueAt ? ` · Due ${formatDate(invoice.dueAt)}` : ""}`,
+        title: describeInvoice(invoice),
+        description: describeInvoiceSubtitle(invoice),
         amountLabel: formatCurrencyFromCents(invoice.amountCents),
-        detailLabel: `${formatCurrencyFromCents(invoice.amountOwingCents)} outstanding`,
+        detailLabel: describeInvoiceDetail(invoice),
         statusLabel: displayStatus,
         tone,
         invoice,
@@ -243,13 +347,13 @@ export default function FamilyInvoices({
         id: `payment-${payment.id}`,
         kind: "payment" as const,
         when: payment.paidAt ?? null,
-        title: `Payment ${payment.id}`,
-        description: `${payment.method ?? "Payment"}${payment.note ? ` · ${payment.note}` : ""}`,
+        title: describePayment(payment),
+        description: describePaymentNote(payment) ?? "Family account payment",
         amountLabel: formatCurrencyFromCents(payment.amountCents),
         detailLabel: payment.allocations?.length
-          ? `${payment.allocations.length} allocation${payment.allocations.length === 1 ? "" : "s"}`
-          : "Unallocated",
-        statusLabel: status,
+          ? `Applied to ${payment.allocations.length} invoice${payment.allocations.length === 1 ? "" : "s"}`
+          : "Unallocated family credit",
+        statusLabel: formatSentenceCase(status),
         tone,
         payment,
       };
@@ -422,199 +526,213 @@ export default function FamilyInvoices({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">Billing activity</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Combined invoice and payment timeline for this family.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onOpenPayment ? (
-                <Button size="sm" variant="secondary" onClick={onOpenPayment}>
-                  Record payment
+      <section className="rounded-xl border border-border/80 bg-background p-5">
+        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold">Billing activity</h2>
+            <p className="text-sm text-muted-foreground">
+              Shared family-account invoices, credits, and payments.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingInvoice(null);
+                setInvoiceFormOpen(true);
+              }}
+            >
+              New invoice
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  More actions
                 </Button>
-              ) : null}
-              {onOpenPayAhead ? (
-                <Button size="sm" variant="outline" onClick={onOpenPayAhead}>
-                  Pay ahead
-                </Button>
-              ) : null}
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingInvoice(null);
-                  setInvoiceFormOpen(true);
-                }}
-              >
-                Create invoice
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    More
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <CatchUpPaymentDialog
-                    familyId={family.id}
-                    familyName={family.name}
-                    trigger={<DropdownMenuItem>Catch up payment</DropdownMenuItem>}
-                  />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <CatchUpPaymentDialog
+                  familyId={family.id}
+                  familyName={family.name}
+                  trigger={<DropdownMenuItem>Catch up payment</DropdownMenuItem>}
+                />
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <div className="grid gap-3 border-b border-gray-200 bg-gray-50 px-6 py-4 sm:grid-cols-3">
+        <div className="mt-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Family account
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Billing here is shared across siblings. Student-level paid-through dates stay on each student record.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <SummaryStat
-            label="Open invoices"
-            value={String(openInvoiceCount)}
-            detail={nextDue?.dueAt ? `Next due ${formatDate(nextDue.dueAt)}` : "No upcoming due date"}
-          />
-          <SummaryStat
-            label="Current balance"
-            value={formatCurrencyFromCents(billingPosition.outstandingCents)}
+            label="Outstanding"
+            value={
+              billingPosition.outstandingCents > 0
+                ? formatCurrencyFromCents(billingPosition.outstandingCents)
+                : "No balance due"
+            }
             detail={
               billingPosition.outstandingCents > 0
-                ? "Outstanding amount"
-                : "Account currently settled"
+                ? "Across the family account."
+                : "This account is currently settled."
             }
             valueClassName={billingPosition.outstandingCents > 0 ? "text-red-700" : "text-emerald-700"}
           />
           <SummaryStat
-            label="Credits remaining"
-            value={String(billingPosition.creditsTotal)}
-            detail="Across active enrolments"
+            label="Open invoices"
+            value={String(openInvoiceCount)}
+            detail={
+              billingPosition.nextDueInvoice?.dueAt
+                ? `Next due ${formatDate(billingPosition.nextDueInvoice.dueAt)}`
+                : "Nothing currently due"
+            }
+          />
+          <SummaryStat
+            label="Unallocated credit"
+            value={
+              billingPosition.unallocatedCents > 0
+                ? formatCurrencyFromCents(billingPosition.unallocatedCents)
+                : "None"
+            }
+            detail="Credit available to apply later."
           />
         </div>
+      </section>
 
-        <div className="p-6">
+      <section className="rounded-xl border border-border/80 bg-background p-5">
+        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <h3 className="text-base font-semibold">Ledger</h3>
+            <p className="text-sm text-muted-foreground">
+              Most recent invoices and payments for this family account.
+            </p>
+          </div>
+          <Badge variant="outline" className="text-[11px]">
+            {billingActivity.length} entr{billingActivity.length === 1 ? "y" : "ies"}
+          </Badge>
+        </div>
+
+        <div className="mt-4">
           {billingActivity.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-gray-900">No billing activity yet</p>
-              <p className="mt-1 text-sm text-gray-500">
-                Create an invoice or record a payment to start this timeline.
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">No billing activity yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create a manual invoice or record a payment to start the ledger.
               </p>
             </div>
           ) : (
-            <div className="flow-root">
-              <ul role="list" className="-mb-8">
-                {billingActivity.map((item, itemIdx) => {
-                  const isInvoice = item.kind === "invoice";
-                  const icon = isInvoice ? FileText : Receipt;
-                  const Icon = icon;
+            <div className="space-y-3">
+              {billingActivity.map((item) => {
+                const isInvoice = item.kind === "invoice";
 
-                  return (
-                    <li key={item.id}>
-                      <div className="relative pb-8">
-                        {itemIdx !== billingActivity.length - 1 ? (
-                          <span
-                            aria-hidden="true"
-                            className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
-                          />
-                        ) : null}
-                        <div className="relative flex space-x-3">
-                          <div>
-                            <span
-                              className={cn(
-                                toneClass(item.tone),
-                                "flex h-8 w-8 items-center justify-center rounded-full ring-8 ring-white"
-                              )}
-                            >
-                              <Icon aria-hidden="true" className="h-4 w-4 text-white" />
-                            </span>
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-border/70 bg-background px-4 py-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex min-w-0 gap-3">
+                        <span className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", toneClass(item.tone))} />
+
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">{item.title}</p>
+                            <Badge variant={statusBadgeVariant(item.statusLabel)} className="text-[11px]">
+                              {item.statusLabel}
+                            </Badge>
+                            <Badge variant="outline" className="text-[11px]">
+                              {isInvoice ? "Invoice" : "Payment"}
+                            </Badge>
                           </div>
-                          <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                            <div className="min-w-0 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                                <Badge variant={statusBadgeVariant(item.statusLabel)}>{item.statusLabel}</Badge>
-                              </div>
-                              <p className="text-xs text-gray-500">{item.description}</p>
-                              <div className="flex flex-wrap items-center gap-2 text-sm">
-                                <span className="font-semibold text-gray-900">{item.amountLabel}</span>
-                                <span className="text-gray-400">•</span>
-                                <span className="text-gray-600">{item.detailLabel}</span>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    if (isInvoice && item.invoice) {
-                                      setSelectedInvoice(item.invoice);
-                                    }
-                                    if (!isInvoice && item.payment) {
-                                      setSelectedPayment(item.payment);
-                                    }
-                                  }}
-                                >
-                                  View details
-                                </Button>
-                                {isInvoice && item.invoice ? (
-                                  <PrintReceiptButton
-                                    href={`/admin/invoice/${item.invoice.id}/receipt`}
-                                    label="Invoice receipt"
-                                    size="sm"
-                                    variant="ghost"
-                                  />
-                                ) : null}
-                                {!isInvoice && item.payment ? (
-                                  <PrintReceiptButton
-                                    href={`/admin/payment/${item.payment.id}/receipt`}
-                                    label="Payment receipt"
-                                    size="sm"
-                                    variant="ghost"
-                                  />
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-2 text-right">
-                              <time className="text-xs whitespace-nowrap text-gray-500">
-                                {formatDateWithTime(item.when)}
-                              </time>
-                              {isInvoice && item.invoice ? (
-                                <InvoiceActions
-                                  invoice={item.invoice}
-                                  onView={(invoice) => setSelectedInvoice(invoice)}
-                                  onEdit={(invoice) => {
-                                    setSelectedInvoice(null);
-                                    setEditingInvoice(invoice);
-                                    setInvoiceFormOpen(true);
-                                  }}
-                                  onDelete={handleDeleteInvoice}
-                                  onMarkPaid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.PAID)}
-                                  onMarkSent={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.SENT)}
-                                  onMarkVoid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.VOID)}
-                                />
-                              ) : null}
-                              {!isInvoice && item.payment ? (
-                                <PaymentActions
-                                  payment={item.payment}
-                                  onView={(payment) => setSelectedPayment(payment)}
-                                  onEdit={(payment) => {
-                                    setSelectedPayment(null);
-                                    setEditingPayment(payment);
-                                    setPaymentFormOpen(true);
-                                  }}
-                                  onDelete={handleDeletePayment}
-                                  onUndo={handleUndoPayment}
-                                  undoingId={undoingPaymentId}
-                                  isUndoing={isUndoing}
-                                />
-                              ) : null}
-                            </div>
+
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
+
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span>{formatDateWithTime(item.when)}</span>
+                            <span>•</span>
+                            <span>{item.detailLabel}</span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (isInvoice && item.invoice) {
+                                  setSelectedInvoice(item.invoice);
+                                }
+                                if (!isInvoice && item.payment) {
+                                  setSelectedPayment(item.payment);
+                                }
+                              }}
+                            >
+                              View details
+                            </Button>
+                            {isInvoice && item.invoice ? (
+                              <PrintReceiptButton
+                                href={`/admin/invoice/${item.invoice.id}/receipt`}
+                                label="Invoice receipt"
+                                size="sm"
+                                variant="ghost"
+                              />
+                            ) : null}
+                            {!isInvoice && item.payment ? (
+                              <PrintReceiptButton
+                                href={`/admin/payment/${item.payment.id}/receipt`}
+                                label="Payment receipt"
+                                size="sm"
+                                variant="ghost"
+                              />
+                            ) : null}
                           </div>
                         </div>
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
+
+                      <div className="flex items-start justify-between gap-3 lg:flex-col lg:items-end">
+                        <div className="text-sm font-semibold text-foreground">{item.amountLabel}</div>
+                        {isInvoice && item.invoice ? (
+                          <InvoiceActions
+                            invoice={item.invoice}
+                            onView={(invoice) => setSelectedInvoice(invoice)}
+                            onEdit={(invoice) => {
+                              setSelectedInvoice(null);
+                              setEditingInvoice(invoice);
+                              setInvoiceFormOpen(true);
+                            }}
+                            onDelete={handleDeleteInvoice}
+                            onMarkPaid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.PAID)}
+                            onMarkSent={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.SENT)}
+                            onMarkVoid={(invoice) => handleMarkInvoice(invoice, InvoiceStatus.VOID)}
+                          />
+                        ) : null}
+                        {!isInvoice && item.payment ? (
+                          <PaymentActions
+                            payment={item.payment}
+                            onView={(payment) => setSelectedPayment(payment)}
+                            onEdit={(payment) => {
+                              setSelectedPayment(null);
+                              setEditingPayment(payment);
+                              setPaymentFormOpen(true);
+                            }}
+                            onDelete={handleDeletePayment}
+                            onUndo={handleUndoPayment}
+                            undoingId={undoingPaymentId}
+                            isUndoing={isUndoing}
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -653,85 +771,99 @@ export default function FamilyInvoices({
           if (!next) setSelectedPayment(null);
         }}
       >
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>Payment details</SheetTitle>
           </SheetHeader>
           {selectedPayment ? (
-            <div className="mt-4 space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold text-gray-900">Payment {selectedPayment.id}</div>
-                  <div className="text-xs text-gray-500">
-                    {selectedPayment.method ?? "Payment"} · {formatDateWithTime(selectedPayment.paidAt)}
+            <div className="mt-6 space-y-6">
+              <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-foreground">{describePayment(selectedPayment)}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDateWithTime(selectedPayment.paidAt)} · Family account
+                    </div>
+                    <div className="text-lg font-semibold text-foreground">
+                      {formatCurrencyFromCents(selectedPayment.amountCents)}
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {formatCurrencyFromCents(selectedPayment.amountCents)}
+                  <div className="flex items-center gap-2">
+                    <PrintReceiptButton
+                      href={`/admin/payment/${selectedPayment.id}/receipt`}
+                      label="Print payment receipt"
+                      size="sm"
+                      variant="outline"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedPayment(null);
+                        setEditingPayment(selectedPayment);
+                        setPaymentFormOpen(true);
+                      }}
+                    >
+                      Edit payment
+                    </Button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <PrintReceiptButton
-                    href={`/admin/payment/${selectedPayment.id}/receipt`}
-                    label="Print payment receipt"
-                    size="sm"
-                    variant="outline"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedPayment(null);
-                      setEditingPayment(selectedPayment);
-                      setPaymentFormOpen(true);
-                    }}
-                  >
-                    Edit payment
-                  </Button>
                 </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <Meta label="Paid on" value={formatDate(selectedPayment.paidAt)} />
-                <Meta label="Method" value={selectedPayment.method ?? "—"} />
-                <Meta label="Status" value={selectedPayment.status ?? "—"} />
+                <Meta label="Method" value={formatPaymentMethod(selectedPayment.method) ?? "Manual"} />
+                <Meta label="Status" value={formatSentenceCase(selectedPayment.status ?? "RECORDED")} />
               </div>
 
-              {selectedPayment.note ? (
-                <div className="rounded-lg border bg-gray-50 p-3 text-sm">
-                  <div className="text-xs text-gray-500">Note</div>
-                  <div className="mt-1 font-medium text-gray-900">{selectedPayment.note}</div>
+              {describePaymentNote(selectedPayment) ? (
+                <div className="rounded-xl border border-border/80 bg-background p-4 text-sm">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Note
+                  </div>
+                  <div className="mt-1 text-foreground">{describePaymentNote(selectedPayment)}</div>
                 </div>
               ) : null}
 
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-gray-900">Allocations</div>
-                  <div className="text-xs text-gray-500">
-                    {selectedPayment.allocations?.length
-                      ? `${selectedPayment.allocations.length} allocation(s)`
-                      : "None yet"}
+              <div className="rounded-xl border border-border/80 bg-background p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Allocations</div>
+                    <p className="text-sm text-muted-foreground">
+                      Where this payment has been applied across the family account.
+                    </p>
                   </div>
+                  <Badge variant="outline" className="text-[11px]">
+                    {selectedPayment.allocations?.length ?? 0}
+                  </Badge>
                 </div>
+
                 {selectedPayment.allocations?.length ? (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-4 space-y-3">
                     {selectedPayment.allocations.map((allocation) => (
                       <div
                         key={`${selectedPayment.id}-${allocation.invoiceId}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-xs"
+                        className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3"
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">Invoice {allocation.invoiceId}</Badge>
-                          <span className="text-gray-500">
-                            {allocation.invoice?.status ?? "—"}
-                          </span>
-                        </div>
-                        <div className="font-semibold text-gray-900">
-                          {formatCurrencyFromCents(allocation.amountCents)}
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-foreground">
+                              {describeAllocationInvoice(allocation.invoice)}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatSentenceCase(allocation.invoice.status)}
+                            </div>
+                          </div>
+                          <div className="text-sm font-semibold text-foreground">
+                            {formatCurrencyFromCents(allocation.amountCents)}
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-500">No allocations recorded for this payment.</p>
+                  <div className="mt-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+                    No allocations recorded for this payment.
+                  </div>
                 )}
               </div>
             </div>
@@ -745,56 +877,63 @@ export default function FamilyInvoices({
           if (!next) setSelectedInvoice(null);
         }}
       >
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-2xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>Invoice details</SheetTitle>
           </SheetHeader>
           {selectedInvoice ? (
-            <div className="mt-4 space-y-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold text-gray-900">Invoice {selectedInvoice.id}</div>
-                  <div className="text-xs text-gray-500">{resolveCoverageLabel(selectedInvoice)}</div>
+            <div className="mt-6 space-y-6">
+              <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-foreground">{describeInvoice(selectedInvoice)}</div>
+                    <div className="text-sm text-muted-foreground">{describeInvoiceSubtitle(selectedInvoice)}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={statusBadgeVariant(resolveInvoiceDisplayStatus(selectedInvoice.status))}>
+                        {resolveInvoiceDisplayStatus(selectedInvoice.status)}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Issued {formatDate(selectedInvoice.issuedAt)}
+                      </span>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={statusBadgeVariant(selectedInvoice.status)}>{selectedInvoice.status}</Badge>
-                    <span className="text-xs text-gray-500">
-                      Issued {formatDate(selectedInvoice.issuedAt)}
-                    </span>
+                    <PrintReceiptButton
+                      href={`/admin/invoice/${selectedInvoice.id}/receipt`}
+                      label="Print invoice receipt"
+                      size="sm"
+                      variant="outline"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedInvoice(null);
+                        setEditingInvoice(selectedInvoice);
+                        setInvoiceFormOpen(true);
+                      }}
+                    >
+                      Edit invoice
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <PrintReceiptButton
-                    href={`/admin/invoice/${selectedInvoice.id}/receipt`}
-                    label="Print invoice receipt"
-                    size="sm"
-                    variant="outline"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedInvoice(null);
-                      setEditingInvoice(selectedInvoice);
-                      setInvoiceFormOpen(true);
-                    }}
-                  >
-                    Edit invoice
-                  </Button>
-                </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <Meta label="Issued" value={formatDate(selectedInvoice.issuedAt)} />
                 <Meta label="Due" value={formatDate(selectedInvoice.dueAt)} />
-                <Meta label="Coverage" value={resolveCoverageLabel(selectedInvoice)} />
+                <Meta label="Total" value={formatCurrencyFromCents(selectedInvoice.amountCents)} />
+                <Meta label="Outstanding" value={formatCurrencyFromCents(selectedInvoice.amountOwingCents)} />
               </div>
 
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-gray-900">Line items</div>
-                  <div className="text-xs text-gray-500">Totals derive from items</div>
+              <div className="rounded-xl border border-border/80 bg-background p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Line items</div>
+                    <p className="text-sm text-muted-foreground">This invoice total is derived from the items below.</p>
+                  </div>
                 </div>
                 {selectedInvoice.lineItems?.length ? (
-                  <Table className="mt-2">
+                  <Table className="mt-4">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Description</TableHead>
@@ -808,7 +947,9 @@ export default function FamilyInvoices({
                         <TableRow key={lineItem.id}>
                           <TableCell className="text-sm">{lineItem.description}</TableCell>
                           <TableCell className="text-sm">{lineItem.quantity}</TableCell>
-                          <TableCell className="text-xs text-gray-500">{lineItem.kind}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {formatSentenceCase(lineItem.kind)}
+                          </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCurrencyFromCents(lineItem.amountCents)}
                           </TableCell>
@@ -817,51 +958,61 @@ export default function FamilyInvoices({
                     </TableBody>
                   </Table>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-500">No line items recorded.</p>
+                  <div className="mt-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+                    No line items recorded.
+                  </div>
                 )}
               </div>
 
-              <div className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-gray-900">Payments applied</div>
-                  <div className="text-xs text-gray-500">
-                    {selectedInvoiceAllocations.length
-                      ? `${selectedInvoiceAllocations.length} allocation(s)`
-                      : "None yet"}
+              <div className="rounded-xl border border-border/80 bg-background p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground">Payments applied</div>
+                    <p className="text-sm text-muted-foreground">
+                      Payments that have been allocated against this invoice.
+                    </p>
                   </div>
+                  <Badge variant="outline" className="text-[11px]">
+                    {selectedInvoiceAllocations.length}
+                  </Badge>
                 </div>
                 {selectedInvoiceAllocations.length === 0 ? (
-                  <p className="mt-2 text-xs text-gray-500">No payments have been allocated to this invoice.</p>
+                  <div className="mt-4 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+                    No payments have been allocated to this invoice.
+                  </div>
                 ) : (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-4 space-y-3">
                     {selectedInvoiceAllocations.map((allocation) => (
                       <div
                         key={`${selectedInvoice.id}-${allocation.paymentId}-${allocation.amountCents}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-xs"
+                        className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3"
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">Payment {allocation.paymentId}</Badge>
-                          <span className="text-gray-500">{formatDate(allocation.paidAt)}</span>
-                          {allocation.method ? (
-                            <>
-                              <span className="text-gray-400">•</span>
-                              <span className="text-gray-500">{allocation.method}</span>
-                            </>
-                          ) : null}
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-foreground">
+                              {allocation.method ? `${formatPaymentMethod(allocation.method)} payment` : "Payment"}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{formatDate(allocation.paidAt)}</div>
+                            {describeAllocationNote(allocation.note) ? (
+                              <div className="text-sm text-muted-foreground">
+                                {describeAllocationNote(allocation.note)}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold text-foreground">
+                              {formatCurrencyFromCents(allocation.amountCents)}
+                            </div>
+                            <PrintReceiptButton
+                              href={`/admin/payment/${allocation.paymentId}/receipt`}
+                              label="Payment receipt"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 px-2"
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-gray-900">
-                            {formatCurrencyFromCents(allocation.amountCents)}
-                          </span>
-                          <PrintReceiptButton
-                            href={`/admin/payment/${allocation.paymentId}/receipt`}
-                            label="Payment receipt"
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs"
-                          />
-                        </div>
-                        {allocation.note ? <div className="w-full text-gray-500">{allocation.note}</div> : null}
                       </div>
                     ))}
                   </div>
@@ -887,19 +1038,23 @@ function SummaryStat({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={cn("mt-1 text-xl font-semibold text-gray-900", valueClassName)}>{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{detail}</div>
+    <div className="rounded-xl border border-border/70 bg-background px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </div>
+      <div className={cn("mt-1 text-lg font-semibold text-foreground", valueClassName)}>{value}</div>
+      <div className="mt-1 text-sm text-muted-foreground">{detail}</div>
     </div>
   );
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-white p-3">
-      <div className="text-[11px] text-gray-500">{label}</div>
-      <div className="mt-0.5 text-sm font-medium text-gray-900">{value}</div>
+    <div className="rounded-xl border border-border/70 bg-background p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-medium text-foreground">{value}</div>
     </div>
   );
 }
@@ -952,9 +1107,15 @@ function InvoiceActions({
           />
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={pending === "sent"} onSelect={() => void run(onMarkSent, "sent")}>Mark sent</DropdownMenuItem>
-        <DropdownMenuItem disabled={pending === "paid"} onSelect={() => void run(onMarkPaid, "paid")}>Mark paid</DropdownMenuItem>
-        <DropdownMenuItem disabled={pending === "void"} onSelect={() => void run(onMarkVoid, "void")}>Void invoice</DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "sent"} onSelect={() => void run(onMarkSent, "sent")}>
+          Mark sent
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "paid"} onSelect={() => void run(onMarkPaid, "paid")}>
+          Mark paid
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={pending === "void"} onSelect={() => void run(onMarkVoid, "void")}>
+          Void invoice
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
@@ -988,7 +1149,12 @@ function PaymentActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Payment actions" disabled={isUndoing && undoingId === payment.id}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Payment actions"
+          disabled={isUndoing && undoingId === payment.id}
+        >
           {isUndoing && undoingId === payment.id ? (
             <PendingDot className="h-3.5 w-3.5" />
           ) : (

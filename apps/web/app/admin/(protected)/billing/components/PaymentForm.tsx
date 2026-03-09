@@ -28,9 +28,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import { formatCurrencyFromCents, dollarsToCents, centsToDollarString } from "@/lib/currency";
+import { Textarea } from "@/components/ui/textarea";
+import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
@@ -65,6 +64,13 @@ type InvoiceOption = {
   amountPaidCents: number;
   balanceCents: number;
 };
+
+function formatSentenceCase(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
 
 export function PaymentForm({
   open,
@@ -183,7 +189,7 @@ export function PaymentForm({
     balanceCents: inv.balanceCents,
   }));
 
-  const totalCents = allocationCents.reduce((sum, a) => sum + a.amountCents, 0);
+  const totalAllocationCents = allocationCents.reduce((sum, a) => sum + a.amountCents, 0);
   const selectedEnrolment = enrolmentOptions.find((option) => option.id === applyTarget) ?? null;
   const isBlockPlan = selectedEnrolment?.plan?.billingType === "PER_CLASS";
   const planBlockLength = selectedEnrolment?.plan ? resolveBlockLength(selectedEnrolment.plan.blockClassCount) : 1;
@@ -211,7 +217,7 @@ export function PaymentForm({
     }
   }, [applyTarget, open, isBlockPlan, planBlockLength, customBlockEnabled]);
 
-  const handleToggle = (invoiceId: string) => {
+  const toggleInvoice = (invoiceId: string) => {
     setAllocations((prev) => {
       const copy = { ...prev };
       if (copy[invoiceId] != null) {
@@ -292,100 +298,49 @@ export function PaymentForm({
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Family</Label>
-              <Select
-                value={familyId}
-                onValueChange={(value) => setFamilyId(value)}
-                disabled={!!payment}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select family" />
-                </SelectTrigger>
-                <SelectContent>
-                  {families.map((family) => (
-                    <SelectItem key={family.id} value={family.id}>
-                      {family.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
-                onChange={(e) => setAmount(e.target.value)}
-                disabled={customBlockEnabled && isBlockPlan}
-                placeholder="0.00"
-              />
-              {isBlockPlan && selectedEnrolment?.plan ? (
-                <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between">
-                    <span>
-                      {planBlockLength} classes · {formatCurrencyFromCents(selectedEnrolment.plan.priceCents)}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
-                      onClick={() => {
-                        if (!customBlockEnabled) {
-                          setCustomBlockLength(String(planBlockLength));
-                        }
-                        setCustomBlockEnabled((prev) => !prev);
-                      }}
-                    >
-                      {customBlockEnabled ? "Use default" : "Customize"}
-                    </button>
-                  </div>
-                  {customBlockEnabled ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="custom-block-length">Number of classes</Label>
-                        <Input
-                          id="custom-block-length"
-                          type="number"
-                          min={planBlockLength}
-                          value={customBlockLength}
-                          onChange={(e) => setCustomBlockLength(e.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">Minimum {planBlockLength} classes.</p>
-                      </div>
-                      {blockPricing ? (
-                        <div className="text-xs text-muted-foreground">
-                          <div>Per class: {formatCurrencyFromCents(blockPricing.perClassPriceCents)}</div>
-                          <div>Total: {formatCurrencyFromCents(blockPricing.totalCents)}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Method</Label>
-              <Input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="Cash, card, etc." />
-            </div>
-            <div className="space-y-2">
-              <Label>Paid on</Label>
-              <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Note (optional)</Label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
-            </div>
-          </div>
-
+      <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-end">
           <div className="space-y-2">
-            <Label>Apply to</Label>
+            <Label>Family</Label>
+            <Select value={familyId} onValueChange={(value) => setFamilyId(value)} disabled={!!payment}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select family" />
+              </SelectTrigger>
+              <SelectContent>
+                {families.map((family) => (
+                  <SelectItem key={family.id} value={family.id}>
+                    {family.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Payment total
+            </div>
+            <div className="text-lg font-semibold text-foreground">{formatCurrencyFromCents(amountCents)}</div>
+            <div className="text-sm text-muted-foreground">
+              {applyTarget === "ALLOCATE_INVOICES"
+                ? `Allocated ${formatCurrencyFromCents(totalAllocationCents)}`
+                : "Applies to the selected target."}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-border/80 bg-background p-4">
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-foreground">Applies to</div>
+          <p className="text-sm text-muted-foreground">
+            Choose whether this payment settles invoices, becomes family credit, or pays for a specific enrolment.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="space-y-2">
+            <Label>Apply target</Label>
             <Select value={applyTarget} onValueChange={setApplyTarget} disabled={!!payment}>
               <SelectTrigger>
                 <SelectValue placeholder="Select apply target" />
@@ -402,139 +357,222 @@ export function PaymentForm({
             </Select>
           </div>
 
-          {applyTarget === "ALLOCATE_INVOICES" ? (
-            <div className="rounded-lg border">
-              <div className="flex items-center justify-between border-b px-4 py-2 text-sm font-medium">
-                <span>Allocate to invoices</span>
-                <span className="text-muted-foreground">
-                  Total {formatCurrencyFromCents(totalCents)} / Payment {formatCurrencyFromCents(dollarsToCents(amount || "0"))}
-                </span>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12"></TableHead>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                    <TableHead className="text-right">Allocate</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoiceOptions.length === 0 ? (
-                    loadingInvoices ? (
-                      <>
-                        {Array.from({ length: 3 }).map((_, index) => (
-                          <TableRow key={`loading-${index}`}>
-                            <TableCell>
-                              <Skeleton className="h-4 w-4 rounded-sm" />
-                            </TableCell>
-                            <TableCell>
-                              <Skeleton className="h-3.5 w-40" />
-                              <Skeleton className="mt-2 h-3.5 w-48" />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Skeleton className="ml-auto h-3.5 w-16" />
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Skeleton className="ml-auto h-9 w-24" />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </>
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-muted-foreground">
-                          No open invoices for this family.
-                        </TableCell>
-                      </TableRow>
-                    )
-                  ) : (
-                    invoiceOptions.map((invoice) => {
-                      const selected = allocations[invoice.id] != null;
-                      const allocationValue = allocations[invoice.id] ?? "";
-                      return (
-                        <TableRow key={invoice.id} className={cn(!selected && "opacity-70")}>
-                          <TableCell>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-muted-foreground/60"
-                              checked={selected}
-                              onChange={() => handleToggle(invoice.id)}
-                              aria-label={`Select invoice ${invoice.id}`}
-                            />
-                          </TableCell>
-                          <TableCell className="space-y-1">
-                            <div className="text-sm font-medium">Invoice #{invoice.id}</div>
-                            <div className="text-xs text-muted-foreground">
-                              Due {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"} · {invoice.status.toLowerCase()}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-semibold">
-                            {formatCurrencyFromCents(invoice.balanceCents)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              inputMode="decimal"
-                              step="0.01"
-                              min="0"
-                              value={allocationValue}
-                              onChange={(e) =>
-                                setAllocations((prev) => ({
-                                  ...prev,
-                                  [invoice.id]: e.target.value,
-                                }))
-                              }
-                              disabled={!selected}
-                              className="w-28 text-right"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          ) : null}
+          <div className="space-y-2">
+            <Label>Amount</Label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={customBlockEnabled && isBlockPlan}
+              placeholder="0.00"
+            />
+          </div>
+        </div>
 
-          <div className="flex items-center justify-between gap-3 sm:justify-between">
-            <div>
-              {payment && onDelete ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={onDelete}
-                  disabled={submitting}
-                >
-                  Delete payment
-                </Button>
-              ) : null}
+        {isBlockPlan && selectedEnrolment?.plan ? (
+          <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-foreground">Block pricing</div>
+                <div className="text-sm text-muted-foreground">
+                  {planBlockLength} classes · {formatCurrencyFromCents(selectedEnrolment.plan.priceCents)}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                onClick={() => {
+                  if (!customBlockEnabled) {
+                    setCustomBlockLength(String(planBlockLength));
+                  }
+                  setCustomBlockEnabled((prev) => !prev);
+                }}
+              >
+                {customBlockEnabled ? "Use default block" : "Customize block"}
+              </button>
             </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting || !familyId || !amount}>
-                {submitting ? "Saving..." : payment ? "Save payment" : "Record payment"}
-              </Button>
+
+            {customBlockEnabled ? (
+              <div className="mt-4 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="custom-block-length">Number of classes</Label>
+                  <Input
+                    id="custom-block-length"
+                    type="number"
+                    min={planBlockLength}
+                    value={customBlockLength}
+                    onChange={(e) => setCustomBlockLength(e.target.value)}
+                  />
+                </div>
+                {blockPricing ? (
+                  <div className="text-sm text-muted-foreground">
+                    Per class {formatCurrencyFromCents(blockPricing.perClassPriceCents)} · Total{" "}
+                    {formatCurrencyFromCents(blockPricing.totalCents)}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {applyTarget === "ALLOCATE_INVOICES" ? (
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">Allocations</div>
+              <p className="text-sm text-muted-foreground">
+                Select the open invoices this payment should settle.
+              </p>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {formatCurrencyFromCents(totalAllocationCents)} allocated
             </div>
           </div>
-        </form>
+
+          <div className="mt-4 space-y-3">
+            {invoiceOptions.length === 0 ? (
+              loadingInvoices ? (
+                <>
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={`loading-${index}`}
+                      className="rounded-xl border border-border/70 bg-muted/10 px-4 py-4"
+                    >
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="mt-3 h-4 w-56" />
+                      <Skeleton className="mt-3 h-10 w-28" />
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+                  No open invoices for this family.
+                </div>
+              )
+            ) : (
+              invoiceOptions.map((invoice) => {
+                const selected = allocations[invoice.id] != null;
+                const allocationValue = allocations[invoice.id] ?? "";
+
+                return (
+                  <label
+                    key={invoice.id}
+                    className="flex cursor-pointer flex-col gap-3 rounded-xl border border-border/70 bg-muted/10 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
+                  >
+                    <div className="flex min-w-0 gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-muted-foreground/60"
+                        checked={selected}
+                        onChange={() => toggleInvoice(invoice.id)}
+                        aria-label={`Select invoice due ${invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "with no due date"}`}
+                      />
+
+                      <div className="min-w-0 space-y-1">
+                        <div className="text-sm font-medium text-foreground">
+                          Invoice due {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {formatSentenceCase(invoice.status)} · Balance {formatCurrencyFromCents(invoice.balanceCents)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-full sm:w-32">
+                      <Label className="mb-2 block text-xs text-muted-foreground">Allocate</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        min="0"
+                        value={allocationValue}
+                        onChange={(e) =>
+                          setAllocations((prev) => ({
+                            ...prev,
+                            [invoice.id]: e.target.value,
+                          }))
+                        }
+                        disabled={!selected}
+                      />
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-xl border border-border/80 bg-background p-4">
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-foreground">Payment details</div>
+          <p className="text-sm text-muted-foreground">Record how and when this payment was received.</p>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Method</Label>
+            <Input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="Cash, card, transfer" />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Paid on</Label>
+            <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label>Note</Label>
+          <Textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional internal note"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col-reverse gap-2 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {payment && onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+              disabled={submitting}
+            >
+              Delete payment
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !familyId || !amount}>
+            {submitting ? "Saving..." : payment ? "Save payment" : "Record payment"}
+          </Button>
+        </div>
+      </div>
+    </form>
   );
 
   if (presentation === "sheet") {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>{payment ? "Edit payment" : "Record payment"}</SheetTitle>
             <SheetDescription>
-              Apply payments against open invoices or leave unapplied for later allocation.
+              Apply payments against open invoices or leave them as family credit for later use.
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-2">{formContent}</div>
+          <div className="mt-6">{formContent}</div>
         </SheetContent>
       </Sheet>
     );
@@ -546,7 +584,7 @@ export function PaymentForm({
         <DialogHeader>
           <DialogTitle>{payment ? "Edit payment" : "Record payment"}</DialogTitle>
           <DialogDescription>
-            Apply payments against open invoices or leave unapplied for later allocation.
+            Apply payments against open invoices or leave them as family credit for later use.
           </DialogDescription>
         </DialogHeader>
         {formContent}

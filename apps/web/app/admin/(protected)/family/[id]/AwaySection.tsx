@@ -6,15 +6,6 @@ import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
@@ -57,6 +56,10 @@ const DEFAULT_FORM = {
 
 function toDateInputValue(value: Date) {
   return toBrisbaneDayKey(value);
+}
+
+function scopeLabel(awayPeriod: AwayPeriodItem) {
+  return awayPeriod.student ? awayPeriod.student.name : "Entire family";
 }
 
 export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProps) {
@@ -157,16 +160,19 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
 
   return (
     <>
-      <Card className="border-dashed">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <section className="rounded-xl border border-border/80 bg-background p-5">
+        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-base">Away</CardTitle>
+            <h3 className="text-base font-semibold">Away</h3>
             <p className="text-sm text-muted-foreground">
               Mark family or student absences and extend paid-through for missed classes.
             </p>
           </div>
+
           <div className="flex items-center gap-2">
-            <Badge variant="outline">{awayPeriods.length}</Badge>
+            <Badge variant="outline" className="text-[11px]">
+              {awayPeriods.length} period{awayPeriods.length === 1 ? "" : "s"}
+            </Badge>
             <Button
               size="sm"
               onClick={() => {
@@ -178,28 +184,43 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
               Mark away
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
+        </div>
+
+        <div className="mt-4 space-y-3">
           {awayPeriods.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No away periods recorded.</p>
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+              No away periods recorded for this family.
+            </div>
           ) : (
             awayPeriods.map((awayPeriod) => (
-              <div key={awayPeriod.id} className="rounded-lg border bg-muted/20 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold">
-                      {formatBrisbaneDate(awayPeriod.startDate)} to {formatBrisbaneDate(awayPeriod.endDate)}
+              <div
+                key={awayPeriod.id}
+                className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium text-foreground">
+                        {formatBrisbaneDate(awayPeriod.startDate)} to {formatBrisbaneDate(awayPeriod.endDate)}
+                      </div>
+                      <Badge variant="secondary" className="h-5 px-2 text-[11px] font-medium">
+                        {scopeLabel(awayPeriod)}
+                      </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Scope: {awayPeriod.student ? awayPeriod.student.name : "Entire family"}
+
+                    <div className="text-sm text-muted-foreground">
+                      Paid-through will be extended for missed classes in this range.
                     </div>
+
                     {awayPeriod.note ? (
-                      <div className="text-xs text-muted-foreground">Note: {awayPeriod.note}</div>
+                      <div className="text-sm text-muted-foreground">{awayPeriod.note}</div>
                     ) : null}
+
                     <div className="text-xs text-muted-foreground">
-                      Created {formatBrisbaneDate(awayPeriod.createdAt)} · by admin
+                      Created {formatBrisbaneDate(awayPeriod.createdAt)}
                     </div>
                   </div>
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -208,19 +229,19 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        onClick={() => {
+                        onSelect={() => {
                           setEditing(awayPeriod);
                           setOpen(true);
                         }}
                       >
-                        Edit
+                        Edit away period
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onClick={() => handleDelete(awayPeriod)}
+                        onSelect={() => handleDelete(awayPeriod)}
                       >
-                        Cancel
+                        Cancel away period
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -228,8 +249,8 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <Sheet
         open={open}
@@ -240,7 +261,7 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
           }
         }}
       >
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-lg">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? "Edit away period" : "Mark away"}</SheetTitle>
             <SheetDescription>
@@ -248,109 +269,135 @@ export function AwaySection({ familyId, students, awayPeriods }: AwaySectionProp
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-2 space-y-4">
-            <div className="space-y-2">
-              <Label>Scope</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={form.scope === "FAMILY" ? "default" : "outline"}
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      scope: "FAMILY",
-                      studentId: "",
-                    }))
-                  }
-                >
-                  Entire family
-                </Button>
-                <Button
-                  type="button"
-                  variant={form.scope === "STUDENT" ? "default" : "outline"}
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      scope: "STUDENT",
-                    }))
-                  }
-                >
-                  Specific student
-                </Button>
+          <div className="mt-6 space-y-6">
+            <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+              <div className="text-sm font-medium text-foreground">Away summary</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Choose whether this applies to the full family or a single student, then set the date range.
               </div>
             </div>
 
-            {form.scope === "STUDENT" ? (
-              <div className="space-y-2">
-                <Label>Student</Label>
-                <Select
-                  value={form.studentId}
-                  onValueChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      studentId: value,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((student) => (
-                      <SelectItem key={student.id} value={student.id}>
-                        {student.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
+            <div className="rounded-xl border border-border/80 bg-background p-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Applies to</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={form.scope === "FAMILY" ? "default" : "outline"}
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          scope: "FAMILY",
+                          studentId: "",
+                        }))
+                      }
+                    >
+                      Entire family
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={form.scope === "STUDENT" ? "default" : "outline"}
+                      disabled={students.length === 0}
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          scope: "STUDENT",
+                          studentId: prev.studentId || students[0]?.id || "",
+                        }))
+                      }
+                    >
+                      Specific student
+                    </Button>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {form.scope === "STUDENT" ? (
+                  <div className="space-y-2">
+                    <Label>Student</Label>
+                    <Select
+                      value={form.studentId}
+                      onValueChange={(value) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          studentId: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select student" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {students.map((student) => (
+                          <SelectItem key={student.id} value={student.id}>
+                            {student.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/80 bg-background p-4">
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Dates</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The selected range determines which missed classes are excused.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Start date</Label>
+                    <Input
+                      type="date"
+                      value={form.startDate}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          startDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End date</Label>
+                    <Input
+                      type="date"
+                      value={form.endDate}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          endDate: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/80 bg-background p-4">
               <div className="space-y-2">
-                <Label>Start date</Label>
-                <Input
-                  type="date"
-                  value={form.startDate}
+                <Label>Note</Label>
+                <Textarea
+                  value={form.note}
+                  placeholder="Optional internal note"
                   onChange={(event) =>
                     setForm((prev) => ({
                       ...prev,
-                      startDate: event.target.value,
+                      note: event.target.value,
                     }))
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label>End date</Label>
-                <Input
-                  type="date"
-                  value={form.endDate}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      endDate: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Note</Label>
-              <Textarea
-                value={form.note}
-                placeholder="Optional (e.g. Holiday)"
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    note: event.target.value,
-                  }))
-                }
-              />
             </div>
           </div>
 
-          <SheetFooter className="px-0 pb-0">
+          <SheetFooter className="px-0 pb-0 pt-6 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"

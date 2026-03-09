@@ -2,16 +2,16 @@
 
 import * as React from "react";
 import type { Family } from "@prisma/client";
-
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { updateFamily } from "@/server/family/updateFamily";
-import { cn } from "@/lib/utils";
-import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { useRouter } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { SmartPhoneInput } from "@/components/SmartPhoneInput";
 import { normalizeAuMobileToE164 } from "@/server/phone/auMobile";
-
+import { updateFamily } from "@/server/family/updateFamily";
+import { runMutationWithToast } from "@/lib/toast/mutationToast";
+import { cn } from "@/lib/utils";
 
 type Props = {
   family: Family;
@@ -19,6 +19,36 @@ type Props = {
   onSaved?: () => void;
   className?: string;
 };
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function FieldGroup({
+  label,
+  description,
+  children,
+  className,
+}: {
+  label: string;
+  description?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="space-y-1">
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      <div className="mt-2">{children}</div>
+    </div>
+  );
+}
 
 export default function FamilyDetails({ family, layout = "section", onSaved, className }: Props) {
   const router = useRouter();
@@ -35,13 +65,12 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
     medicalContactPhone: family.medicalContactPhone ?? "",
     address: family.address ?? "",
   });
-
   const [saving, setSaving] = React.useState(false);
   const [phoneErrors, setPhoneErrors] = React.useState<{ primaryPhone?: string; secondaryPhone?: string }>({});
 
   const onChange =
-    (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((prev) => ({ ...prev, [key]: event.target.value }));
 
   const setPhoneError = (key: "primaryPhone" | "secondaryPhone", message?: string) => {
     setPhoneErrors((prev) => ({ ...prev, [key]: message }));
@@ -81,15 +110,14 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
     return false;
   };
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
     const primary = normalizePhoneField("primaryPhone");
     const secondary = normalizePhoneField("secondaryPhone");
-
     if (!primary.ok || !secondary.ok) return;
 
     setSaving(true);
-
     const payload = {
       name: form.name.trim(),
       primaryContactName: form.primaryContactName.trim() || undefined,
@@ -104,24 +132,21 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
     };
 
     try {
-      const result = await runMutationWithToast(
-        () => updateFamily(payload, family.id),
-        {
-          pending: { title: "Saving family..." },
-          success: { title: "Family updated" },
-          error: (message) => ({
-            title: "Unable to update family",
-            description: message,
-          }),
-          onSuccess: () => {
-            router.refresh();
-            onSaved?.();
-          },
-          onError: (message) => {
-            applyServerPhoneError(message);
-          },
-        }
-      );
+      const result = await runMutationWithToast(() => updateFamily(payload, family.id), {
+        pending: { title: "Saving family..." },
+        success: { title: "Family updated" },
+        error: (message) => ({
+          title: "Unable to update family",
+          description: message,
+        }),
+        onSuccess: () => {
+          router.refresh();
+          onSaved?.();
+        },
+        onError: (message) => {
+          applyServerPhoneError(message);
+        },
+      });
 
       if (!result) return;
     } finally {
@@ -129,95 +154,114 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
     }
   };
 
-  const Wrapper: React.ElementType = layout === "section" ? "section" : "div";
-  const wrapperClass = cn(
-    layout === "section"
-      ? "md:col-span-3 border-t border-b bg-background p-5"
-      : "space-y-6 rounded-lg border bg-muted/30 p-4",
-    className
-  );
+  const wrapperClass = cn(layout === "plain" ? "space-y-6" : "space-y-6", className);
 
   return (
-    <Wrapper className={wrapperClass}>
-      <div className="mb-4">
-        <h2 className="text-base font-semibold">Family information</h2>
-        <p className="text-sm text-muted-foreground">Update contacts and emergency info.</p>
+    <section className={wrapperClass}>
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold">Family details</h2>
+        <p className="text-sm text-muted-foreground">
+          Update family account information, contacts, and emergency details.
+        </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-6">
-        <Field label="Family name">
-          <Input value={form.name} onChange={onChange("name")} />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Primary contact">
-            <Input
-              value={form.primaryContactName}
-              onChange={onChange("primaryContactName")}
-              placeholder="Full name"
-            />
-          </Field>
-          <Field label="Primary phone">
-            <SmartPhoneInput
-              label="Primary phone"
-              hideLabel
-              value={form.primaryPhone}
-              onChange={(next) => {
-                setForm((prev) => ({ ...prev, primaryPhone: next }));
-                setPhoneError("primaryPhone", undefined);
-              }}
-              onBlur={() => normalizePhoneField("primaryPhone")}
-              error={phoneErrors.primaryPhone}
-            />
-          </Field>
-          <Field label="Primary email" className="sm:col-span-2">
-            <Input value={form.primaryEmail} onChange={onChange("primaryEmail")} placeholder="name@email.com" />
-          </Field>
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Address</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Street address" className="sm:col-span-2">
-              <Input value={form.address} onChange={onChange("address")} placeholder="Street, suburb, state" />
-            </Field>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-4">
+            <SectionTitle>Family information</SectionTitle>
+            <FieldGroup label="Family name" description="Used throughout billing and student records.">
+              <Input value={form.name} onChange={onChange("name")} />
+            </FieldGroup>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Secondary contact</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">
-              <Input value={form.secondaryContactName} onChange={onChange("secondaryContactName")} />
-            </Field>
-            <Field label="Phone">
-              <SmartPhoneInput
-                label="Secondary phone"
-                hideLabel
-                value={form.secondaryPhone}
-                onChange={(next) => {
-                  setForm((prev) => ({ ...prev, secondaryPhone: next }));
-                  setPhoneError("secondaryPhone", undefined);
-                }}
-                onBlur={() => normalizePhoneField("secondaryPhone")}
-                error={phoneErrors.secondaryPhone}
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-4">
+            <SectionTitle>Primary contact</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Primary contact" description="Main contact for the family account.">
+                <Input
+                  value={form.primaryContactName}
+                  onChange={onChange("primaryContactName")}
+                  placeholder="Full name"
+                />
+              </FieldGroup>
+              <FieldGroup label="Primary phone" description="AU mobile preferred.">
+                <SmartPhoneInput
+                  label="Primary phone"
+                  hideLabel
+                  value={form.primaryPhone}
+                  onChange={(next) => {
+                    setForm((prev) => ({ ...prev, primaryPhone: next }));
+                    setPhoneError("primaryPhone", undefined);
+                  }}
+                  onBlur={() => normalizePhoneField("primaryPhone")}
+                  error={phoneErrors.primaryPhone}
+                />
+              </FieldGroup>
+              <FieldGroup label="Primary email" className="md:col-span-2">
+                <Input
+                  value={form.primaryEmail}
+                  onChange={onChange("primaryEmail")}
+                  placeholder="name@email.com"
+                />
+              </FieldGroup>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-4">
+            <SectionTitle>Address</SectionTitle>
+            <FieldGroup label="Address" description="Street, suburb, state, and postcode if needed.">
+              <Textarea
+                value={form.address}
+                onChange={onChange("address")}
+                placeholder="Street, suburb, state"
+                className="min-h-24 resize-y"
               />
-            </Field>
-            <Field label="Email" className="sm:col-span-2">
-              <Input value={form.secondaryEmail} onChange={onChange("secondaryEmail")} />
-            </Field>
+            </FieldGroup>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold">Medical contact</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">
-              <Input value={form.medicalContactName} onChange={onChange("medicalContactName")} />
-            </Field>
-            <Field label="Phone">
-              <Input value={form.medicalContactPhone} onChange={onChange("medicalContactPhone")} />
-            </Field>
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-4">
+            <SectionTitle>Secondary contact</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Secondary contact">
+                <Input value={form.secondaryContactName} onChange={onChange("secondaryContactName")} />
+              </FieldGroup>
+              <FieldGroup label="Secondary phone" description="AU mobile preferred.">
+                <SmartPhoneInput
+                  label="Secondary phone"
+                  hideLabel
+                  value={form.secondaryPhone}
+                  onChange={(next) => {
+                    setForm((prev) => ({ ...prev, secondaryPhone: next }));
+                    setPhoneError("secondaryPhone", undefined);
+                  }}
+                  onBlur={() => normalizePhoneField("secondaryPhone")}
+                  error={phoneErrors.secondaryPhone}
+                />
+              </FieldGroup>
+              <FieldGroup label="Secondary email" className="md:col-span-2">
+                <Input value={form.secondaryEmail} onChange={onChange("secondaryEmail")} />
+              </FieldGroup>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-4">
+            <SectionTitle>Medical contact</SectionTitle>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Medical contact" description="Used for emergencies or urgent health follow-up.">
+                <Input value={form.medicalContactName} onChange={onChange("medicalContactName")} />
+              </FieldGroup>
+              <FieldGroup label="Medical phone">
+                <Input value={form.medicalContactPhone} onChange={onChange("medicalContactPhone")} />
+              </FieldGroup>
+            </div>
           </div>
         </div>
 
@@ -227,23 +271,6 @@ export default function FamilyDetails({ family, layout = "section", onSaved, cla
           </Button>
         </div>
       </form>
-    </Wrapper>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <label className="mb-2 block text-sm font-medium">{label}</label>
-      {children}
-    </div>
+    </section>
   );
 }

@@ -6,7 +6,16 @@ import { MakeupCreditStatus } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -15,17 +24,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
-import {
-  cancelMakeupBookingAsAdmin,
-  grantMakeupCredit,
-} from "@/server/makeup/actions";
+import { cancelMakeupBookingAsAdmin, grantMakeupCredit } from "@/server/makeup/actions";
 import type { FamilyMakeupSummary } from "@/server/makeup/getFamilyMakeups";
 
 type MakeupSummary = FamilyMakeupSummary;
@@ -179,62 +181,88 @@ export function MakeupsSection({
 
   return (
     <>
-      <Card className="border-dashed">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <section className="rounded-xl border border-border/80 bg-background p-5">
+        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-base">Makeups</CardTitle>
+            <h3 className="text-base font-semibold">Makeups</h3>
             <p className="text-sm text-muted-foreground">
               Grant and manage makeup credits for manually excused absences.
             </p>
           </div>
+
           <div className="flex items-center gap-2">
-            <Badge variant="outline">Available: {summary.availableCount}</Badge>
-            <Button size="sm" onClick={() => setOpen(true)}>
+            <Badge variant="outline" className="text-[11px]">
+              {summary.availableCount} available
+            </Badge>
+            <Button size="sm" onClick={() => setOpen(true)} disabled={students.length === 0}>
               Grant makeup
             </Button>
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent className="space-y-3">
+        <div className="mt-4 space-y-3">
           {summary.credits.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No makeup credits recorded.</p>
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
+              {students.length === 0
+                ? "Add a student before granting makeup credits."
+                : "No makeup credits recorded for this family."}
+            </div>
           ) : (
             summary.credits.map((credit) => (
-              <div key={credit.id} className="rounded-lg border bg-muted/20 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold">{credit.student.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {credit.reason} · Issued {formatBrisbaneDate(credit.issuedAt)} · Expires {formatBrisbaneDate(credit.expiresAt)}
+              <div
+                key={credit.id}
+                className="rounded-xl border border-border/70 bg-muted/10 px-4 py-3"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-medium text-foreground">{credit.student.name}</div>
+                      <Badge
+                        variant={badgeVariantForStatus(credit.status)}
+                        className="h-5 px-2 text-[11px] font-medium"
+                      >
+                        {credit.status.replaceAll("_", " ").toLowerCase()}
+                      </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Missed session: {credit.earnedFromClass?.name ?? "Class"} on {formatBrisbaneDate(credit.earnedFromSessionDate)}
+
+                    <div className="text-sm text-muted-foreground">
+                      {credit.reason === "SICK" ? "Sick leave" : "Manual makeup"} · Issued{" "}
+                      {formatBrisbaneDate(credit.issuedAt)} · Expires {formatBrisbaneDate(credit.expiresAt)}
                     </div>
+
+                    <div className="text-sm text-muted-foreground">
+                      Missed session: {credit.earnedFromClass?.name ?? "Class"} on{" "}
+                      {formatBrisbaneDate(credit.earnedFromSessionDate)}
+                    </div>
+
                     {credit.booking ? (
-                      <div className="text-xs text-muted-foreground">
-                        Booked into {credit.booking.targetClass?.name ?? "Class"} on {formatBrisbaneDate(credit.booking.targetSessionDate)}
+                      <div className="text-sm text-muted-foreground">
+                        Booked into {credit.booking.targetClass?.name ?? "Class"} on{" "}
+                        {formatBrisbaneDate(credit.booking.targetSessionDate)}
                       </div>
                     ) : null}
-                    {credit.notes ? <div className="text-xs text-muted-foreground">Note: {credit.notes}</div> : null}
+
+                    {credit.notes ? <div className="text-sm text-muted-foreground">{credit.notes}</div> : null}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <Badge variant={badgeVariantForStatus(credit.status)}>{credit.status}</Badge>
-                    {credit.booking && credit.booking.status === "BOOKED" ? (
-                      <Button size="sm" variant="outline" onClick={() => handleCancelBooking(credit.booking!.id)}>
-                        Cancel booking
-                      </Button>
-                    ) : null}
-                  </div>
+                  {credit.booking && credit.booking.status === "BOOKED" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCancelBooking(credit.booking!.id)}
+                    >
+                      Cancel booking
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-lg">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>Grant makeup credit</SheetTitle>
             <SheetDescription>
@@ -242,76 +270,108 @@ export function MakeupsSection({
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-2 space-y-4">
-            <div className="space-y-2">
-              <Label>Student</Label>
-              <Select value={studentId} onValueChange={setStudentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="mt-6 space-y-6">
+            <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+              <div className="text-sm font-medium text-foreground">Makeup summary</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Choose the missed class, session date, and reason. One credit will be created for the selected student.
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Class</Label>
-              <Select value={classId} onValueChange={setClassId} disabled={!classOptions.length}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {classOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="rounded-xl border border-border/80 bg-background p-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Student</Label>
+                  <Select value={studentId} onValueChange={setStudentId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Class</Label>
+                  <Select value={classId} onValueChange={setClassId} disabled={!classOptions.length}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Session date</Label>
-              <Input type="date" value={sessionDate} onChange={(event) => setSessionDate(event.target.value)} />
+            <div className="rounded-xl border border-border/80 bg-background p-4">
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Session details</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Record the missed session and why the absence should be treated as excused.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Session date</Label>
+                    <Input
+                      type="date"
+                      value={sessionDate}
+                      onChange={(event) => setSessionDate(event.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Reason</Label>
+                    <Select value={reason} onValueChange={(value) => setReason(value as "SICK" | "OTHER")}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SICK">Sick</SelectItem>
+                        <SelectItem value="OTHER">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Reason</Label>
-              <Select value={reason} onValueChange={(value) => setReason(value as "SICK" | "OTHER")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SICK">Sick</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="rounded-xl border border-border/80 bg-background p-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    value={notes}
+                    placeholder="Optional internal note"
+                    onChange={(event) => setNotes(event.target.value)}
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label>Notes (optional)</Label>
-              <Textarea
-                value={notes}
-                placeholder="Optional internal note"
-                onChange={(event) => setNotes(event.target.value)}
-              />
+                <label className="flex items-start gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={allowLateOverride}
+                    onCheckedChange={(checked) => setAllowLateOverride(Boolean(checked))}
+                  />
+                  <span>Override the usual notice cutoff when this absence should still receive a makeup credit.</span>
+                </label>
+              </div>
             </div>
-
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Checkbox
-                checked={allowLateOverride}
-                onCheckedChange={(checked) => setAllowLateOverride(Boolean(checked))}
-              />
-              Override notice cutoff when needed
-            </label>
           </div>
 
-          <SheetFooter className="px-0 pb-0">
+          <SheetFooter className="px-0 pb-0 pt-6 sm:flex-row sm:justify-end">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
               Cancel
             </Button>

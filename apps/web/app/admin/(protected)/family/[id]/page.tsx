@@ -2,11 +2,9 @@ import getFamily from "@/server/family/getFamily";
 import FamilyForm from "./FamilyForm";
 import type { FamilyWithStudentsAndInvoices } from "./FamilyForm";
 import { getLevels } from "@/server/level/getLevels";
-import { getUnpaidFamiliesSummary } from "@/server/invoicing";
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import { getFamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
 import { getEnrolmentPlans } from "@/server/enrolmentPlan/getEnrolmentPlans";
-import getClassTemplates from "@/server/classTemplate/getClassTemplates";
 import { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
 import { getFamilyAwayPeriods } from "@/server/away/getFamilyAwayPeriods";
 import { getFamilyMakeups } from "@/server/makeup/getFamilyMakeups";
@@ -27,10 +25,8 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
     family,
     levels,
     enrolmentPlans,
-    unpaidSummary,
     billing,
     billingPosition,
-    classTemplates,
     openingState,
     awayPeriods,
     makeups,
@@ -39,10 +35,8 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       getFamily(id),
       getLevels(),
       getEnrolmentPlans(),
-      getUnpaidFamiliesSummary(),
       getFamilyBillingData(id),
       getFamilyBillingPosition(id),
-      getClassTemplates(),
       getAccountOpeningState(id),
       getFamilyAwayPeriods(id),
       getFamilyMakeups(id),
@@ -63,11 +57,9 @@ export default async function FamilyPage({ params, searchParams }: PageProps) {
       family={typedFamily}
       enrolContext={enrolContext}
       levels={levels}
-      unpaidSummary={unpaidSummary}
       billing={billing}
       billingPosition={billingPosition}
       enrolmentPlans={enrolmentPlans}
-      classTemplates={classTemplates}
       openingState={openingState}
       awayPeriods={awayPeriods}
       makeups={makeups}

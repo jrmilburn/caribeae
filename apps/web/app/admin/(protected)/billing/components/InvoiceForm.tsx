@@ -28,7 +28,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatCurrencyFromCents } from "@/lib/currency";
-
 import type { InvoiceLineItemKind, InvoiceStatus } from "@prisma/client";
 
 type LineItemDraft = {
@@ -97,6 +96,13 @@ type Props = {
   onDelete?: () => Promise<void>;
   presentation?: "dialog" | "sheet";
 };
+
+function formatSentenceCase(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
 
 export function InvoiceForm({
   open,
@@ -226,9 +232,7 @@ export function InvoiceForm({
         dueAt: form.dueAt ? new Date(form.dueAt) : undefined,
         coverageStart: form.coverageStart ? new Date(form.coverageStart) : undefined,
         coverageEnd: form.coverageEnd ? new Date(form.coverageEnd) : undefined,
-        creditsPurchased: form.creditsPurchased
-          ? Number.parseInt(form.creditsPurchased, 10)
-          : undefined,
+        creditsPurchased: form.creditsPurchased ? Number.parseInt(form.creditsPurchased, 10) : undefined,
         lineItems: preparedLineItems,
       });
       onOpenChange(false);
@@ -239,148 +243,159 @@ export function InvoiceForm({
 
   const formContent = (
     <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Family</Label>
-              <Select
-                value={form.familyId}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, familyId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select family" />
-                </SelectTrigger>
-                <SelectContent>
-                  {families.map((family) => (
-                    <SelectItem key={family.id} value={family.id}>
-                      {family.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Total (from line items)</Label>
-              <Input value={formatCurrencyFromCents(computedTotal)} disabled />
-              <p className="text-xs text-muted-foreground">Derived from the line items below.</p>
-            </div>
+      <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-end">
+          <div className="space-y-2">
+            <Label>Family</Label>
+            <Select
+              value={form.familyId}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, familyId: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select family" />
+              </SelectTrigger>
+              <SelectContent>
+                {families.map((family) => (
+                  <SelectItem key={family.id} value={family.id}>
+                    {family.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="rounded-md border p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">Line items</div>
-                <p className="text-xs text-muted-foreground">Add enrolment fees, products, or adjustments.</p>
-              </div>
-              <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
-                Add item
-              </Button>
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Invoice total
             </div>
+            <div className="text-lg font-semibold text-foreground">
+              {formatCurrencyFromCents(computedTotal)}
+            </div>
+            <div className="text-sm text-muted-foreground">Calculated from the line items below.</div>
+          </div>
+        </div>
+      </div>
 
-            <div className="mt-3 space-y-3">
-              {form.lineItems.map((item, index) => {
-                const quantity = Number.parseInt(item.quantity || "1", 10) || 1;
-                const derivedAmount =
-                  item.amountCents && item.amountCents !== ""
-                    ? Number.parseInt(item.amountCents, 10)
-                    : (Number.parseInt(item.unitPriceCents || "0", 10) || 0) * quantity;
-                return (
-                  <div
-                    key={`${index}-${item.description}-${item.kind}`}
-                    className="rounded-md border bg-background/50 p-3"
-                  >
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,180px)_minmax(0,1fr)]">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Kind</Label>
-                        <Select
-                          value={item.kind}
-                          onValueChange={(value) =>
-                            updateLineItem(index, { kind: value as InvoiceLineItemKind })
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {lineItemKinds.map((kind) => (
-                              <SelectItem key={kind} value={kind}>
-                                {kind}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Description</Label>
-                        <Input
-                          value={item.description}
-                          onChange={(e) => updateLineItem(index, { description: e.target.value })}
-                          placeholder="Fee or product name"
-                        />
-                      </div>
-                    </div>
+      <div className="rounded-xl border border-border/80 bg-background p-4">
+        <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <div className="text-sm font-medium text-foreground">Line items</div>
+            <p className="text-sm text-muted-foreground">
+              Add the charges or adjustments that make up this invoice.
+            </p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
+            Add item
+          </Button>
+        </div>
 
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Qty</Label>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Unit price (cents)</Label>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          value={item.unitPriceCents}
-                          onChange={(e) => updateLineItem(index, { unitPriceCents: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Amount (optional)</Label>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          value={item.amountCents ?? ""}
-                          onChange={(e) => updateLineItem(index, { amountCents: e.target.value })}
-                          placeholder="Auto (qty x unit)"
-                        />
-                        <div className="text-[11px] text-muted-foreground">
-                          Calculated: {formatCurrencyFromCents(derivedAmount)}
-                        </div>
-                      </div>
-                    </div>
+        <div className="mt-4 space-y-4">
+          {form.lineItems.map((item, index) => {
+            const quantity = Number.parseInt(item.quantity || "1", 10) || 1;
+            const derivedAmount =
+              item.amountCents && item.amountCents !== ""
+                ? Number.parseInt(item.amountCents, 10)
+                : (Number.parseInt(item.unitPriceCents || "0", 10) || 0) * quantity;
 
-                    <div className="mt-3 flex justify-end">
-                      {form.lineItems.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeLineItem(index)}
-                        >
-                          Remove
-                        </Button>
-                      ) : null}
+            return (
+              <div
+                key={`${index}-${item.description}-${item.kind}`}
+                className="rounded-xl border border-border/70 bg-muted/10 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-foreground">Item {index + 1}</div>
+                  {form.lineItems.length > 1 ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeLineItem(index)}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                  <div className="space-y-2">
+                    <Label>Kind</Label>
+                    <Select
+                      value={item.kind}
+                      onValueChange={(value) => updateLineItem(index, { kind: value as InvoiceLineItemKind })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lineItemKinds.map((kind) => (
+                          <SelectItem key={kind} value={kind}>
+                            {formatSentenceCase(kind)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input
+                      value={item.description}
+                      onChange={(e) => updateLineItem(index, { description: e.target.value })}
+                      placeholder="Fee, credit, or adjustment"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Quantity</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateLineItem(index, { quantity: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Unit price (cents)</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={item.unitPriceCents}
+                      onChange={(e) => updateLineItem(index, { unitPriceCents: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Amount override (optional)</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={item.amountCents ?? ""}
+                      onChange={(e) => updateLineItem(index, { amountCents: e.target.value })}
+                      placeholder="Auto from qty x unit price"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      Calculated: {formatCurrencyFromCents(derivedAmount)}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-1">
+            <div className="text-sm font-medium text-foreground">Status and dates</div>
+            <p className="text-sm text-muted-foreground">Control when this invoice is active and due.</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
                 value={form.status}
-                onValueChange={(value) =>
-                  setForm((prev) => ({ ...prev, status: value as InvoiceStatus }))
-                }
+                onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as InvoiceStatus }))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -388,7 +403,7 @@ export function InvoiceForm({
                 <SelectContent>
                   {statuses.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {status.replace("_", " ")}
+                      {formatSentenceCase(status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -413,8 +428,17 @@ export function InvoiceForm({
               />
             </div>
           </div>
+        </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-1">
+            <div className="text-sm font-medium text-foreground">Coverage metadata</div>
+            <p className="text-sm text-muted-foreground">
+              Optional billing context for coverage windows or purchased credits.
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Coverage start</Label>
               <Input
@@ -423,6 +447,7 @@ export function InvoiceForm({
                 onChange={(e) => setForm((prev) => ({ ...prev, coverageStart: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
               <Label>Coverage end</Label>
               <Input
@@ -431,6 +456,7 @@ export function InvoiceForm({
                 onChange={(e) => setForm((prev) => ({ ...prev, coverageEnd: e.target.value }))}
               />
             </div>
+
             <div className="space-y-2">
               <Label>Credits purchased</Label>
               <Input
@@ -441,54 +467,57 @@ export function InvoiceForm({
               />
             </div>
           </div>
+        </div>
+      </div>
 
-          {invoice ? (
-            <div className="rounded-md bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
-              <div>
-                Paid so far: {formatCurrencyFromCents(invoice.amountPaidCents)} · Owing{" "}
-                {formatCurrencyFromCents(invoice.amountOwingCents)}
-              </div>
-              {invoice.paidAt ? <div>Paid on {format(invoice.paidAt, "d MMM yyyy")}</div> : null}
-            </div>
-          ) : null}
-
-          <div className="flex items-center justify-between gap-3 sm:justify-between">
-            <div>
-              {invoice && onDelete ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={onDelete}
-                  disabled={submitting}
-                >
-                  Delete invoice
-                </Button>
-              ) : null}
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting || !form.familyId || !hasValidLineItems}>
-                {submitting ? "Saving..." : invoice ? "Save invoice" : "Create invoice"}
-              </Button>
-            </div>
+      {invoice ? (
+        <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          <div>
+            Paid so far: {formatCurrencyFromCents(invoice.amountPaidCents)} · Outstanding{" "}
+            {formatCurrencyFromCents(invoice.amountOwingCents)}
           </div>
-        </form>
+          {invoice.paidAt ? <div className="mt-1">Paid on {format(invoice.paidAt, "d MMM yyyy")}</div> : null}
+        </div>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-2 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {invoice && onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+              disabled={submitting}
+            >
+              Delete invoice
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting || !form.familyId || !hasValidLineItems}>
+            {submitting ? "Saving..." : invoice ? "Save invoice" : "Create invoice"}
+          </Button>
+        </div>
+      </div>
+    </form>
   );
 
   if (presentation === "sheet") {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-4xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>{invoice ? "Edit invoice" : "New invoice"}</SheetTitle>
             <SheetDescription>
               {invoice ? "Update invoice details and status." : "Create a manual invoice for a family."}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-2">{formContent}</div>
+          <div className="mt-6">{formContent}</div>
         </SheetContent>
       </Sheet>
     );
@@ -496,7 +525,7 @@ export function InvoiceForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{invoice ? "Edit invoice" : "New invoice"}</DialogTitle>
           <DialogDescription>

@@ -2,23 +2,19 @@
 
 import * as React from "react";
 import type { Prisma, Student } from "@prisma/client";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { format } from "date-fns";
 import {
   ArrowRightLeft,
   CheckCircle2,
-  ChevronRight,
+  ChevronDown,
   GraduationCap,
-  Info,
-  MoreVertical,
   RefreshCcw,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,46 +22,42 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { buildReturnUrl } from "@/lib/returnContext";
 import { cn } from "@/lib/utils";
-
-import FamilyDetails from "./FamilyDetails";
-import FamilyInvoices from "./FamilyInvoices";
-import { StudentModal } from "./StudentModal";
-import { FamilyTransitionWizard } from "./FamilyTransitionWizard";
 
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
 import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
-
-import type { EnrolmentPlan, Level } from "@prisma/client";
-import type { UnpaidFamiliesSummary } from "@/server/invoicing";
-import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
-import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
-import type getClassTemplates from "@/server/classTemplate/getClassTemplates";
-import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
-import type { getFamilyAwayPeriods } from "@/server/away/getFamilyAwayPeriods";
-import { createStudent } from "@/server/student/createStudent";
+import { StudentEnrolmentsSection } from "@/app/admin/(protected)/student/[id]/StudentEnrolmentsSection";
+import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
 import { deleteStudent } from "@/server/student/deleteStudent";
 import { getStudent } from "@/server/student/getStudent";
 import { updateStudent } from "@/server/student/updateStudent";
 import type { ClientStudent } from "@/server/student/types";
-import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
-import { StudentEnrolmentsSection } from "@/app/admin/(protected)/student/[id]/StudentEnrolmentsSection";
-import { AddEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/AddEnrolmentDialog";
-import { ChangeEnrolmentDialog } from "@/app/admin/(protected)/student/[id]/ChangeEnrolmentDialog";
-import { buildReturnUrl } from "@/lib/returnContext";
-import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
-import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
-import { AwaySection } from "./AwaySection";
-import { MakeupsSection } from "./MakeupsSection";
+import { createStudent } from "@/server/student/createStudent";
+import type { EnrolmentPlan, Level } from "@prisma/client";
+import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
+import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
+import type { getAccountOpeningState } from "@/server/family/getAccountOpeningState";
+import type { getFamilyAwayPeriods } from "@/server/away/getFamilyAwayPeriods";
 import type { FamilyMakeupSummary } from "@/server/makeup/getFamilyMakeups";
+
+import { AwaySection } from "./AwaySection";
+import { ChangeStudentLevelDialog } from "./ChangeStudentLevelDialog";
+import { FamilyContactsPanel } from "./FamilyContactsPanel";
+import FamilyDetails from "./FamilyDetails";
+import { FamilyHeader } from "./FamilyHeader";
+import FamilyInvoices from "./FamilyInvoices";
+import { FamilyStudentList } from "./FamilyStudentList";
+import { FamilySummaryRow } from "./FamilySummaryRow";
+import { MakeupsSection } from "./MakeupsSection";
+import { StudentModal } from "./StudentModal";
 
 export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
   include: {
@@ -84,7 +76,9 @@ export type FamilyWithStudentsAndInvoices = Prisma.FamilyGetPayload<{
             classAssignments: {
               select: {
                 templateId: true;
-                template: { select: { id: true; name: true; dayOfWeek: true; startTime: true; endTime: true } };
+                template: {
+                  select: { id: true; name: true; dayOfWeek: true; startTime: true; endTime: true };
+                };
               };
             };
           };
@@ -124,31 +118,43 @@ type FamilyFormProps = {
   family: FamilyWithStudentsAndInvoices | null;
   enrolContext?: EnrolContext | null;
   levels: Level[];
-  unpaidSummary: UnpaidFamiliesSummary;
   billing: Awaited<ReturnType<typeof getFamilyBillingData>>;
   billingPosition: FamilyBillingPosition;
   enrolmentPlans: EnrolmentPlan[];
-  classTemplates: Awaited<ReturnType<typeof getClassTemplates>>;
   openingState: Awaited<ReturnType<typeof getAccountOpeningState>>;
   awayPeriods: Awaited<ReturnType<typeof getFamilyAwayPeriods>>;
   makeups: FamilyMakeupSummary;
 };
+
+type FamilyTabKey = "overview" | "billing" | "history" | "contacts";
 
 type StudentStatus = {
   label: string;
   variant: "default" | "secondary" | "outline" | "destructive";
 };
 
-function resolveStudentStatus(enrolments: Array<{ entitlementStatus?: string }> | undefined): StudentStatus {
+type StudentListRow = {
+  id: string;
+  name: string;
+  levelName: string | null;
+  status: StudentStatus;
+  paidThroughLabel: string;
+  enrolments: FamilyBillingPosition["students"][number]["enrolments"];
+  student: FamilyWithStudentsAndInvoices["students"][number];
+};
+
+function resolveStudentStatus(
+  enrolments: Array<{ entitlementStatus?: string }> | undefined
+): StudentStatus {
   if (!enrolments || enrolments.length === 0) {
     return { label: "Not enrolled", variant: "outline" };
   }
 
   const statuses = enrolments.map((enrolment) => enrolment.entitlementStatus ?? "UNKNOWN");
-  if (statuses.includes("OVERDUE")) return { label: "Overdue", variant: "destructive" };
-  if (statuses.includes("DUE_SOON")) return { label: "Due soon", variant: "secondary" };
-  if (statuses.includes("AHEAD")) return { label: "Ahead", variant: "outline" };
-  return { label: "Unknown", variant: "outline" };
+  if (statuses.includes("OVERDUE")) return { label: "Payment overdue", variant: "destructive" };
+  if (statuses.includes("DUE_SOON")) return { label: "Payment due soon", variant: "secondary" };
+  if (statuses.includes("AHEAD")) return { label: "Paid ahead", variant: "outline" };
+  return { label: "Billing pending", variant: "outline" };
 }
 
 function resolveStudentPaidThrough(
@@ -158,14 +164,20 @@ function resolveStudentPaidThrough(
     latestCoverageEnd?: Date | null;
   }>
 ) {
-  if (!enrolments.length) return "Not enrolled";
+  if (!enrolments.length) return "No billing plan yet";
   const dates = enrolments
     .map((enrolment) => enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd)
     .filter(Boolean) as Date[];
-  const latest = dates.length
-    ? dates.reduce((acc, curr) => (acc && acc > curr ? acc : curr))
-    : null;
-  return `Paid through ${formatBrisbaneDate(latest ?? null)}`;
+  const latest = dates.length ? dates.reduce((acc, curr) => (acc && acc > curr ? acc : curr)) : null;
+  return latest ? `Paid through ${formatBrisbaneDate(latest)}` : "Not prepaid";
+}
+
+function parseTabParam(value: string | null): FamilyTabKey {
+  if (value === "billing") return "billing";
+  if (value === "contacts") return "contacts";
+  if (value === "history" || value === "transition") return "history";
+  if (value === "enrolments" || value === "students") return "overview";
+  return "overview";
 }
 
 export default function FamilyForm({
@@ -175,44 +187,22 @@ export default function FamilyForm({
   billing,
   billingPosition,
   enrolmentPlans,
-  classTemplates,
   openingState,
   awayPeriods,
   makeups,
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const parseTabParam = React.useCallback((value: string | null) => {
-    if (value === "billing") return "billing";
-    if (value === "contacts") return "contacts";
-    if (value === "history") return "history";
-    if (value === "enrolments") return "overview";
-    if (value === "students") return "overview";
-    if (value === "transition") return "history";
-    return "overview";
-  }, []);
-  const [activeTab, setActiveTab] = React.useState<string>(() => parseTabParam(searchParams.get("tab")));
+
+  const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(() => parseTabParam(searchParams.get("tab")));
+  const [visitedTabs, setVisitedTabs] = React.useState<Set<FamilyTabKey>>(() => new Set([activeTab]));
   const [selectedStudentId, setSelectedStudentId] = React.useState<string>(() => searchParams.get("student") ?? "");
-  const [visitedTabs, setVisitedTabs] = React.useState<Set<string>>(() => new Set([activeTab]));
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
-  const [pendingStudentAction, setPendingStudentAction] = React.useState<{
-    type: "add-enrolment" | "change-enrolment" | "edit-paid-through";
-    studentId: string;
-  } | null>(null);
-  const [enrolmentDialog, setEnrolmentDialog] = React.useState<{
-    mode: "add" | "change";
-    studentId: string;
-    enrolment: ClientStudentWithRelations["enrolments"][number] | null;
-  } | null>(null);
-  const [paidThroughTarget, setPaidThroughTarget] = React.useState<{
-    enrolmentId: string;
-    currentPaidThrough: Date | null;
-  } | null>(null);
-  const [changingStudent, setChangingStudent] = React.useState<
-    FamilyWithStudentsAndInvoices["students"][number] | null
-  >(null);
+  const [changingStudent, setChangingStudent] = React.useState<FamilyWithStudentsAndInvoices["students"][number] | null>(
+    null
+  );
   const [paymentSheetOpen, setPaymentSheetOpen] = React.useState(false);
   const [payAheadOpen, setPayAheadOpen] = React.useState(false);
 
@@ -243,77 +233,40 @@ export default function FamilyForm({
     window.history.replaceState(null, "", next);
   }, []);
 
-  const loadStudentDetails = React.useCallback(
-    async (studentId: string, options?: { silent?: boolean }) => {
-      const token = ++studentRequestToken.current;
-      if (!options?.silent) {
-        setIsLoadingStudent(true);
-      }
+  const loadStudentDetails = React.useCallback(async (studentId: string, options?: { silent?: boolean }) => {
+    const token = ++studentRequestToken.current;
+    if (!options?.silent) {
+      setIsLoadingStudent(true);
+    }
 
-      try {
-        const student = await getStudent(studentId);
-        if (studentRequestToken.current !== token) return;
-        if (!student) throw new Error("Student not found.");
-        const typed = student as ClientStudentWithRelations;
-        studentCache.current.set(studentId, typed);
-        setStudentDetails(typed);
-      } catch (error) {
-        if (studentRequestToken.current !== token) return;
-        const message = error instanceof Error ? error.message : "Unable to load student.";
-        console.error(error);
-        toast.error(message);
-        setStudentDetails(null);
-      } finally {
-        if (studentRequestToken.current === token && !options?.silent) {
-          setIsLoadingStudent(false);
-        }
+    try {
+      const student = await getStudent(studentId);
+      if (studentRequestToken.current !== token) return;
+      if (!student) throw new Error("Student not found.");
+      const typed = student as ClientStudentWithRelations;
+      studentCache.current.set(studentId, typed);
+      setStudentDetails(typed);
+    } catch (error) {
+      if (studentRequestToken.current !== token) return;
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Unable to load student.");
+      setStudentDetails(null);
+    } finally {
+      if (studentRequestToken.current === token && !options?.silent) {
+        setIsLoadingStudent(false);
       }
-    },
-    []
-  );
-
-  React.useEffect(() => {
-    syncQueryParam("student", selectedStudentId || null);
-  }, [selectedStudentId, syncQueryParam]);
+    }
+  }, []);
 
   React.useEffect(() => {
     syncQueryParam("tab", activeTab === "overview" ? null : activeTab);
   }, [activeTab, syncQueryParam]);
 
   React.useEffect(() => {
-    if (!selectedStudentId) return;
-    const exists = family?.students.some((student) => student.id === selectedStudentId) ?? false;
-    if (!exists) setSelectedStudentId("");
-  }, [family, selectedStudentId, setSelectedStudentId]);
+    syncQueryParam("student", selectedStudentId || null);
+  }, [selectedStudentId, syncQueryParam]);
 
-  const refreshStudentDetails = React.useCallback(
-    (id?: string | null) => {
-      const studentId = id ?? selectedStudentId;
-      if (!studentId) return;
-      void loadStudentDetails(studentId);
-    },
-    [loadStudentDetails, selectedStudentId]
-  );
-
-  React.useEffect(() => {
-    if (!selectedStudentId) {
-      studentRequestToken.current += 1;
-      setIsLoadingStudent(false);
-      setStudentDetails(null);
-      return;
-    }
-
-    const cached = studentCache.current.get(selectedStudentId);
-    if (cached) {
-      setStudentDetails(cached);
-      setIsLoadingStudent(false);
-      return;
-    }
-
-    void loadStudentDetails(selectedStudentId);
-  }, [loadStudentDetails, selectedStudentId]);
-
-  const studentRows = React.useMemo(() => {
+  const studentRows = React.useMemo<StudentListRow[]>(() => {
     const billingByStudentId = new Map(billingPosition.students.map((student) => [student.id, student]));
     return (family?.students ?? []).map((student) => {
       const billingStudent = billingByStudentId.get(student.id);
@@ -330,22 +283,47 @@ export default function FamilyForm({
     });
   }, [billingPosition.students, family?.students]);
 
+  React.useEffect(() => {
+    const availableStudentIds = studentRows.map((row) => row.id);
+    if (!availableStudentIds.length) {
+      if (selectedStudentId) {
+        setSelectedStudentId("");
+      }
+      return;
+    }
+    if (!selectedStudentId || !availableStudentIds.includes(selectedStudentId)) {
+      setSelectedStudentId(availableStudentIds[0]);
+    }
+  }, [selectedStudentId, studentRows]);
+
+  React.useEffect(() => {
+    if (!selectedStudentId) {
+      studentRequestToken.current += 1;
+      setStudentDetails(null);
+      setIsLoadingStudent(false);
+      return;
+    }
+
+    const cached = studentCache.current.get(selectedStudentId);
+    if (cached) {
+      setStudentDetails(cached);
+      setIsLoadingStudent(false);
+      return;
+    }
+
+    void loadStudentDetails(selectedStudentId);
+  }, [loadStudentDetails, selectedStudentId]);
+
+  const refreshStudentDetails = React.useCallback(
+    (id?: string | null) => {
+      const studentId = id ?? selectedStudentId;
+      if (!studentId) return;
+      void loadStudentDetails(studentId);
+    },
+    [loadStudentDetails, selectedStudentId]
+  );
+
   const selectedStudentRow = studentRows.find((row) => row.id === selectedStudentId) ?? null;
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
-  };
-
-  const handleAddStudent = () => {
-    setEditingStudent(null);
-    setStudentSheetOpen(true);
-  };
-
-  const handleEditStudent = (student: Student) => {
-    setSelectedStudentId(student.id);
-    setEditingStudent(student);
-    setStudentSheetOpen(true);
-  };
 
   const handleSaveStudent = async (payload: ClientStudent & { familyId: string; id?: string }) => {
     try {
@@ -360,63 +338,54 @@ export default function FamilyForm({
       setStudentSheetOpen(false);
       setEditingStudent(null);
       return { success: true };
-    } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Unable to save student.");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Unable to save student.");
       return { success: false };
     }
   };
 
   const handleDeleteStudent = async (studentId: string) => {
-    setSelectedStudentId(studentId);
     const ok = window.confirm("Delete this student? This cannot be undone.");
     if (!ok) return;
+
     try {
       await deleteStudent(studentId);
       toast.success("Student removed.");
+      studentCache.current.delete(studentId);
       router.refresh();
       if (selectedStudentId === studentId) {
-        setSelectedStudentId("");
+        const remainingIds = studentRows.filter((row) => row.id !== studentId).map((row) => row.id);
+        setSelectedStudentId(remainingIds[0] ?? "");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to delete student.";
       console.error(error);
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : "Unable to delete student.");
     }
   };
 
-  const handleSelectStudent = (studentId: string) => {
+  const handleEditStudent = (studentId: string) => {
+    const target = family?.students.find((student) => student.id === studentId);
+    if (!target) return;
     setSelectedStudentId(studentId);
+    setEditingStudent(target);
+    setStudentSheetOpen(true);
   };
 
-  const handleManageEnrolments = (studentId: string) => {
+  const handleChangeLevel = (studentId: string) => {
+    const target = family?.students.find((student) => student.id === studentId);
+    if (!target) return;
     setSelectedStudentId(studentId);
-    setActiveTab("overview");
-    const row = studentRows.find((student) => student.id === studentId);
-    const hasEnrolments = (row?.enrolments?.length ?? 0) > 0;
-    setPendingStudentAction({
-      type: hasEnrolments ? "change-enrolment" : "add-enrolment",
-      studentId,
-    });
-    refreshStudentDetails(studentId);
-  };
-
-  const handleEditPaidThrough = (studentId: string) => {
-    setSelectedStudentId(studentId);
-    setActiveTab("overview");
-    setPendingStudentAction({ type: "edit-paid-through", studentId });
-    refreshStudentDetails(studentId);
+    setChangingStudent(target);
   };
 
   const handleOpenStudent = (studentId: string) => {
     if (!family) return;
-    setSelectedStudentId(studentId);
     const returnUrl = `/admin/family/${family.id}?tab=overview&student=${studentId}`;
     router.push(buildReturnUrl(`/admin/student/${studentId}`, returnUrl));
   };
 
   const handleEnrolInClass = (studentId: string) => {
-    setSelectedStudentId(studentId);
     if (!enrolContext?.templateId) return;
     const qs = new URLSearchParams();
     qs.set("studentId", studentId);
@@ -426,421 +395,285 @@ export default function FamilyForm({
   };
 
   const handleBillingUpdated = React.useCallback(() => {
-    if (selectedStudentId) refreshStudentDetails(selectedStudentId);
+    if (selectedStudentId) {
+      refreshStudentDetails(selectedStudentId);
+    }
   }, [refreshStudentDetails, selectedStudentId]);
 
-  React.useEffect(() => {
-    if (!pendingStudentAction) return;
-    if (!studentDetails || studentDetails.id !== pendingStudentAction.studentId) return;
+  const subtitleParts = [
+    `${family?.students.length ?? 0} student${family?.students.length === 1 ? "" : "s"}`,
+    family?.primaryContactName ? `Primary contact: ${family.primaryContactName}` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
 
-    const enrolments = studentDetails.enrolments ?? [];
-    const primaryEnrolment =
-      enrolments.find((enrolment) => !enrolment.endDate && enrolment.plan) ??
-      enrolments.find((enrolment) => enrolment.plan) ??
-      enrolments.find((enrolment) => !enrolment.endDate) ??
-      enrolments[0] ??
-      null;
-
-    if (pendingStudentAction.type === "add-enrolment") {
-      setEnrolmentDialog({ mode: "add", studentId: studentDetails.id, enrolment: null });
-      setPendingStudentAction(null);
-      return;
-    }
-
-    if (pendingStudentAction.type === "change-enrolment") {
-      if (!primaryEnrolment) {
-        setEnrolmentDialog({ mode: "add", studentId: studentDetails.id, enrolment: null });
-        setPendingStudentAction(null);
-        return;
-      }
-      if (!primaryEnrolment.plan) {
-        toast.error("Enrolment plan missing; add a plan before changing classes.");
-        setPendingStudentAction(null);
-        return;
-      }
-      setEnrolmentDialog({ mode: "change", studentId: studentDetails.id, enrolment: primaryEnrolment });
-      setPendingStudentAction(null);
-      return;
-    }
-
-    if (pendingStudentAction.type === "edit-paid-through") {
-      if (!primaryEnrolment) {
-        toast.error("No enrolment yet. Add an enrolment first.");
-        setPendingStudentAction(null);
-        return;
-      }
-      setPaidThroughTarget({
-        enrolmentId: primaryEnrolment.id,
-        currentPaidThrough: primaryEnrolment.paidThroughDate ?? null,
-      });
-      setPendingStudentAction(null);
-    }
-  }, [pendingStudentAction, studentDetails]);
-
-  React.useEffect(() => {
-    if (!pendingStudentAction) return;
-    if (isLoadingStudent) return;
-    if (!studentDetails && selectedStudentId === pendingStudentAction.studentId) {
-      toast.error("Unable to load student details.");
-      setPendingStudentAction(null);
-    }
-  }, [isLoadingStudent, pendingStudentAction, selectedStudentId, studentDetails]);
+  const balanceSummary =
+    billingPosition.outstandingCents > 0
+      ? {
+          value: formatCurrencyFromCents(billingPosition.outstandingCents),
+          detail: "Outstanding across the family account.",
+          tone: "danger" as const,
+        }
+      : billingPosition.unallocatedCents > 0
+        ? {
+            value: formatCurrencyFromCents(billingPosition.unallocatedCents),
+            detail: "Credit available across the family account.",
+            tone: "success" as const,
+          }
+        : {
+            value: "Settled",
+            detail: "No balance due right now.",
+            tone: "success" as const,
+          };
 
   if (!family) return null;
-
-  const balanceBreakdown = billingPosition.balanceBreakdown;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-scroll">
-        <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-          <header className="border-b border-gray-200 pb-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                  <Link href="/admin/family" className="hover:text-gray-900">
-                    Families
-                  </Link>
-                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
-                  <span className="font-medium text-gray-900">{family.name}</span>
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{family.name}</h1>
-                <p className="text-sm text-gray-600">
-                  {family.students.length} student{family.students.length === 1 ? "" : "s"} enrolled in this family
-                  account.
-                </p>
-              </div>
+        <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+          <FamilyHeader
+            title={family.name}
+            subtitle={subtitleParts || null}
+            onRecordPayment={() => setPaymentSheetOpen(true)}
+            onAddStudent={() => {
+              setEditingStudent(null);
+              setStudentSheetOpen(true);
+            }}
+            onPayAhead={() => setPayAheadOpen(true)}
+            onEditFamily={() => setFamilySheetOpen(true)}
+          />
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => setPaymentSheetOpen(true)}>
-                  Record payment
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleAddStudent}>
-                  Add student
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setPayAheadOpen(true)}>
-                  Pay ahead
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
-                  Edit family
-                </Button>
-              </div>
-            </div>
-          </header>
+          <FamilySummaryRow
+            items={[
+              {
+                label: "Balance",
+                value: balanceSummary.value,
+                detail: balanceSummary.detail,
+                tone: balanceSummary.tone,
+              },
+              {
+                label: "Paid through",
+                value: billingPosition.paidThroughLatest ? formatBrisbaneDate(billingPosition.paidThroughLatest) : "Not prepaid",
+                detail: "Latest entitlement across active student billing.",
+              },
+              {
+                label: "Next payment due",
+                value: billingPosition.nextDueInvoice?.dueAt ? formatBrisbaneDate(billingPosition.nextDueInvoice.dueAt) : "Nothing due",
+                detail: billingPosition.nextDueInvoice
+                  ? `${formatCurrencyFromCents(billingPosition.nextDueInvoice.balanceCents)} outstanding on the next invoice.`
+                  : "No open invoice is currently due.",
+              },
+            ]}
+            secondaryTitle="Family account"
+            secondaryDescription="Secondary account metadata and setup details."
+            secondaryItems={[
+              {
+                label: "Opening balance",
+                value: openingState ? `Recorded ${formatBrisbaneDate(openingState.createdAt)}` : "Not recorded",
+              },
+              {
+                label: "Unallocated credit",
+                value:
+                  billingPosition.unallocatedCents > 0
+                    ? formatCurrencyFromCents(billingPosition.unallocatedCents)
+                    : "None",
+              },
+              {
+                label: "Students",
+                value: String(family.students.length),
+              },
+            ]}
+          />
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <span>Balance</span>
-                {balanceBreakdown ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-500 transition hover:text-gray-900"
-                        aria-label="View balance breakdown"
-                      >
-                        <Info className="h-3.5 w-3.5" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-72">
-                      <div className="text-xs font-semibold text-foreground">Balance breakdown</div>
-                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        <div className="flex items-center justify-between gap-4">
-                          <span>Invoice outstanding</span>
-                          <span className="font-medium text-foreground">
-                            {formatCurrencyFromCents(balanceBreakdown.invoiceOutstandingCents)}
-                          </span>
-                        </div>
-                        {balanceBreakdown.overdueOwingCents > 0 ? (
-                          <div className="flex items-center justify-between gap-4">
-                            <span>Overdue (uninvoiced)</span>
-                            <span className="font-medium text-foreground">
-                              {formatCurrencyFromCents(balanceBreakdown.overdueOwingCents)}
-                            </span>
-                          </div>
-                        ) : null}
-                        <div className="flex items-center justify-between gap-4">
-                          <span>Unallocated credit</span>
-                          <span className="font-medium text-foreground">
-                            {balanceBreakdown.unallocatedCreditCents > 0
-                              ? `-${formatCurrencyFromCents(balanceBreakdown.unallocatedCreditCents)}`
-                              : formatCurrencyFromCents(0)}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between gap-4 border-t pt-2 text-foreground">
-                          <span className="font-semibold">Net balance</span>
-                          <span className="font-semibold">
-                            {formatCurrencyFromCents(balanceBreakdown.netOwingCents)}
-                          </span>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(parseTabParam(value))}
+            className="space-y-4"
+          >
+            <TabsList className="h-auto w-fit justify-start rounded-lg bg-muted/60 p-1">
+              <TabsTrigger value="overview" className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="billing" className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Billing activity
+              </TabsTrigger>
+              <TabsTrigger value="history" className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                History
+              </TabsTrigger>
+              <TabsTrigger value="contacts" className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                Contacts
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="m-0">
+              <div className="space-y-4">
+                {studentRows.length > 0 ? (
+                  <div className="space-y-2 md:hidden">
+                    <label className="text-sm font-medium text-foreground">Student</label>
+                    <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select student" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {studentRows.map((row) => (
+                          <SelectItem key={row.id} value={row.id}>
+                            {row.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ) : null}
-              </div>
-              <div
-                className={cn(
-                  "mt-2 text-2xl font-semibold",
-                  billingPosition.outstandingCents > 0 ? "text-red-700" : "text-emerald-700"
-                )}
-              >
-                {formatCurrencyFromCents(billingPosition.outstandingCents)}
-              </div>
-              {billingPosition.unallocatedCents > 0 ? (
-                <div className="mt-1 text-xs text-gray-500">
-                  {formatCurrencyFromCents(billingPosition.unallocatedCents)} unallocated
-                </div>
-              ) : (
-                <div className="mt-1 text-xs text-gray-500">No unallocated credit</div>
-              )}
-            </div>
 
-            <SummaryCard
-              label="Paid through"
-              value={formatBrisbaneDate(billingPosition.paidThroughLatest)}
-              detail="Latest entitlement across active enrolments"
-            />
-            <SummaryCard
-              label="Next payment due"
-              value={billingPosition.nextDueInvoice?.dueAt ? formatBrisbaneDate(billingPosition.nextDueInvoice.dueAt) : "—"}
-              detail={
-                billingPosition.nextDueInvoice
-                  ? `${formatCurrencyFromCents(billingPosition.nextDueInvoice.balanceCents)} outstanding`
-                  : "No open invoices"
-              }
-            />
-            <SummaryCard
-              label="Opening balance"
-              value={openingState ? "Recorded" : "Not recorded"}
-              detail={
-                openingState
-                  ? `Captured ${formatBrisbaneDate(openingState.createdAt)}`
-                  : "Record when migrating historical balances"
-              }
-            />
-          </div>
+                <div className="grid items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="space-y-4">
+                    <FamilyStudentList
+                      rows={studentRows}
+                      selectedStudentId={selectedStudentId}
+                      onSelect={setSelectedStudentId}
+                      onEditStudent={handleEditStudent}
+                      onChangeLevel={handleChangeLevel}
+                      onOpenStudent={handleOpenStudent}
+                      onDeleteStudent={handleDeleteStudent}
+                      onEnrolInClass={enrolContext ? handleEnrolInClass : undefined}
+                    />
+                  </div>
 
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-            <div className="border-b border-gray-200">
-              <TabsList className="h-auto w-full justify-start gap-6 rounded-none bg-transparent p-0">
-                <TabsTrigger
-                  value="overview"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="billing"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
-                >
-                  Billing activity
-                </TabsTrigger>
-                <TabsTrigger
-                  value="history"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
-                >
-                  History
-                </TabsTrigger>
-                <TabsTrigger
-                  value="contacts"
-                  className="h-11 flex-none rounded-none border-b-2 border-transparent px-1 text-sm font-medium text-gray-500 data-[state=active]:border-gray-900 data-[state=active]:bg-transparent data-[state=active]:text-gray-900"
-                >
-                  Contacts
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="overview" className="m-0 space-y-4">
-              <div className="space-y-2 md:hidden">
-                <label className="text-sm font-medium">Student</label>
-                <Select
-                  value={selectedStudentId || "__none"}
-                  onValueChange={(value) => handleSelectStudent(value === "__none" ? "" : value)}
-                >
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Select student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none">No student selected</SelectItem>
-                    {studentRows.map((row) => (
-                      <SelectItem key={row.id} value={row.id}>
-                        {row.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-                <Card className="hidden lg:block">
-                  <CardHeader className="flex flex-row items-center justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-base">Students</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {studentRows.length} student{studentRows.length === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{studentRows.length}</Badge>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {studentRows.length === 0 ? (
-                      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                        No students yet.
-                      </div>
-                    ) : (
-                      studentRows.map((row) => (
-                        <div
-                          key={row.id}
-                          onClick={() => handleSelectStudent(row.id)}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition",
-                            selectedStudentId === row.id ? "border-primary/40 bg-primary/5" : "hover:bg-muted/40"
-                          )}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handleSelectStudent(row.id);
-                            }
-                          }}
-                        >
-                          <div className="min-w-0 space-y-1">
-                            <div className="truncate text-sm font-semibold">{row.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {row.levelName ?? "No level"} · {row.paidThroughLabel}
-                            </div>
+                  <div className="space-y-6">
+                    <section className="rounded-xl border border-border/80 bg-background p-5">
+                      <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Student-scoped
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={row.status.variant} className="text-[11px]">
-                              {row.status.label}
-                            </Badge>
-                            <DropdownMenu
-                              modal={false}
-                              onOpenChange={(open) => {
-                                if (open) setSelectedStudentId(row.id);
-                              }}
-                            >
+                          {selectedStudentRow ? (
+                            <>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h2 className="text-base font-semibold">{selectedStudentRow.name}</h2>
+                                <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
+                                  {selectedStudentRow.status.label}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {selectedStudentRow.levelName ?? "No level"} • {selectedStudentRow.paidThroughLabel}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <h2 className="text-base font-semibold">Selected student</h2>
+                              <p className="text-sm text-muted-foreground">
+                                Add a student to start managing enrolments from this family page.
+                              </p>
+                            </>
+                          )}
+                        </div>
+
+                        {selectedStudentRow ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => handleOpenStudent(selectedStudentRow.id)}>
+                              Open student
+                            </Button>
+                            <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={(event) => event.stopPropagation()}
-                                  aria-label="Student actions"
-                                >
-                                  <MoreVertical className="h-4 w-4" />
+                                <Button size="sm" variant="secondary">
+                                  More
+                                  <ChevronDown className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-48">
                                 {enrolContext ? (
                                   <>
-                                    <DropdownMenuItem
-                                      onSelect={(event) => {
-                                        event.stopPropagation();
-                                        handleEnrolInClass(row.id);
-                                      }}
-                                    >
+                                    <DropdownMenuItem onSelect={() => handleEnrolInClass(selectedStudentRow.id)}>
                                       Enrol in class
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                   </>
                                 ) : null}
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    handleEditStudent(row.student);
-                                  }}
-                                >
+                                <DropdownMenuItem onSelect={() => handleEditStudent(selectedStudentRow.id)}>
                                   Edit student
                                 </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    handleManageEnrolments(row.id);
-                                  }}
-                                >
-                                  Enrol / change class
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    handleEditPaidThrough(row.id);
-                                  }}
-                                >
-                                  Edit paid-through
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    setChangingStudent(row.student);
-                                  }}
-                                >
+                                <DropdownMenuItem onSelect={() => handleChangeLevel(selectedStudentRow.id)}>
                                   Change level
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    handleOpenStudent(row.id);
-                                  }}
-                                >
-                                  Open student
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onSelect={(event) => {
-                                    event.stopPropagation();
-                                    handleDeleteStudent(row.id);
-                                  }}
+                                  variant="destructive"
+                                  onSelect={() => handleDeleteStudent(selectedStudentRow.id)}
                                 >
                                   Remove student
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-
-                <div className="space-y-4">
-                  {selectedStudentRow ? (
-                    isLoadingStudent && !studentDetails ? (
-                      <div className="space-y-2" aria-busy="true" aria-live="polite" role="status">
-                        <span className="sr-only">Loading student details</span>
-                        <Skeleton className="h-4 w-44" />
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
-                        <Skeleton className="h-10 w-full" />
+                        ) : null}
                       </div>
-                    ) : studentDetails ? (
-                      <StudentEnrolmentsSection
-                        student={studentDetails}
-                        levels={levels}
-                        enrolmentPlans={enrolmentPlans}
-                        onUpdated={() => {
-                          refreshStudentDetails(selectedStudentId);
-                          router.refresh();
-                        }}
-                        editContextSource="family"
+
+                      <div className="mt-4">
+                        {studentRows.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-border bg-muted/20 px-5 py-8 text-center">
+                            <div className="text-sm font-medium text-foreground">No students yet</div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Add a student before managing enrolments or class changes.
+                            </p>
+                            <Button
+                              className="mt-4"
+                              onClick={() => {
+                                setEditingStudent(null);
+                                setStudentSheetOpen(true);
+                              }}
+                            >
+                              Add student
+                            </Button>
+                          </div>
+                        ) : isLoadingStudent && !studentDetails ? (
+                          <div className="space-y-3" aria-busy="true" aria-live="polite" role="status">
+                            <span className="sr-only">Loading student details</span>
+                            <Skeleton className="h-5 w-44" />
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                          </div>
+                        ) : studentDetails ? (
+                          <StudentEnrolmentsSection
+                            student={studentDetails}
+                            levels={levels}
+                            enrolmentPlans={enrolmentPlans}
+                            onUpdated={() => {
+                              refreshStudentDetails(selectedStudentId);
+                              router.refresh();
+                            }}
+                            editContextSource="family"
+                            layout="plain"
+                          />
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border bg-muted/20 px-5 py-8 text-center">
+                            <div className="text-sm font-medium text-foreground">Unable to load student details</div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Try selecting the student again.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="space-y-4">
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Family-level tools
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Operational tools that apply to the family account rather than a single student.
+                        </p>
+                      </div>
+                      <AwaySection
+                        familyId={family.id}
+                        students={family.students.map((student) => ({ id: student.id, name: student.name }))}
+                        awayPeriods={awayPeriods}
                       />
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Unable to load student details.</div>
-                    )
-                  ) : (
-                    <StudentSelectionEmptyState />
-                  )}
-
-                  <AwaySection
-                    familyId={family.id}
-                    students={family.students.map((student) => ({ id: student.id, name: student.name }))}
-                    awayPeriods={awayPeriods}
-                  />
-
-                  <MakeupsSection familyId={family.id} students={family.students} summary={makeups} />
+                      <MakeupsSection familyId={family.id} students={family.students} summary={makeups} />
+                    </section>
+                  </div>
                 </div>
               </div>
             </TabsContent>
@@ -851,47 +684,23 @@ export default function FamilyForm({
                   family={family}
                   billing={billing}
                   billingPosition={billingPosition}
-                  onOpenPayment={() => setPaymentSheetOpen(true)}
-                  onOpenPayAhead={() => setPayAheadOpen(true)}
                   onUpdated={handleBillingUpdated}
                 />
               </TabsContent>
             ) : null}
 
             {visitedTabs.has("history") ? (
-              <TabsContent value="history" className="m-0 space-y-4">
-                <HistoryTab billing={billing} family={family} />
-                <FamilyTransitionWizard
-                  family={family}
-                  enrolmentPlans={enrolmentPlans}
-                  classTemplates={classTemplates}
-                  levels={levels}
-                  openingState={openingState}
-                />
+              <TabsContent value="history" className="m-0">
+                <HistorySection billing={billing} family={family} />
               </TabsContent>
             ) : null}
 
             {visitedTabs.has("contacts") ? (
               <TabsContent value="contacts" className="m-0">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3">
-                    <CardTitle className="text-base">Family contacts</CardTitle>
-                    <Button size="sm" variant="outline" onClick={() => setFamilySheetOpen(true)}>
-                      Edit contacts
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <ContactRow label="Primary contact" value={family.primaryContactName ?? "—"} />
-                    <ContactRow label="Primary phone" value={family.primaryPhone ?? "—"} />
-                    <ContactRow label="Primary email" value={family.primaryEmail ?? "—"} className="sm:col-span-2" />
-                    <ContactRow label="Secondary contact" value={family.secondaryContactName ?? "—"} />
-                    <ContactRow label="Secondary phone" value={family.secondaryPhone ?? "—"} />
-                    <ContactRow label="Secondary email" value={family.secondaryEmail ?? "—"} className="sm:col-span-2" />
-                    <ContactRow label="Medical contact" value={family.medicalContactName ?? "—"} />
-                    <ContactRow label="Medical phone" value={family.medicalContactPhone ?? "—"} />
-                    <ContactRow label="Address" value={family.address ?? "—"} className="sm:col-span-2" />
-                  </CardContent>
-                </Card>
+                <FamilyContactsPanel
+                  contacts={family}
+                  onEdit={() => setFamilySheetOpen(true)}
+                />
               </TabsContent>
             ) : null}
           </Tabs>
@@ -910,7 +719,7 @@ export default function FamilyForm({
         }}
         familyId={family.id}
         student={editingStudent}
-        onSave={async (payload) => handleSaveStudent(payload)}
+        onSave={handleSaveStudent}
         levels={levels}
       />
 
@@ -944,102 +753,6 @@ export default function FamilyForm({
         trigger={null}
         onUpdated={handleBillingUpdated}
       />
-
-      {enrolmentDialog?.mode === "add" ? (
-        <AddEnrolmentDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setEnrolmentDialog(null);
-          }}
-          studentId={enrolmentDialog.studentId}
-          levels={levels}
-          enrolmentPlans={enrolmentPlans}
-          studentLevelId={
-            studentDetails?.id === enrolmentDialog.studentId
-              ? studentDetails.levelId
-              : family.students.find((student) => student.id === enrolmentDialog.studentId)?.levelId ?? null
-          }
-          onCreated={() => {
-            setEnrolmentDialog(null);
-            refreshStudentDetails(enrolmentDialog.studentId);
-          }}
-          presentation="sheet"
-        />
-      ) : null}
-
-      {enrolmentDialog?.mode === "change" && enrolmentDialog.enrolment ? (
-        <ChangeEnrolmentDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setEnrolmentDialog(null);
-          }}
-          enrolment={enrolmentDialog.enrolment as ClientStudentWithRelations["enrolments"][number] & {
-            plan: NonNullable<ClientStudentWithRelations["enrolments"][number]["plan"]>;
-          }}
-          enrolmentPlans={enrolmentPlans}
-          levels={levels}
-          studentLevelId={
-            studentDetails?.id === enrolmentDialog.studentId
-              ? studentDetails.levelId
-              : family.students.find((student) => student.id === enrolmentDialog.studentId)?.levelId ?? null
-          }
-          initialTemplateIds={
-            enrolmentDialog.enrolment.classAssignments?.length
-              ? enrolmentDialog.enrolment.classAssignments.map((assignment) => assignment.templateId)
-              : [enrolmentDialog.enrolment.templateId]
-          }
-          onChanged={() => {
-            setEnrolmentDialog(null);
-            refreshStudentDetails(enrolmentDialog.studentId);
-          }}
-          presentation="sheet"
-        />
-      ) : null}
-
-      {paidThroughTarget ? (
-        <EditPaidThroughDialog
-          enrolmentId={paidThroughTarget.enrolmentId}
-          currentPaidThrough={paidThroughTarget.currentPaidThrough}
-          open
-          onOpenChange={(open) => {
-            if (!open) setPaidThroughTarget(null);
-          }}
-          onUpdated={() => {
-            setPaidThroughTarget(null);
-            refreshStudentDetails(selectedStudentId);
-          }}
-          presentation="sheet"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function StudentSelectionEmptyState() {
-  return (
-    <div className="rounded-lg border border-dashed p-5">
-      <h3 className="text-sm font-semibold">Select a student</h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Select a student to manage enrolments, class changes, and paid-through updates.
-      </p>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-2 text-xl font-semibold text-gray-900">{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{detail}</div>
     </div>
   );
 }
@@ -1057,7 +770,7 @@ type AuditEntry = {
   details?: string;
 };
 
-function HistoryTab({
+function HistorySection({
   billing,
   family,
 }: {
@@ -1075,17 +788,14 @@ function HistoryTab({
   const auditEntries = React.useMemo(() => {
     const entries: AuditEntry[] = [];
 
-    const reasonMeta: Record<
-      string,
-      { label: string; source: string; category: AuditCategory }
-    > = {
+    const reasonMeta: Record<string, { label: string; source: string; category: AuditCategory }> = {
       PAIDTHROUGH_MANUAL_EDIT: { label: "Paid-through updated", source: "Manual edit", category: "PAIDTHROUGH" },
       INVOICE_APPLIED: { label: "Payment applied", source: "Payment", category: "PAIDTHROUGH" },
       HOLIDAY_ADDED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
       HOLIDAY_REMOVED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
       HOLIDAY_UPDATED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
-      CLASS_CHANGED: { label: "Schedule updated", source: "Recalculation", category: "CLASS_CHANGE" },
-      PLAN_CHANGED: { label: "Plan updated", source: "Recalculation", category: "CLASS_CHANGE" },
+      CLASS_CHANGED: { label: "Class changed", source: "Schedule update", category: "CLASS_CHANGE" },
+      PLAN_CHANGED: { label: "Plan changed", source: "Billing update", category: "CLASS_CHANGE" },
       CANCELLATION_CREATED: { label: "Cancellation recorded", source: "Cancellation", category: "COVERAGE" },
       CANCELLATION_REVERSED: { label: "Cancellation reversed", source: "Cancellation", category: "COVERAGE" },
     };
@@ -1097,9 +807,6 @@ function HistoryTab({
         source: "System",
         category: "COVERAGE" as AuditCategory,
       };
-      const previous = formatBrisbaneDate(audit.previousPaidThroughDate ?? null);
-      const next = formatBrisbaneDate(audit.nextPaidThroughDate ?? null);
-
       entries.push({
         id: audit.id,
         studentId: student.id,
@@ -1107,8 +814,8 @@ function HistoryTab({
         createdAt: new Date(audit.createdAt),
         category: meta.category,
         title: meta.label,
-        subtitle: `${meta.source} · ${format(new Date(audit.createdAt), "d MMM yyyy · h:mm a")}`,
-        details: `Paid-through changed from ${previous} to ${next}.`,
+        subtitle: `${meta.source} • ${format(new Date(audit.createdAt), "d MMM yyyy · h:mm a")}`,
+        details: `Paid-through changed from ${formatBrisbaneDate(audit.previousPaidThroughDate ?? null)} to ${formatBrisbaneDate(audit.nextPaidThroughDate ?? null)}.`,
       });
     });
 
@@ -1121,10 +828,8 @@ function HistoryTab({
           createdAt: new Date(change.createdAt),
           category: "LEVEL_CHANGE",
           title: "Level updated",
-          subtitle: `Admin · ${format(new Date(change.createdAt), "d MMM yyyy · h:mm a")}`,
-          details: `Level changed from ${change.fromLevel?.name ?? "—"} to ${
-            change.toLevel?.name ?? "—"
-          } (effective ${formatBrisbaneDate(change.effectiveDate)}).`,
+          subtitle: `Admin • ${format(new Date(change.createdAt), "d MMM yyyy · h:mm a")}`,
+          details: `Changed from ${change.fromLevel?.name ?? "—"} to ${change.toLevel?.name ?? "—"} (effective ${formatBrisbaneDate(change.effectiveDate)}).`,
         });
       });
     });
@@ -1132,13 +837,15 @@ function HistoryTab({
     return entries.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [billing.coverageAudits, family.students]);
 
-  const filteredEntries = React.useMemo(() => {
-    return auditEntries.filter((entry) => {
-      if (selectedStudentId !== "ALL" && entry.studentId !== selectedStudentId) return false;
-      if (selectedCategory !== "ALL" && entry.category !== selectedCategory) return false;
-      return true;
-    });
-  }, [auditEntries, selectedCategory, selectedStudentId]);
+  const filteredEntries = React.useMemo(
+    () =>
+      auditEntries.filter((entry) => {
+        if (selectedStudentId !== "ALL" && entry.studentId !== selectedStudentId) return false;
+        if (selectedCategory !== "ALL" && entry.category !== selectedCategory) return false;
+        return true;
+      }),
+    [auditEntries, selectedCategory, selectedStudentId]
+  );
 
   const categoryMeta: Record<
     Exclude<AuditCategory, "ALL">,
@@ -1151,37 +858,38 @@ function HistoryTab({
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-200 px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">History</h2>
-            <p className="mt-1 text-sm text-gray-600">Admin and system events for enrolment and coverage updates.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{filteredEntries.length} items</Badge>
-            <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as AuditCategory)}>
-              <SelectTrigger className="h-8 w-[190px] text-xs">
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All types</SelectItem>
-                <SelectItem value="PAIDTHROUGH">Paid-through</SelectItem>
-                <SelectItem value="CLASS_CHANGE">Class/plan changes</SelectItem>
-                <SelectItem value="LEVEL_CHANGE">Level changes</SelectItem>
-                <SelectItem value="COVERAGE">Coverage changes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <section className="rounded-xl border border-border/80 bg-background p-5">
+      <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold">History</h2>
+          <p className="text-sm text-muted-foreground">
+            Admin and system events for enrolment, level, and coverage updates.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{filteredEntries.length} events</Badge>
+          <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as AuditCategory)}>
+            <SelectTrigger className="h-8 w-[190px] text-xs">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All types</SelectItem>
+              <SelectItem value="PAIDTHROUGH">Paid-through</SelectItem>
+              <SelectItem value="CLASS_CHANGE">Class or plan changes</SelectItem>
+              <SelectItem value="LEVEL_CHANGE">Level changes</SelectItem>
+              <SelectItem value="COVERAGE">Coverage changes</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <div className="space-y-4 p-6">
+      <div className="mt-4 space-y-4">
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant={selectedStudentId === "ALL" ? "secondary" : "outline"}
             size="sm"
+            variant={selectedStudentId === "ALL" ? "secondary" : "outline"}
             onClick={() => setSelectedStudentId("ALL")}
           >
             All students
@@ -1190,8 +898,8 @@ function HistoryTab({
             <Button
               key={student.id}
               type="button"
-              variant={selectedStudentId === student.id ? "secondary" : "outline"}
               size="sm"
+              variant={selectedStudentId === student.id ? "secondary" : "outline"}
               onClick={() => setSelectedStudentId(student.id)}
             >
               {student.name}
@@ -1200,44 +908,48 @@ function HistoryTab({
         </div>
 
         {filteredEntries.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-gray-900">No history yet</p>
-            <p className="mt-1 text-sm text-gray-500">Events will appear here as admins update enrolments.</p>
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+            <div className="text-sm font-medium text-foreground">No history yet</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Events will appear here as admins update enrolments and billing coverage.
+            </p>
           </div>
         ) : (
           <div className="flow-root">
             <ul role="list" className="-mb-8">
               {filteredEntries.map((entry, index) => {
-                const meta = categoryMeta[(entry.category === "ALL" ? "COVERAGE" : entry.category) as Exclude<AuditCategory, "ALL">];
+                const meta = categoryMeta[(entry.category === "ALL" ? "COVERAGE" : entry.category) as Exclude<
+                  AuditCategory,
+                  "ALL"
+                >];
                 const Icon = meta.icon;
+
                 return (
                   <li key={entry.id}>
                     <div className="relative pb-8">
                       {index !== filteredEntries.length - 1 ? (
-                        <span aria-hidden="true" className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200" />
+                        <span aria-hidden="true" className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-border" />
                       ) : null}
                       <div className="relative flex space-x-3">
                         <div>
-                          <span className={cn(meta.color, "flex h-8 w-8 items-center justify-center rounded-full ring-8 ring-white")}>
+                          <span className={cn(meta.color, "flex h-8 w-8 items-center justify-center rounded-full ring-8 ring-background")}>
                             <Icon aria-hidden="true" className="h-4 w-4 text-white" />
                           </span>
                         </div>
-                        <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
+                        <div className="flex min-w-0 flex-1 justify-between gap-4 pt-1.5">
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-sm font-medium text-gray-900">{entry.title}</p>
+                              <p className="text-sm font-medium text-foreground">{entry.title}</p>
                               <Badge variant="outline" className="text-[11px]">
                                 {entry.studentName}
                               </Badge>
                             </div>
-                            <p className="text-xs text-gray-500">{entry.subtitle}</p>
-                            {entry.details ? <p className="text-xs text-gray-600">{entry.details}</p> : null}
+                            <p className="text-xs text-muted-foreground">{entry.subtitle}</p>
+                            {entry.details ? <p className="text-sm text-muted-foreground">{entry.details}</p> : null}
                           </div>
-                          <div className="text-right text-xs whitespace-nowrap text-gray-500">
-                            <time dateTime={entry.createdAt.toISOString()}>
-                              {format(entry.createdAt, "d MMM yyyy")}
-                            </time>
-                          </div>
+                          <time className="text-xs whitespace-nowrap text-muted-foreground" dateTime={entry.createdAt.toISOString()}>
+                            {format(entry.createdAt, "d MMM yyyy")}
+                          </time>
                         </div>
                       </div>
                     </div>
@@ -1264,8 +976,11 @@ function FamilyActionSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-xl sm:px-8">
-        <SheetHeader>
+        <SheetHeader className="px-0">
           <SheetTitle>Edit family</SheetTitle>
+          <SheetDescription>
+            Update contact details, address information, and family account metadata.
+          </SheetDescription>
         </SheetHeader>
         <div className="mt-4 space-y-4">
           <Separator />
@@ -1273,14 +988,5 @@ function FamilyActionSheet({
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function ContactRow({ label, value, className }: { label: string; value: string; className?: string }) {
-  return (
-    <div className={className}>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium">{value}</div>
-    </div>
   );
 }

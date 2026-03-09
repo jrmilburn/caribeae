@@ -105,23 +105,36 @@ export function EditPaidThroughDialog({
 
   const content = (
     <>
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Current paid-through</Label>
-          <div className="text-sm font-medium">{formatBrisbaneDate(currentPaidThrough ?? null)}</div>
+      <div className="space-y-6">
+        <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Current paid-through
+          </div>
+          <div className="mt-1 text-sm font-medium text-foreground">
+            {formatBrisbaneDate(currentPaidThrough ?? null)}
+          </div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            This is the last entitled class date for the enrolment.
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={`paid-through-${enrolmentId}`}>New paid-through date</Label>
-          <Input
-            id={`paid-through-${enrolmentId}`}
-            type="date"
-            value={dateValue}
-            onChange={(event) => setDateValue(event.target.value)}
-          />
+
+        <div className="rounded-xl border border-border/80 bg-background p-4">
+          <div className="space-y-2">
+            <Label htmlFor={`paid-through-${enrolmentId}`}>New paid-through date</Label>
+            <Input
+              id={`paid-through-${enrolmentId}`}
+              type="date"
+              value={dateValue}
+              onChange={(event) => setDateValue(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank to clear the date when the enrolment should no longer be prepaid.
+            </p>
+          </div>
         </div>
       </div>
       {presentation === "sheet" ? (
-        <SheetFooter className="px-0 pb-0">
+        <SheetFooter className="px-0 pb-0 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
@@ -146,14 +159,14 @@ export function EditPaidThroughDialog({
     return (
       <Sheet open={dialogOpen} onOpenChange={handleOpenChange}>
         {trigger ? <SheetTrigger asChild>{trigger}</SheetTrigger> : null}
-        <SheetContent side="right" className="w-full sm:max-w-xl">
+        <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
           <SheetHeader className="px-0">
             <SheetTitle>Edit paid-through date</SheetTitle>
             <SheetDescription>
               Paid-through is inclusive (last entitled class date).
             </SheetDescription>
           </SheetHeader>
-          {content}
+          <div className="mt-6">{content}</div>
         </SheetContent>
       </Sheet>
     );
