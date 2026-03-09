@@ -311,6 +311,7 @@ export default function FamilyForm({
       return;
     }
 
+    // Clear stale data while switching students to avoid showing previous details during fetch.
     setStudentDetails(null);
     void loadStudentDetails(selectedStudentId);
   }, [loadStudentDetails, selectedStudentId]);
