@@ -32,9 +32,16 @@ import { AdminPagination } from "@/components/admin/AdminPagination";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { format } from "date-fns";
+import { MoreVerticalIcon } from "lucide-react";
 import { buildReturnUrl } from "@/lib/returnContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function formatDeleteCount(label: string, count: number) {
   return `${count} ${label}${count === 1 ? "" : "s"}`;
@@ -285,27 +292,30 @@ export default function FamilyList({
                       <tr>
                         <th
                           scope="col"
-                          className="w-[30%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                          className="w-[28%] py-3 pr-3 pl-4 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                         >
                           Student
                         </th>
                         <th
                           scope="col"
-                          className="w-[30%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                          className="w-[28%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                         >
                           Family
                         </th>
                         <th
                           scope="col"
-                          className="w-[22%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                          className="w-[20%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                         >
                           Level
                         </th>
                         <th
                           scope="col"
-                          className="w-[18%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                          className="w-[16%] px-3 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground uppercase"
                         >
                           Created
+                        </th>
+                        <th scope="col" className="w-[8%] py-3 pr-4 pl-3 text-right sm:pr-0">
+                          <span className="sr-only">Actions</span>
                         </th>
                       </tr>
                     ) : (
@@ -346,12 +356,25 @@ export default function FamilyList({
                       <>
                         {students.map((student) => {
                           const studentUrl = buildReturnUrl(`/admin/student/${student.id}`, listUrl);
+                          const familyUrl = `/admin/family/${student.family.id}`;
                           return (
-                            <tr key={student.id} className="transition-colors hover:bg-accent/40">
+                            <tr
+                              key={student.id}
+                              role="link"
+                              tabIndex={0}
+                              onClick={() => router.push(studentUrl)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  router.push(studentUrl);
+                                }
+                              }}
+                              className="group cursor-pointer transition-colors hover:bg-accent/40"
+                            >
                               <td className="max-w-0 py-4 pr-3 pl-4 text-sm font-medium text-foreground">
-                                <Link href={studentUrl} className="block truncate hover:underline" title={student.name}>
+                                <span className="block truncate" title={student.name}>
                                   {student.name}
-                                </Link>
+                                </span>
                               </td>
                               <td className="max-w-0 px-3 py-4 text-sm text-foreground">
                                 <span className="block truncate" title={student.family.name ?? "—"}>
@@ -366,13 +389,49 @@ export default function FamilyList({
                               <td className="px-3 py-4 text-sm whitespace-nowrap text-muted-foreground">
                                 {format(student.createdAt, "dd MMM yyyy")}
                               </td>
+                              <td className="py-4 pr-4 pl-3 text-right text-sm font-medium whitespace-nowrap sm:pr-0">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label="Open student actions"
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <MoreVerticalIcon className="h-4 w-4 text-muted-foreground" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        router.push(studentUrl);
+                                      }}
+                                    >
+                                      View student
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        router.push(familyUrl);
+                                      }}
+                                    >
+                                      Open family
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
                             </tr>
                           );
                         })}
 
                         {students.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
+                            <td colSpan={5} className="py-6 pr-3 pl-4 text-sm text-muted-foreground">
                               No students found.
                             </td>
                           </tr>

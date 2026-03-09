@@ -220,7 +220,7 @@ function StudentCard({
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", "students");
     const familyUrl = `/admin/family/${familyId}?${params.toString()}`;
-    router.push(buildReturnUrl(`/admin/student/${student.id}`, familyUrl)); // note: if your route is /admin/students/[id], update this
+    router.push(buildReturnUrl(`/admin/student/${student.id}`, familyUrl));
   };
 
   const goToEnrol = (e: React.MouseEvent) => {

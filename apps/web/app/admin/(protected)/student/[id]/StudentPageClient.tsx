@@ -3,7 +3,7 @@
 import * as React from "react";
 import type { EnrolmentPlan, Level } from "@prisma/client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { formatCurrencyFromCents } from "@/lib/currency";
 import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
+import { parseReturnContext } from "@/lib/returnContext";
 import { useSyncedQueryState } from "@/hooks/useSyncedQueryState";
 
 import type { ClientStudentWithRelations } from "./types";
@@ -170,6 +171,8 @@ export default function StudentPageClient({
   billingPosition: FamilyBillingPosition;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = parseReturnContext(searchParams);
 
   const [activeTab, setActiveTab] = useSyncedQueryState<TabKey>("tab", {
     defaultValue: "enrolment",
@@ -245,6 +248,9 @@ export default function StudentPageClient({
     billingPosition.outstandingCents > 0
       ? "Outstanding across the family account"
       : "Family account is currently settled or in credit";
+  const breadcrumbHref = returnTo?.startsWith("/admin/family")
+    ? returnTo
+    : "/admin/family?view=students";
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -254,7 +260,7 @@ export default function StudentPageClient({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                  <Link href="/admin/students" className="hover:text-gray-900">
+                  <Link href={breadcrumbHref} className="hover:text-gray-900">
                     Students
                   </Link>
                   <ChevronRight className="h-3 w-3" aria-hidden="true" />
