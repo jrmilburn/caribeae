@@ -193,6 +193,8 @@ export default function FamilyForm({
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const requestedTab = parseTabParam(searchParams.get("tab"));
+  const requestedStudentId = searchParams.get("student") ?? "";
 
   const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(() => parseTabParam(searchParams.get("tab")));
   const [visitedTabs, setVisitedTabs] = React.useState<Set<FamilyTabKey>>(() => new Set([activeTab]));
@@ -257,6 +259,18 @@ export default function FamilyForm({
       }
     }
   }, []);
+
+  React.useEffect(() => {
+    if (requestedTab !== activeTab) {
+      setActiveTab(requestedTab);
+    }
+  }, [activeTab, requestedTab]);
+
+  React.useEffect(() => {
+    if (requestedStudentId !== selectedStudentId) {
+      setSelectedStudentId(requestedStudentId);
+    }
+  }, [requestedStudentId, selectedStudentId]);
 
   React.useEffect(() => {
     syncQueryParam("tab", activeTab === "overview" ? null : activeTab);
