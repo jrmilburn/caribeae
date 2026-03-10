@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
 import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
+import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { StudentEnrolmentsSection } from "@/app/admin/(protected)/student/[id]/StudentEnrolmentsSection";
 import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
 import { deleteStudent } from "@/server/student/deleteStudent";
@@ -133,6 +134,12 @@ type StudentStatus = {
   variant: "default" | "secondary" | "outline" | "destructive";
 };
 
+type StudentPaidThroughOption = {
+  id: string;
+  label: string;
+  currentPaidThrough: Date | null;
+};
+
 type StudentListRow = {
   id: string;
   name: string;
@@ -193,10 +200,12 @@ export default function FamilyForm({
 }: FamilyFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initialTab = React.useRef<FamilyTabKey>(parseTabParam(searchParams.get("tab")));
+  const initialStudentId = React.useRef<string>(searchParams.get("student") ?? "");
 
-  const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(() => parseTabParam(searchParams.get("tab")));
+  const [activeTab, setActiveTab] = React.useState<FamilyTabKey>(initialTab.current);
   const [visitedTabs, setVisitedTabs] = React.useState<Set<FamilyTabKey>>(() => new Set([activeTab]));
-  const [selectedStudentId, setSelectedStudentId] = React.useState<string>(() => searchParams.get("student") ?? "");
+  const [selectedStudentId, setSelectedStudentId] = React.useState<string>(initialStudentId.current);
   const [familySheetOpen, setFamilySheetOpen] = React.useState(false);
   const [studentSheetOpen, setStudentSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
@@ -205,6 +214,10 @@ export default function FamilyForm({
   );
   const [paymentSheetOpen, setPaymentSheetOpen] = React.useState(false);
   const [payAheadOpen, setPayAheadOpen] = React.useState(false);
+  const [paidThroughTarget, setPaidThroughTarget] = React.useState<{
+    enrolmentId: string;
+    currentPaidThrough: Date | null;
+  } | null>(null);
 
   const [studentDetails, setStudentDetails] = React.useState<ClientStudentWithRelations | null>(null);
   const [isLoadingStudent, setIsLoadingStudent] = React.useState(false);
@@ -223,6 +236,10 @@ export default function FamilyForm({
   const syncQueryParam = React.useCallback((key: string, value: string | null) => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    const current = params.get(key);
+    const normalizedValue = value || null;
+    if (current === normalizedValue) return;
+
     if (!value) {
       params.delete(key);
     } else {
@@ -230,6 +247,7 @@ export default function FamilyForm({
     }
     const qs = params.toString();
     const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    if (`${window.location.pathname}${window.location.search}` === next) return;
     window.history.replaceState(null, "", next);
   }, []);
 
@@ -311,8 +329,13 @@ export default function FamilyForm({
       return;
     }
 
+    // Clear stale data while switching students to avoid showing previous details during fetch.
+    setStudentDetails(null);
     void loadStudentDetails(selectedStudentId);
   }, [loadStudentDetails, selectedStudentId]);
+
+  const selectedStudentDetails =
+    studentDetails && studentDetails.id === selectedStudentId ? studentDetails : null;
 
   const refreshStudentDetails = React.useCallback(
     (id?: string | null) => {
@@ -324,6 +347,12 @@ export default function FamilyForm({
   );
 
   const selectedStudentRow = studentRows.find((row) => row.id === selectedStudentId) ?? null;
+  const paidThroughOptions: StudentPaidThroughOption[] = selectedStudentRow?.enrolments.map((enrolment: StudentListRow["enrolments"][number]) => ({
+    id: enrolment.id,
+    label: enrolment.templateName ? `${enrolment.planName} • ${enrolment.templateName}` : enrolment.planName,
+    currentPaidThrough:
+      enrolment.projectedCoverageEnd ?? enrolment.paidThroughDate ?? enrolment.latestCoverageEnd ?? null,
+  })) ?? [];
 
   const handleSaveStudent = async (payload: ClientStudent & { familyId: string; id?: string }) => {
     try {
@@ -532,11 +561,6 @@ export default function FamilyForm({
                       rows={studentRows}
                       selectedStudentId={selectedStudentId}
                       onSelect={setSelectedStudentId}
-                      onEditStudent={handleEditStudent}
-                      onChangeLevel={handleChangeLevel}
-                      onOpenStudent={handleOpenStudent}
-                      onDeleteStudent={handleDeleteStudent}
-                      onEnrolInClass={enrolContext ? handleEnrolInClass : undefined}
                     />
                   </div>
 
@@ -597,6 +621,35 @@ export default function FamilyForm({
                                 <DropdownMenuItem onSelect={() => handleChangeLevel(selectedStudentRow.id)}>
                                   Change level
                                 </DropdownMenuItem>
+                                {paidThroughOptions.length > 1 ? (
+                                  paidThroughOptions.map((option: StudentPaidThroughOption) => (
+                                    <DropdownMenuItem
+                                      key={option.id}
+                                      onSelect={() =>
+                                        setPaidThroughTarget({
+                                          enrolmentId: option.id,
+                                          currentPaidThrough: option.currentPaidThrough,
+                                        })
+                                      }
+                                    >
+                                      Edit paid through · {option.label}
+                                    </DropdownMenuItem>
+                                  ))
+                                ) : (
+                                  <DropdownMenuItem
+                                    disabled={!paidThroughOptions.length}
+                                    onSelect={() => {
+                                      const option = paidThroughOptions[0];
+                                      if (!option) return;
+                                      setPaidThroughTarget({
+                                        enrolmentId: option.id,
+                                        currentPaidThrough: option.currentPaidThrough,
+                                      });
+                                    }}
+                                  >
+                                    Edit paid through
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   variant="destructive"
@@ -627,7 +680,7 @@ export default function FamilyForm({
                               Add student
                             </Button>
                           </div>
-                        ) : isLoadingStudent && !studentDetails ? (
+                        ) : isLoadingStudent && !selectedStudentDetails ? (
                           <div className="space-y-3" aria-busy="true" aria-live="polite" role="status">
                             <span className="sr-only">Loading student details</span>
                             <Skeleton className="h-5 w-44" />
@@ -635,9 +688,9 @@ export default function FamilyForm({
                             <Skeleton className="h-10 w-full" />
                             <Skeleton className="h-10 w-full" />
                           </div>
-                        ) : studentDetails ? (
+                        ) : selectedStudentDetails ? (
                           <StudentEnrolmentsSection
-                            student={studentDetails}
+                            student={selectedStudentDetails}
                             levels={levels}
                             enrolmentPlans={enrolmentPlans}
                             onUpdated={() => {
@@ -734,6 +787,22 @@ export default function FamilyForm({
           levels={levels}
           enrolmentPlans={enrolmentPlans}
           presentation="sheet"
+        />
+      ) : null}
+
+      {paidThroughTarget ? (
+        <EditPaidThroughDialog
+          enrolmentId={paidThroughTarget.enrolmentId}
+          currentPaidThrough={paidThroughTarget.currentPaidThrough}
+          open={Boolean(paidThroughTarget)}
+          presentation="sheet"
+          onOpenChange={(open) => {
+            if (!open) setPaidThroughTarget(null);
+          }}
+          onUpdated={() => {
+            setPaidThroughTarget(null);
+            router.refresh();
+          }}
         />
       ) : null}
 

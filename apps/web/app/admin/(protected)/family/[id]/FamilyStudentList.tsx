@@ -1,16 +1,6 @@
 "use client";
 
-import { MoreVertical } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 type StudentStatusVariant = "default" | "secondary" | "outline" | "destructive";
@@ -51,22 +41,12 @@ type FamilyStudentListProps = {
   rows: StudentRow[];
   selectedStudentId: string;
   onSelect: (studentId: string) => void;
-  onEditStudent: (studentId: string) => void;
-  onChangeLevel: (studentId: string) => void;
-  onOpenStudent: (studentId: string) => void;
-  onDeleteStudent: (studentId: string) => void;
-  onEnrolInClass?: (studentId: string) => void;
 };
 
 export function FamilyStudentList({
   rows,
   selectedStudentId,
   onSelect,
-  onEditStudent,
-  onChangeLevel,
-  onOpenStudent,
-  onDeleteStudent,
-  onEnrolInClass,
 }: FamilyStudentListProps) {
   return (
     <section className="rounded-xl border border-border/80 bg-background p-4">
@@ -105,6 +85,7 @@ export function FamilyStudentList({
                 </div>
               </div>
 
+<<<<<<< HEAD
               <div className="ml-auto flex shrink-0 items-center gap-2 self-start pl-1">
                 <StudentStatusBadge
                   label={row.status.label}
@@ -172,6 +153,12 @@ export function FamilyStudentList({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+=======
+              <div className="flex items-start gap-2">
+                <Badge variant={row.status.variant} className="mt-0.5 text-[11px]">
+                  {row.status.label}
+                </Badge>
+>>>>>>> 4315bc51a0880226340d4a0b63587bfa3b044b4e
               </div>
             </button>
           ))
