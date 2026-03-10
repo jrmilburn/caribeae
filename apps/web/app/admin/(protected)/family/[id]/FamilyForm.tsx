@@ -561,6 +561,11 @@ export default function FamilyForm({
                       rows={studentRows}
                       selectedStudentId={selectedStudentId}
                       onSelect={setSelectedStudentId}
+                      onEditStudent={handleEditStudent}
+                      onChangeLevel={handleChangeLevel}
+                      onOpenStudent={handleOpenStudent}
+                      onDeleteStudent={handleDeleteStudent}
+                      onEnrolInClass={enrolContext ? handleEnrolInClass : undefined}
                     />
                   </div>
 
