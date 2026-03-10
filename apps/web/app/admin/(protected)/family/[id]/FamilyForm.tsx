@@ -54,7 +54,7 @@ import { FamilyContactsPanel } from "./FamilyContactsPanel";
 import FamilyDetails from "./FamilyDetails";
 import { FamilyHeader } from "./FamilyHeader";
 import FamilyInvoices from "./FamilyInvoices";
-import { FamilyStudentList } from "./FamilyStudentList";
+import { FamilyStudentList, StudentStatusBadge } from "./FamilyStudentList";
 import { FamilySummaryRow } from "./FamilySummaryRow";
 import { MakeupsSection } from "./MakeupsSection";
 import { StudentModal } from "./StudentModal";
@@ -551,9 +551,10 @@ export default function FamilyForm({
                             <>
                               <div className="flex flex-wrap items-center gap-2">
                                 <h2 className="text-base font-semibold">{selectedStudentRow.name}</h2>
-                                <Badge variant={selectedStudentRow.status.variant} className="text-[11px]">
-                                  {selectedStudentRow.status.label}
-                                </Badge>
+                                <StudentStatusBadge
+                                  label={selectedStudentRow.status.label}
+                                  variant={selectedStudentRow.status.variant}
+                                />
                               </div>
                               <p className="text-sm text-muted-foreground">
                                 {selectedStudentRow.levelName ?? "No level"} • {selectedStudentRow.paidThroughLabel}

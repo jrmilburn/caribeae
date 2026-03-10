@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+type StudentStatusVariant = "default" | "secondary" | "outline" | "destructive";
+
 type StudentRow = {
   id: string;
   name: string;
@@ -20,9 +22,30 @@ type StudentRow = {
   paidThroughLabel: string;
   status: {
     label: string;
-    variant: "default" | "secondary" | "outline" | "destructive";
+    variant: StudentStatusVariant;
   };
 };
+
+const studentStatusBadgeClassName =
+  "min-h-6 shrink-0 justify-center rounded-full px-2.5 py-1 text-center text-[11px] font-medium leading-none tracking-[0.01em] whitespace-nowrap shadow-none";
+
+type StudentStatusBadgeProps = {
+  label: string;
+  variant: StudentStatusVariant;
+  className?: string;
+};
+
+export function StudentStatusBadge({
+  label,
+  variant,
+  className,
+}: StudentStatusBadgeProps) {
+  return (
+    <Badge variant={variant} className={cn(studentStatusBadgeClassName, className)}>
+      {label}
+    </Badge>
+  );
+}
 
 type FamilyStudentListProps = {
   rows: StudentRow[];
@@ -69,27 +92,31 @@ export function FamilyStudentList({
               type="button"
               onClick={() => onSelect(row.id)}
               className={cn(
-                "flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-muted/30",
+                "flex w-full flex-wrap items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-muted/30",
                 selectedStudentId === row.id ? "border-primary/40 bg-primary/5" : "border-border/70"
               )}
             >
-              <div className="min-w-0 space-y-1">
-                <div className="truncate text-sm font-semibold text-foreground">{row.name}</div>
-                <div className="text-xs text-muted-foreground">
+              <div className="min-w-0 flex-1 basis-[11rem] space-y-1.5">
+                <div className="truncate text-sm font-semibold leading-5 text-foreground">
+                  {row.name}
+                </div>
+                <div className="text-xs leading-5 text-muted-foreground">
                   {row.levelName ?? "No level"} • {row.paidThroughLabel}
                 </div>
               </div>
 
-              <div className="flex items-start gap-2">
-                <Badge variant={row.status.variant} className="mt-0.5 text-[11px]">
-                  {row.status.label}
-                </Badge>
+              <div className="ml-auto flex shrink-0 items-center gap-2 self-start pl-1">
+                <StudentStatusBadge
+                  label={row.status.label}
+                  variant={row.status.variant}
+                />
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       aria-label="Student actions"
+                      className="shrink-0"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <MoreVertical className="h-4 w-4" />
