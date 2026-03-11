@@ -1,16 +1,6 @@
 "use client";
 
-import { MoreVertical } from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 type StudentStatusVariant = "default" | "secondary" | "outline" | "destructive";
@@ -51,32 +41,17 @@ type FamilyStudentListProps = {
   rows: StudentRow[];
   selectedStudentId: string;
   onSelect: (studentId: string) => void;
-  onEditStudent: (studentId: string) => void;
-  onChangeLevel: (studentId: string) => void;
-  onOpenStudent: (studentId: string) => void;
-  onDeleteStudent: (studentId: string) => void;
-  onEnrolInClass?: (studentId: string) => void;
 };
 
 export function FamilyStudentList({
   rows,
   selectedStudentId,
   onSelect,
-  onEditStudent,
-  onChangeLevel,
-  onOpenStudent,
-  onDeleteStudent,
-  onEnrolInClass,
 }: FamilyStudentListProps) {
   return (
     <section className="rounded-xl border border-border/80 bg-background p-4">
       <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
-        <div>
-          <h2 className="text-base font-semibold">Students</h2>
-          <p className="text-sm text-muted-foreground">
-            Select a student to manage enrolments and related admin actions.
-          </p>
-        </div>
+        <h2 className="text-base font-semibold">Students</h2>
         <Badge variant="secondary">{rows.length}</Badge>
       </div>
 
@@ -105,70 +80,8 @@ export function FamilyStudentList({
                 </div>
               </div>
 
-              <div className="ml-auto flex shrink-0 items-center gap-2 self-start pl-1">
+              <div className="ml-auto flex shrink-0 items-center self-start pl-1">
                 <StudentStatusBadge label={row.status.label} variant={row.status.variant} />
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Student actions"
-                      className="shrink-0"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {onEnrolInClass ? (
-                      <>
-                        <DropdownMenuItem
-                          onSelect={(event) => {
-                            event.stopPropagation();
-                            onEnrolInClass(row.id);
-                          }}
-                        >
-                          Enrol in class
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                      </>
-                    ) : null}
-                    <DropdownMenuItem
-                      onSelect={(event) => {
-                        event.stopPropagation();
-                        onEditStudent(row.id);
-                      }}
-                    >
-                      Edit student
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={(event) => {
-                        event.stopPropagation();
-                        onChangeLevel(row.id);
-                      }}
-                    >
-                      Change level
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={(event) => {
-                        event.stopPropagation();
-                        onOpenStudent(row.id);
-                      }}
-                    >
-                      Open student
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onSelect={(event) => {
-                        event.stopPropagation();
-                        onDeleteStudent(row.id);
-                      }}
-                    >
-                      Remove student
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </div>
             </button>
           ))

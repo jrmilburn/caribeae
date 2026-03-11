@@ -1,23 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 type FamilyHeaderProps = {
   title: string;
   subtitle?: string | null;
   onRecordPayment: () => void;
   onAddStudent: () => void;
-  onPayAhead: () => void;
   onEditFamily: () => void;
 };
 
@@ -26,7 +18,6 @@ export function FamilyHeader({
   subtitle,
   onRecordPayment,
   onAddStudent,
-  onPayAhead,
   onEditFamily,
 }: FamilyHeaderProps) {
   return (
@@ -55,20 +46,9 @@ export function FamilyHeader({
           <Button variant="outline" onClick={onAddStudent}>
             Add student
           </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary">
-                More actions
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuLabel>Family actions</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={onPayAhead}>Pay ahead</DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditFamily}>Edit family</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button variant="secondary" onClick={onEditFamily}>
+            Edit family
+          </Button>
         </div>
       </div>
     </header>

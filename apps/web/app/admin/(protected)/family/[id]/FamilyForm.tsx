@@ -33,7 +33,6 @@ import { buildReturnUrl } from "@/lib/returnContext";
 import { cn } from "@/lib/utils";
 
 import { RecordPaymentSheet } from "@/components/admin/billing/RecordPaymentSheet";
-import { PayAheadSheet } from "@/components/admin/billing/PayAheadSheet";
 import { EditPaidThroughDialog } from "@/components/admin/EditPaidThroughDialog";
 import { StudentEnrolmentsSection } from "@/app/admin/(protected)/student/[id]/StudentEnrolmentsSection";
 import type { ClientStudentWithRelations } from "@/app/admin/(protected)/student/[id]/types";
@@ -213,7 +212,6 @@ export default function FamilyForm({
     null
   );
   const [paymentSheetOpen, setPaymentSheetOpen] = React.useState(false);
-  const [payAheadOpen, setPayAheadOpen] = React.useState(false);
   const [paidThroughTarget, setPaidThroughTarget] = React.useState<{
     enrolmentId: string;
     currentPaidThrough: Date | null;
@@ -469,7 +467,6 @@ export default function FamilyForm({
               setEditingStudent(null);
               setStudentSheetOpen(true);
             }}
-            onPayAhead={() => setPayAheadOpen(true)}
             onEditFamily={() => setFamilySheetOpen(true)}
           />
 
@@ -561,11 +558,6 @@ export default function FamilyForm({
                       rows={studentRows}
                       selectedStudentId={selectedStudentId}
                       onSelect={setSelectedStudentId}
-                      onEditStudent={handleEditStudent}
-                      onChangeLevel={handleChangeLevel}
-                      onOpenStudent={handleOpenStudent}
-                      onDeleteStudent={handleDeleteStudent}
-                      onEnrolInClass={enrolContext ? handleEnrolInClass : undefined}
                     />
                   </div>
 
@@ -573,9 +565,6 @@ export default function FamilyForm({
                     <section className="rounded-xl border border-border/80 bg-background p-5">
                       <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
                         <div className="space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                            Student-scoped
-                          </div>
                           {selectedStudentRow ? (
                             <>
                               <div className="flex flex-wrap items-center gap-2">
@@ -717,14 +706,6 @@ export default function FamilyForm({
                     </section>
 
                     <section className="space-y-4">
-                      <div className="space-y-1">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Family-level tools
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Operational tools that apply to the family account rather than a single student.
-                        </p>
-                      </div>
                       <AwaySection
                         familyId={family.id}
                         students={family.students.map((student) => ({ id: student.id, name: student.name }))}
@@ -819,14 +800,6 @@ export default function FamilyForm({
         onOpenChange={setPaymentSheetOpen}
         trigger={null}
         onSuccess={handleBillingUpdated}
-      />
-
-      <PayAheadSheet
-        familyId={family.id}
-        open={payAheadOpen}
-        onOpenChange={setPayAheadOpen}
-        trigger={null}
-        onUpdated={handleBillingUpdated}
       />
     </div>
   );
