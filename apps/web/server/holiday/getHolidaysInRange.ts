@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { normalizeToLocalMidnight } from "@/lib/dateUtils";
+import { brisbaneStartOfDay } from "@/server/dates/brisbaneDay";
 
 export async function getHolidaysInRange(params: { from: Date; to: Date }) {
-  const from = normalizeToLocalMidnight(params.from);
-  const to = normalizeToLocalMidnight(params.to);
+  const from = brisbaneStartOfDay(params.from);
+  const to = brisbaneStartOfDay(params.to);
 
   return prisma.holiday.findMany({
     where: {

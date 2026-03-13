@@ -39,6 +39,8 @@ export class CoverageWouldShortenError extends Error {
   }
 }
 
+type CoverageShortenAction = "ACCEPT" | "PRESERVE" | "REJECT";
+
 type RecalculateOptions = {
   tx?: Prisma.TransactionClient;
   actorId?: string;
@@ -82,6 +84,29 @@ export function wouldShortenCoverage(current: Date | null, proposed: Date | null
   const currentKey = current ? toBrisbaneDayKey(brisbaneStartOfDay(current)) : null;
   const proposedKey = proposed ? toBrisbaneDayKey(brisbaneStartOfDay(proposed)) : null;
   return compareDayKeys(proposedKey, currentKey) < 0;
+}
+
+export function resolveCoverageShortenAction(params: {
+  reason: EnrolmentCoverageReason;
+  confirmShorten?: boolean;
+}): CoverageShortenAction {
+  if (params.confirmShorten) return "ACCEPT";
+
+  // Holiday edits are configuration changes, so recomputes must be able to move
+  // paid-through dates in either direction without a separate confirmation step.
+  if (params.reason === "HOLIDAY_REMOVED" || params.reason === "HOLIDAY_UPDATED") {
+    return "ACCEPT";
+  }
+
+  if (
+    params.reason === "INVOICE_APPLIED" ||
+    params.reason === "CANCELLATION_CREATED" ||
+    params.reason === "CANCELLATION_REVERSED"
+  ) {
+    return "PRESERVE";
+  }
+
+  return "REJECT";
 }
 
 function buildHolidayOverlapDayKeys(params: {
@@ -171,15 +196,22 @@ export async function recalculateEnrolmentCoverage(
 
       const previousKey = previousPaidThrough ? toBrisbaneDayKey(previousPaidThrough) : null;
       const computedKey = computedPaidThrough ? toBrisbaneDayKey(computedPaidThrough) : null;
+      const shortenAction = resolveCoverageShortenAction({
+        reason,
+        confirmShorten: opts?.confirmShorten,
+      });
 
       let nextPaidThrough = computedPaidThrough;
       if (wouldShortenCoverage(previousPaidThrough, computedPaidThrough)) {
-        if (opts?.confirmShorten) {
-          nextPaidThrough = computedPaidThrough;
-        } else if (reason === "INVOICE_APPLIED" || reason === "CANCELLATION_CREATED" || reason === "CANCELLATION_REVERSED") {
-          nextPaidThrough = previousPaidThrough;
-        } else {
-          throw new CoverageWouldShortenError({ oldDateKey: previousKey, newDateKey: computedKey });
+        switch (shortenAction) {
+          case "ACCEPT":
+            nextPaidThrough = computedPaidThrough;
+            break;
+          case "PRESERVE":
+            nextPaidThrough = previousPaidThrough;
+            break;
+          default:
+            throw new CoverageWouldShortenError({ oldDateKey: previousKey, newDateKey: computedKey });
         }
       }
 
@@ -271,8 +303,15 @@ export async function recalculateEnrolmentCoverage(
       const currentPaidThrough = enrolment.paidThroughDate ? brisbaneStartOfDay(enrolment.paidThroughDate) : null;
       const currentKey = currentPaidThrough ? toBrisbaneDayKey(currentPaidThrough) : null;
       const proposedKey = proposedPaidThrough ? toBrisbaneDayKey(proposedPaidThrough) : null;
+      const shortenAction = resolveCoverageShortenAction({
+        reason,
+        confirmShorten: opts?.confirmShorten,
+      });
 
-      const nextPaidThrough = compareDayKeys(proposedKey, currentKey) < 0 ? currentPaidThrough : proposedPaidThrough;
+      const nextPaidThrough =
+        compareDayKeys(proposedKey, currentKey) < 0 && shortenAction !== "ACCEPT"
+          ? currentPaidThrough
+          : proposedPaidThrough;
       const nextKey = nextPaidThrough ? toBrisbaneDayKey(nextPaidThrough) : null;
 
       if (currentKey !== nextKey) {

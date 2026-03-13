@@ -36,35 +36,40 @@ export async function updateHoliday(id: string, input: z.input<typeof payloadSch
     throw new Error("End date must be on or after start date.");
   }
 
-  const existing = await prisma.holiday.findUnique({ where: { id } });
-  if (!existing) {
-    throw new Error("Holiday not found.");
-  }
+  const holiday = await prisma.$transaction(async (tx) => {
+    const existing = await tx.holiday.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error("Holiday not found.");
+    }
 
-  const holiday = await prisma.holiday.update({
-    where: { id },
-    data: {
-      name: payload.name.trim(),
-      startDate,
-      endDate,
-      note: payload.note?.trim() || null,
-      levelId,
-      templateId,
-    },
-  });
-
-  await recomputeHolidayEnrolments(
-    [
-      {
-        startDate: existing.startDate,
-        endDate: existing.endDate,
-        levelId: existing.levelId,
-        templateId: existing.templateId,
+    const updatedHoliday = await tx.holiday.update({
+      where: { id },
+      data: {
+        name: payload.name.trim(),
+        startDate,
+        endDate,
+        note: payload.note?.trim() || null,
+        levelId,
+        templateId,
       },
-      { startDate, endDate, levelId, templateId },
-    ],
-    "HOLIDAY_UPDATED"
-  );
+    });
+
+    await recomputeHolidayEnrolments(
+      [
+        {
+          startDate: existing.startDate,
+          endDate: existing.endDate,
+          levelId: existing.levelId,
+          templateId: existing.templateId,
+        },
+        { startDate, endDate, levelId, templateId },
+      ],
+      "HOLIDAY_UPDATED",
+      { tx }
+    );
+
+    return updatedHoliday;
+  });
 
   revalidatePath("/admin/holidays");
   revalidatePath("/admin/settings/holidays");

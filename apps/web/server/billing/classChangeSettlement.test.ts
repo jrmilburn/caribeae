@@ -115,6 +115,23 @@ await test("Per-class rounding uses cents precision", () => {
   assert.strictEqual(settlement.newValueCents, Math.round(2 * (9000 / 3)));
 });
 
+await test("Settlement handles weekly to per-class transfers with shared pricing logic", () => {
+  const oldPlan = { billingType: BillingType.PER_CLASS, priceCents: 12000, sessionsPerWeek: null, blockClassCount: 4 };
+  const newPlan = { billingType: BillingType.PER_WEEK, priceCents: 9000, sessionsPerWeek: 2, blockClassCount: null };
+
+  const settlement = computeClassChangeSettlement({
+    oldPlan,
+    newPlan,
+    chargeableClasses: 3,
+    changeOverDate: d("2025-06-02"),
+    paidThroughDate: d("2025-06-30"),
+  });
+
+  assert.strictEqual(settlement.oldCostPerClassCents, 3000);
+  assert.strictEqual(settlement.newCostPerClassCents, 4500);
+  assert.strictEqual(settlement.differenceCents, 4500);
+});
+
 await test("Settlement application creates invoice or payment and preserves paid-through", async () => {
   const settlement = computeClassChangeSettlement({
     oldPlan: { billingType: BillingType.PER_WEEK, priceCents: 10000, sessionsPerWeek: 2, blockClassCount: null },
@@ -154,11 +171,11 @@ await test("Settlement application creates invoice or payment and preserves paid
     mutations: {
       createInvoice: async () => {
         invoiceCreated = true;
-        return { id: "inv-1" } as any;
+        return { id: "inv-1" };
       },
       createPayment: async () => {
         paymentCreated = true;
-        return { payment: { id: "pay-1" } } as any;
+        return { payment: { id: "pay-1" } };
       },
     },
   });

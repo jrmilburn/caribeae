@@ -1,7 +1,9 @@
-import { BillingType, type ClassTemplate, type EnrolmentPlan } from "@prisma/client";
+import type { ClassTemplate, EnrolmentPlan } from "@prisma/client";
+
+import { isDayOfWeekCompatibleWithPlan, isSaturdayDayOfWeek } from "@/lib/enrolment/planDayCompatibility";
 
 export function isSaturdayTemplate(template: Pick<ClassTemplate, "dayOfWeek">) {
-  return template.dayOfWeek === 5;
+  return isSaturdayDayOfWeek(template.dayOfWeek);
 }
 
 export function assertPlanMatchesTemplate(
@@ -13,11 +15,13 @@ export function assertPlanMatchesTemplate(
   }
 
   const saturdayTemplate = isSaturdayTemplate(template);
-  if (saturdayTemplate && !plan.isSaturdayOnly && plan.billingType !== BillingType.PER_WEEK) {
+  const compatible = isDayOfWeekCompatibleWithPlan(plan, template.dayOfWeek);
+
+  if (!compatible && saturdayTemplate) {
     throw new Error("Saturday classes require a Saturday-only enrolment plan.");
   }
 
-  if (!saturdayTemplate && plan.isSaturdayOnly) {
+  if (!compatible && !saturdayTemplate) {
     throw new Error("Saturday-only enrolment plans can only be used for Saturday classes.");
   }
 }

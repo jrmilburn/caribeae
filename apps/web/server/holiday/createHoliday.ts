@@ -18,15 +18,26 @@ const payloadSchema = z.object({
   templateId: z.string().optional().nullable(),
 });
 
-export async function createHoliday(input: z.input<typeof payloadSchema>) {
+const mutationOptionsSchema = z
+  .object({
+    recalculatePaidThroughDates: z.boolean().optional(),
+  })
+  .optional();
+
+export async function createHoliday(
+  input: z.input<typeof payloadSchema>,
+  rawOptions?: z.input<typeof mutationOptionsSchema>
+) {
   await getOrCreateUser();
   await requireAdmin();
 
   const payload = payloadSchema.parse(input);
+  const options = mutationOptionsSchema.parse(rawOptions);
   const startDate = brisbaneStartOfDay(payload.startDate);
   const endDate = brisbaneStartOfDay(payload.endDate);
   const levelId = payload.levelId?.trim() || null;
   const templateId = payload.templateId?.trim() || null;
+  const shouldRecalculatePaidThroughDates = options?.recalculatePaidThroughDates !== false;
 
   if (levelId && templateId) {
     throw new Error("Select at most one holiday scope.");
@@ -36,21 +47,26 @@ export async function createHoliday(input: z.input<typeof payloadSchema>) {
     throw new Error("End date must be on or after start date.");
   }
 
-  const holiday = await prisma.holiday.create({
-    data: {
-      name: payload.name.trim(),
-      startDate,
-      endDate,
-      note: payload.note?.trim() || null,
-      levelId,
-      templateId,
-    },
-  });
+  const holiday = await prisma.$transaction(async (tx) => {
+    const createdHoliday = await tx.holiday.create({
+      data: {
+        name: payload.name.trim(),
+        startDate,
+        endDate,
+        note: payload.note?.trim() || null,
+        levelId,
+        templateId,
+      },
+    });
 
-  await recomputeHolidayEnrolments(
-    [{ startDate, endDate, levelId, templateId }],
-    "HOLIDAY_ADDED"
-  );
+    if (shouldRecalculatePaidThroughDates) {
+      await recomputeHolidayEnrolments([{ startDate, endDate, levelId, templateId }], "HOLIDAY_ADDED", {
+        tx,
+      });
+    }
+
+    return createdHoliday;
+  });
 
   revalidatePath("/admin/holidays");
   revalidatePath("/admin/settings/holidays");

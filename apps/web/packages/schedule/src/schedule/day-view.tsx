@@ -9,6 +9,7 @@ import type {
   NormalizedScheduleClass,
   ScheduleClassClickContext,
 } from "./schedule-types";
+import { formatHolidayLabel } from "./holiday-utils";
 import { dayOfWeekToColumnIndex, scheduleDateKey } from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
@@ -157,7 +158,7 @@ export default function DayView(props: DayViewProps) {
             <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
               {dayHolidays.map((holiday) => (
                 <div key={holiday.id} className="truncate">
-                  Holiday: {holiday.name}
+                  {formatHolidayLabel(holiday)}
                 </div>
               ))}
             </div>

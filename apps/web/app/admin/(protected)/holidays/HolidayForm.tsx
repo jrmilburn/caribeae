@@ -7,6 +7,7 @@ import type { HolidayListItem } from "@/server/holiday/listHolidays";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -26,6 +27,8 @@ import { formatDateKey } from "@/lib/dateKey";
 import { createHoliday } from "@/server/holiday/createHoliday";
 import { updateHoliday } from "@/server/holiday/updateHoliday";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
+import { HolidayPaidThroughDateChoice, type PaidThroughDateUpdateMode } from "./HolidayPaidThroughDateChoice";
+import { HolidayRecalculationLoadingState } from "./HolidayRecalculationLoadingState";
 
 type HolidayScope = "BUSINESS" | "LEVEL" | "TEMPLATE";
 
@@ -58,6 +61,7 @@ export function HolidayForm({
 }) {
   const mode: "create" | "edit" = holiday ? "edit" : "create";
   const [submitting, setSubmitting] = React.useState(false);
+  const [paidThroughMode, setPaidThroughMode] = React.useState<PaidThroughDateUpdateMode>("recalculate");
   const [form, setForm] = React.useState({
     name: "",
     startDate: "",
@@ -95,8 +99,12 @@ export function HolidayForm({
         templateId: "",
       });
     }
+    setPaidThroughMode("recalculate");
     setSubmitting(false);
   }, [open, holiday]);
+
+  const recalculatePaidThroughDates = mode === "create" ? paidThroughMode === "recalculate" : true;
+  const showRecalculationLoading = mode === "create" && submitting && recalculatePaidThroughDates;
 
   const canSubmit =
     form.name.trim().length > 0 &&
@@ -121,10 +129,29 @@ export function HolidayForm({
 
     try {
       const result = await runMutationWithToast(
-        () => (mode === "edit" && holiday ? updateHoliday(holiday.id, payload) : createHoliday(payload)),
+        () =>
+          mode === "edit" && holiday
+            ? updateHoliday(holiday.id, payload)
+            : createHoliday(payload, {
+                recalculatePaidThroughDates,
+              }),
         {
-          pending: { title: mode === "edit" ? "Saving holiday..." : "Creating holiday..." },
-          success: { title: mode === "edit" ? "Holiday updated" : "Holiday created" },
+          pending: {
+            title:
+              mode === "edit"
+                ? "Saving holiday..."
+                : recalculatePaidThroughDates
+                  ? "Creating holiday and recalculating..."
+                  : "Creating holiday...",
+          },
+          success: {
+            title:
+              mode === "edit"
+                ? "Holiday updated"
+                : recalculatePaidThroughDates
+                  ? "Holiday created and paid-through dates recalculated"
+                  : "Holiday created",
+          },
           error: (message) => ({
             title: mode === "edit" ? "Unable to update holiday" : "Unable to create holiday",
             description: message,
@@ -141,126 +168,150 @@ export function HolidayForm({
     }
   };
 
+  const handleDialogOpenChange = (next: boolean) => {
+    if (submitting) return;
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New holiday" : "Edit holiday"}</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent className="sm:max-w-lg" showCloseButton={!submitting}>
+        {showRecalculationLoading ? (
+          <HolidayRecalculationLoadingState actionLabel="Creating holiday" holidayName={form.name || "holiday"} />
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>{mode === "create" ? "New holiday" : "Edit holiday"}</DialogTitle>
+              {mode === "create" ? (
+                <DialogDescription>
+                  Choose whether creating this holiday should also recalculate current enrolment paid-through dates.
+                </DialogDescription>
+              ) : null}
+            </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="e.g. Queensland Holiday"
-            />
-          </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Queensland Holiday"
+                />
+              </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Start date</Label>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Start date</Label>
+                  <Input
+                    type="date"
+                    value={form.startDate}
+                    onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End date</Label>
+                  <Input
+                    type="date"
+                    value={form.endDate}
+                    onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Scope</Label>
+                <Select
+                  value={form.scope}
+                  onValueChange={(value) =>
+                    setForm((p) => ({
+                      ...p,
+                      scope: value as HolidayScope,
+                      levelId: value === "LEVEL" ? p.levelId : "",
+                      templateId: value === "TEMPLATE" ? p.templateId : "",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BUSINESS">All business</SelectItem>
+                    <SelectItem value="LEVEL">Level</SelectItem>
+                    <SelectItem value="TEMPLATE">Specific class template</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {form.scope === "LEVEL" ? (
+                <div className="space-y-2">
+                  <Label>Level</Label>
+                  <Select
+                    value={form.levelId}
+                    onValueChange={(value) => setForm((p) => ({ ...p, levelId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {levels.map((level) => (
+                        <SelectItem key={level.id} value={level.id}>
+                          {level.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              {form.scope === "TEMPLATE" ? (
+                <div className="space-y-2">
+                  <Label>Class template</Label>
+                  <Select
+                    value={form.templateId}
+                    onValueChange={(value) => setForm((p) => ({ ...p, templateId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {formatTemplateLabel(template)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <Label>Note</Label>
+                <Textarea
+                  value={form.note}
+                  onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
+                  placeholder="Optional notes"
+                />
+              </div>
+
+              {mode === "create" ? (
+                <HolidayPaidThroughDateChoice
+                  mutation="create"
+                  value={paidThroughMode}
+                  onValueChange={setPaidThroughMode}
+                />
+              ) : null}
             </div>
-            <div className="space-y-2">
-              <Label>End date</Label>
-              <Input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm((p) => ({ ...p, endDate: e.target.value }))}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Scope</Label>
-            <Select
-              value={form.scope}
-              onValueChange={(value) =>
-                setForm((p) => ({
-                  ...p,
-                  scope: value as HolidayScope,
-                  levelId: value === "LEVEL" ? p.levelId : "",
-                  templateId: value === "TEMPLATE" ? p.templateId : "",
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="BUSINESS">All business</SelectItem>
-                <SelectItem value="LEVEL">Level</SelectItem>
-                <SelectItem value="TEMPLATE">Specific class template</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {form.scope === "LEVEL" ? (
-            <div className="space-y-2">
-              <Label>Level</Label>
-              <Select
-                value={form.levelId}
-                onValueChange={(value) => setForm((p) => ({ ...p, levelId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select level" />
-                </SelectTrigger>
-                <SelectContent>
-                  {levels.map((level) => (
-                    <SelectItem key={level.id} value={level.id}>
-                      {level.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          {form.scope === "TEMPLATE" ? (
-            <div className="space-y-2">
-              <Label>Class template</Label>
-              <Select
-                value={form.templateId}
-                onValueChange={(value) => setForm((p) => ({ ...p, templateId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select class" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {formatTemplateLabel(template)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <Label>Note</Label>
-            <Textarea
-              value={form.note}
-              onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
-              placeholder="Optional notes"
-            />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-            {submitting ? "Saving..." : mode === "create" ? "Create holiday" : "Save changes"}
-          </Button>
-        </DialogFooter>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
+                {submitting ? "Saving..." : mode === "create" ? "Create holiday" : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -25,10 +25,9 @@ import {
 } from "@/components/ui/table";
 
 import { HolidayForm } from "./HolidayForm";
-import { deleteHoliday } from "@/server/holiday/deleteHoliday";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 import type { HolidayListItem } from "@/server/holiday/listHolidays";
-import { runMutationWithToast } from "@/lib/toast/mutationToast";
+import { DeleteHolidayDialog } from "./DeleteHolidayDialog";
 
 export default function HolidaysPageClient({
   holidays,
@@ -48,29 +47,13 @@ export default function HolidaysPageClient({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<HolidayListItem | null>(null);
+  const [deleting, setDeleting] = React.useState<HolidayListItem | null>(null);
 
   const levelMap = React.useMemo(() => new Map(levels.map((level) => [level.id, level])), [levels]);
   const templateMap = React.useMemo(
     () => new Map(templates.map((template) => [template.id, template])),
     [templates]
   );
-
-  const onDelete = async (holiday: HolidayListItem) => {
-    const ok = window.confirm(`Delete holiday "${holiday.name}"?`);
-    if (!ok) return;
-    await runMutationWithToast(
-      () => deleteHoliday(holiday.id),
-      {
-        pending: { title: "Deleting holiday..." },
-        success: { title: "Holiday deleted" },
-        error: (message) => ({
-          title: "Unable to delete holiday",
-          description: message,
-        }),
-        onSuccess: () => router.refresh(),
-      }
-    );
-  };
 
   const fmtDate = (value: Date) => format(value, "MMM d, yyyy");
   const scopeLabel = (holiday: HolidayListItem) => {
@@ -154,7 +137,7 @@ export default function HolidaysPageClient({
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => onDelete(holiday)}
+                              onClick={() => setDeleting(holiday)}
                               className="text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -189,6 +172,15 @@ export default function HolidaysPageClient({
         levels={levels}
         templates={templates}
         onSaved={() => router.refresh()}
+      />
+
+      <DeleteHolidayDialog
+        holiday={deleting}
+        open={Boolean(deleting)}
+        onOpenChange={(next) => {
+          if (!next) setDeleting(null);
+        }}
+        onDeleted={() => router.refresh()}
       />
     </div>
   );

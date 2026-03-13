@@ -9,6 +9,7 @@ import type {
   NormalizedScheduleClass,
   ScheduleClassClickContext,
 } from "./schedule-types";
+import { formatHolidayLabel } from "./holiday-utils";
 import {
   SCHEDULE_TIME_ZONE,
   dayOfWeekToColumnIndex,
@@ -219,13 +220,13 @@ export default function WeekView(props: WeekViewProps) {
                 className="border-l border-border px-2 py-1 flex flex-col justify-center"
               >
                 {dayHolidays.length ? (
-                  <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
-                    {dayHolidays.map((holiday) => (
-                      <div key={holiday.id} className="truncate">
-                        Holiday: {holiday.name}
-                      </div>
-                    ))}
-                  </div>
+                    <div className="rounded-md bg-muted-foreground/20 text-muted-foreground text-xs font-medium px-2 py-1">
+                      {dayHolidays.map((holiday) => (
+                        <div key={holiday.id} className="truncate">
+                          {formatHolidayLabel(holiday)}
+                        </div>
+                      ))}
+                    </div>
                 ) : null}
               </div>
             );

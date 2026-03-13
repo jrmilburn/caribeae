@@ -1,34 +1,49 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { prisma } from "@/lib/prisma";
 import { recomputeHolidayEnrolments } from "./recomputeHolidayEnrolments";
 
-export async function deleteHoliday(id: string) {
+const mutationOptionsSchema = z
+  .object({
+    recalculatePaidThroughDates: z.boolean().optional(),
+  })
+  .optional();
+
+export async function deleteHoliday(id: string, rawOptions?: z.input<typeof mutationOptionsSchema>) {
   await getOrCreateUser();
   await requireAdmin();
 
-  const existing = await prisma.holiday.findUnique({ where: { id } });
-  if (!existing) {
-    throw new Error("Holiday not found.");
-  }
+  const options = mutationOptionsSchema.parse(rawOptions);
+  const shouldRecalculatePaidThroughDates = options?.recalculatePaidThroughDates !== false;
 
-  await prisma.holiday.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.holiday.findUnique({ where: { id } });
+    if (!existing) {
+      throw new Error("Holiday not found.");
+    }
 
-  await recomputeHolidayEnrolments(
-    [
-      {
-        startDate: existing.startDate,
-        endDate: existing.endDate,
-        levelId: existing.levelId,
-        templateId: existing.templateId,
-      },
-    ],
-    "HOLIDAY_REMOVED"
-  );
+    await tx.holiday.delete({ where: { id } });
+
+    if (shouldRecalculatePaidThroughDates) {
+      await recomputeHolidayEnrolments(
+        [
+          {
+            startDate: existing.startDate,
+            endDate: existing.endDate,
+            levelId: existing.levelId,
+            templateId: existing.templateId,
+          },
+        ],
+        "HOLIDAY_REMOVED",
+        { tx }
+      );
+    }
+  });
 
   revalidatePath("/admin/holidays");
   revalidatePath("/admin/settings/holidays");

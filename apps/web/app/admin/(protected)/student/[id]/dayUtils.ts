@@ -1,6 +1,6 @@
 import { dayOfWeekToName, SCHEDULE_TIME_ZONE, type NormalizedScheduleClass } from "@/packages/schedule";
+import { isSaturdayDayOfWeek } from "@/lib/enrolment/planDayCompatibility";
 
-export const SATURDAY_INDEX = 5;
 export type SelectionDay = "saturday" | "weekday" | "mixed" | null;
 
 export function dayOfWeekFromScheduleDate(date: Date) {
@@ -29,7 +29,7 @@ export function resolveTemplateDayOfWeek(occurrence: NormalizedScheduleClass): n
 }
 
 export function isSaturdayOccurrence(occurrence: NormalizedScheduleClass) {
-  return resolveTemplateDayOfWeek(occurrence) === SATURDAY_INDEX;
+  return isSaturdayDayOfWeek(resolveTemplateDayOfWeek(occurrence));
 }
 
 export function resolveTemplateDayName(occurrence: NormalizedScheduleClass) {

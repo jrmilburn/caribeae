@@ -839,8 +839,8 @@ function HistorySection({
     const reasonMeta: Record<string, { label: string; source: string; category: AuditCategory }> = {
       PAIDTHROUGH_MANUAL_EDIT: { label: "Paid-through updated", source: "Manual edit", category: "PAIDTHROUGH" },
       INVOICE_APPLIED: { label: "Payment applied", source: "Payment", category: "PAIDTHROUGH" },
-      HOLIDAY_ADDED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
-      HOLIDAY_REMOVED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
+      HOLIDAY_ADDED: { label: "Holiday added", source: "Recalculation", category: "COVERAGE" },
+      HOLIDAY_REMOVED: { label: "Holiday removed", source: "Recalculation", category: "COVERAGE" },
       HOLIDAY_UPDATED: { label: "Holiday updated", source: "Recalculation", category: "COVERAGE" },
       CLASS_CHANGED: { label: "Class changed", source: "Schedule update", category: "CLASS_CHANGE" },
       PLAN_CHANGED: { label: "Plan changed", source: "Billing update", category: "CLASS_CHANGE" },

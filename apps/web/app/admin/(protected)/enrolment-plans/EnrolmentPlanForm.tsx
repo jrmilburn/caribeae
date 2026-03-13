@@ -4,12 +4,12 @@ import * as React from "react";
 import type { BillingType, EnrolmentPlan, EnrolmentType, Level } from "@prisma/client";
 
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { createEnrolmentPlan } from "@/server/enrolmentPlan/createEnrolmentPlan";
@@ -58,6 +57,8 @@ export function EnrolmentPlanForm({
 }) {
   const mode: "create" | "edit" = plan ? "edit" : "create";
   const [submitting, setSubmitting] = React.useState(false);
+  const saturdayOnlyFieldId = React.useId();
+  const alternatingWeeksFieldId = React.useId();
   const [form, setForm] = React.useState<PlanFormState>(() => ({
     name: "",
     priceCents: "0",
@@ -160,13 +161,13 @@ export function EnrolmentPlanForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New enrolment plan" : "Edit enrolment plan"}</DialogTitle>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-xl">
+        <SheetHeader className="border-b px-6 py-5">
+          <SheetTitle>{mode === "create" ? "New enrolment plan" : "Edit enrolment plan"}</SheetTitle>
+        </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 px-6 py-5">
           <div className="space-y-2">
             <Label>Name</Label>
             <Input
@@ -258,9 +259,6 @@ export function EnrolmentPlanForm({
                 value={form.durationWeeks}
                 onChange={(e) => setForm((p) => ({ ...p, durationWeeks: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">
-                Weekly plans require a fixed number of weeks per invoice period.
-              </p>
             </div>
           ) : null}
 
@@ -272,9 +270,6 @@ export function EnrolmentPlanForm({
                 value={form.blockClassCount}
                 onChange={(e) => setForm((p) => ({ ...p, blockClassCount: e.target.value }))}
               />
-              <p className="text-xs text-muted-foreground">
-                Set how many class credits are sold together for each invoice. Defaults to one.
-              </p>
             </div>
           ) : null}
 
@@ -286,50 +281,48 @@ export function EnrolmentPlanForm({
               onChange={(e) => setForm((p) => ({ ...p, sessionsPerWeek: e.target.value }))}
               placeholder="Leave blank for single-session plans"
             />
-            <p className="text-xs text-muted-foreground">
-              Use this to enforce multi-session plans (e.g. 2/week for 4 weeks or 5/week intensive).
-            </p>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <div className="space-y-1">
-              <Label className="text-sm">Saturday-only plan</Label>
-              <p className="text-xs text-muted-foreground">
-                Only valid for Saturday classes. Weekday classes require a normal plan.
-              </p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 rounded-md border px-3 py-3">
+              <Checkbox
+                id={saturdayOnlyFieldId}
+                className="mt-0.5"
+                checked={form.isSaturdayOnly}
+                onCheckedChange={(checked) =>
+                  setForm((p) => ({ ...p, isSaturdayOnly: Boolean(checked) }))
+                }
+              />
+              <Label htmlFor={saturdayOnlyFieldId} className="leading-5">
+                Saturday-only plan
+              </Label>
             </div>
-            <Switch
-              checked={form.isSaturdayOnly}
-              onCheckedChange={(checked) => setForm((p) => ({ ...p, isSaturdayOnly: checked }))}
-            />
-          </div>
 
-          <div className="flex items-start gap-3 rounded-md border px-3 py-2">
-            <Checkbox
-              className="mt-0.5"
-              checked={form.alternatingWeeks}
-              onCheckedChange={(checked) =>
-                setForm((p) => ({ ...p, alternatingWeeks: Boolean(checked) }))
-              }
-            />
-            <div className="space-y-1">
-              <Label className="text-sm">Alternating weeks (every 2nd week)</Label>
-              <p className="text-xs text-muted-foreground">
-                Student attends every second week from the enrolment start date.
-              </p>
+            <div className="flex items-start gap-3 rounded-md border px-3 py-3">
+              <Checkbox
+                id={alternatingWeeksFieldId}
+                className="mt-0.5"
+                checked={form.alternatingWeeks}
+                onCheckedChange={(checked) =>
+                  setForm((p) => ({ ...p, alternatingWeeks: Boolean(checked) }))
+                }
+              />
+              <Label htmlFor={alternatingWeeksFieldId} className="leading-5">
+                Alternating weeks
+              </Label>
             </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <SheetFooter className="border-t px-6 py-4 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
             {submitting ? "Saving..." : mode === "create" ? "Create plan" : "Save changes"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

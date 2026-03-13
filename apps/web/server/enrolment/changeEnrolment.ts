@@ -86,7 +86,7 @@ type ChangeEnrolmentResult =
     };
 
 export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<ChangeEnrolmentResult> {
-  const user = await getOrCreateUser();
+  await getOrCreateUser();
   await requireAdmin();
 
   const payload = {
@@ -118,9 +118,6 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
       ? await tx.enrolmentPlan.findUnique({ where: { id: input.planId } })
       : enrolment.plan;
     if (!selectedPlan) throw new Error("Selected enrolment plan not found.");
-    if (selectedPlan.billingType !== enrolment.plan.billingType) {
-      throw new Error("Enrolment plan type must match the current enrolment billing type.");
-    }
 
     const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
     if (!effectiveLevelId) {
@@ -525,9 +522,6 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     ? await prisma.enrolmentPlan.findUnique({ where: { id: input.planId } })
     : enrolment.plan;
   if (!selectedPlan) throw new Error("Selected enrolment plan not found.");
-  if (selectedPlan.billingType !== enrolment.plan.billingType) {
-    throw new Error("Enrolment plan type must match the current enrolment billing type.");
-  }
 
   const effectiveLevelId = input.effectiveLevelId ?? enrolment.student?.levelId ?? null;
   if (!effectiveLevelId) {
@@ -624,7 +618,7 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     templateEndDates.length > 0
       ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
       : null;
-  const plannedEndDate = resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
+  resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
 
   const oldPaidThrough = resolveChangeOverPaidThroughDate(
     enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null

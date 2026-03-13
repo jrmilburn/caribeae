@@ -26,6 +26,7 @@ import {
   scheduleDayOfWeekIndex,
   scheduleWeekStart,
 } from "./schedule-date-utils";
+import { holidayAppliesToScheduleClass } from "./holiday-utils";
 
 export type ScheduleViewHandle = {
   /** Re-fetches schedule data without flipping `loading` (prevents UI “reload” / unmount). */
@@ -44,6 +45,7 @@ export type ScheduleViewProps = {
   dataEndpoint?: string;
   onSlotClick?: (date: Date, dayOfWeek: number) => void;
   onClassClick?: (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => void;
+  classFilter?: (occurrence: NormalizedScheduleClass) => boolean;
   defaultViewMode?: "week" | "day";
   viewMode?: "week" | "day";
   showHeader?: boolean;
@@ -70,6 +72,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       dataEndpoint = "/api/admin/class-templates",
       onSlotClick,
       onClassClick,
+      classFilter,
       defaultViewMode = "week",
       viewMode: controlledViewMode,
       showHeader = true,
@@ -226,7 +229,7 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       return () => {
         cancelled = true;
       };
-    }, [adapter, weekStart, displayWeekEnd, levelFilter, makeupOnly]);
+    }, [adapter, weekStart, displayWeekEnd, levelFilter, makeupOnly, suppressLoading]);
 
     React.useEffect(() => {
       let cancelled = false;
@@ -304,14 +307,15 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
       const levelId = levelFilter;
       const teacherId = teacherFilter;
 
-      if (!levelId && !teacherId) return classes;
+      if (!levelId && !teacherId && !classFilter) return classes;
 
       return classes.filter((c) => {
         if (levelId && c.levelId !== levelId) return false;
         if (teacherId && c.teacherId !== teacherId) return false;
+        if (classFilter && !classFilter(c)) return false;
         return true;
       });
-    }, [classes, levelFilter, teacherFilter]);
+    }, [classFilter, classes, levelFilter, teacherFilter]);
 
     const holidayIndex = useMemo(() => {
       const index = new Map<string, Holiday[]>();
@@ -329,7 +333,10 @@ export const ScheduleView = React.forwardRef<ScheduleViewHandle, ScheduleViewPro
     const visibleClasses = useMemo(
       () =>
         filteredClasses.filter(
-          (occurrence) => !holidayIndex.has(scheduleDateKey(occurrence.startTime))
+          (occurrence) =>
+            !(holidayIndex.get(scheduleDateKey(occurrence.startTime)) ?? []).some((holiday) =>
+              holidayAppliesToScheduleClass(holiday, occurrence)
+            )
         ),
       [filteredClasses, holidayIndex]
     );

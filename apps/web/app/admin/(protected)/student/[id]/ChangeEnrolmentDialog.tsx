@@ -41,7 +41,12 @@ import {
 } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment, previewChangeEnrolment } from "@/server/enrolment/changeEnrolment";
-import { dayOfWeekFromScheduleDate, isSaturdayOccurrence, resolveSelectionDay } from "./dayUtils";
+import {
+  isDayOfWeekCompatibleWithPlan,
+  SATURDAY_DAY_INDEX,
+  resolvePlanDayConstraint,
+} from "@/lib/enrolment/planDayCompatibility";
+import { dayOfWeekFromScheduleDate } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
 import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
 import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
@@ -85,39 +90,29 @@ export function ChangeEnrolmentDialog({
     details: CapacityExceededDetails;
     confirmShorten?: boolean;
   } | null>(null);
+  const preferredLevelId = studentLevelId ?? enrolment.plan.levelId ?? null;
 
   const selectedPlan = React.useMemo(
     () => enrolmentPlans.find((plan) => plan.id === planId) ?? enrolment.plan,
     [enrolment.plan, enrolmentPlans, planId]
   );
 
-  const selectionDayType = React.useMemo(
-    () => resolveSelectionDay(selectedTemplates),
-    [selectedTemplates]
-  );
   const availablePlans = React.useMemo(() => {
     const levelFiltered = enrolmentPlans.filter(
-      (plan) => plan.levelId === enrolment.plan.levelId && plan.billingType === enrolment.plan.billingType
+      (plan) => !preferredLevelId || plan.levelId === preferredLevelId
     );
-    let filtered = levelFiltered;
-    if (selectionDayType === "saturday") {
-      filtered = levelFiltered.filter((plan) => plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
+    if (!levelFiltered.find((plan) => plan.id === enrolment.plan.id)) {
+      return [enrolment.plan, ...levelFiltered];
     }
-    if (selectionDayType === "weekday") {
-      filtered = levelFiltered.filter((plan) => !plan.isSaturdayOnly || plan.billingType === "PER_WEEK");
-    }
-    if (!filtered.find((plan) => plan.id === enrolment.plan.id)) {
-      filtered = [enrolment.plan, ...filtered];
-    }
-    return filtered;
-  }, [enrolment.plan, enrolmentPlans, selectionDayType]);
+    return levelFiltered;
+  }, [enrolment.plan, enrolmentPlans, preferredLevelId]);
 
   const selectionRequirement = React.useMemo(
     () => getSelectionRequirement(selectedPlan),
     [selectedPlan]
   );
   const planIsWeekly = selectedPlan.billingType === "PER_WEEK";
-  const planDay = selectedPlan.isSaturdayOnly ? "saturday" : planIsWeekly ? "any" : "weekday";
+  const planDayConstraint = resolvePlanDayConstraint(selectedPlan);
 
   React.useEffect(() => {
     if (open) {
@@ -148,7 +143,7 @@ export function ChangeEnrolmentDialog({
           ? enrolment.endDate
           : new Date(enrolment.endDate)
         : start;
-      const dayOfWeek = dayOfWeekFromScheduleDate(start);
+      const dayOfWeek = enrolment.plan.isSaturdayOnly ? SATURDAY_DAY_INDEX : dayOfWeekFromScheduleDate(start);
       const dayName = dayOfWeekToName(dayOfWeek);
 
       map[id] = {
@@ -166,6 +161,19 @@ export function ChangeEnrolmentDialog({
     setSelectedTemplates(map);
   }, [enrolment, initialTemplateIds, open]);
 
+  React.useEffect(() => {
+    if (!open) return;
+    setSelectedTemplates((prev) => {
+      const nextEntries = Object.entries(prev).filter(([, occurrence]) =>
+        classMatchesPlan(selectedPlan, occurrence)
+      );
+      if (nextEntries.length === Object.keys(prev).length) {
+        return prev;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+  }, [open, selectedPlan]);
+
   const selectedTemplateIds = React.useMemo(
     () => Object.keys(selectedTemplates),
     [selectedTemplates]
@@ -180,6 +188,19 @@ export function ChangeEnrolmentDialog({
   const effectiveLevelId = studentLevelId ?? selectedPlan.levelId ?? null;
   const effectiveLevel = levels.find((level) => level.id === effectiveLevelId) ?? null;
   const scheduleBlocked = !effectiveLevelId;
+  const scheduleClassFilter = React.useCallback(
+    (occurrence: NormalizedScheduleClass) => classMatchesPlan(selectedPlan, occurrence),
+    [selectedPlan]
+  );
+  const scheduleAvailabilityLabel = React.useMemo(() => {
+    if (planDayConstraint === "saturday") {
+      return "Showing Saturday classes for the selected plan.";
+    }
+    if (planDayConstraint === "weekday") {
+      return "Showing weekday classes for the selected plan.";
+    }
+    return "Showing all classes for this level.";
+  }, [planDayConstraint]);
 
   const onClassClick = (occurrence: NormalizedScheduleClass, context?: ScheduleClassClickContext) => {
     if (!effectiveLevelId) {
@@ -195,22 +216,8 @@ export function ChangeEnrolmentDialog({
       return;
     }
 
-    const occurrenceIsSaturday = isSaturdayOccurrence(occurrence);
-    const currentDayType = resolveSelectionDay(selectedTemplates);
-    if (!planIsWeekly && planDay === "saturday" && !occurrenceIsSaturday) {
-      toast.error("Saturday-only plans can only be used for Saturday classes.");
-      return;
-    }
-    if (!planIsWeekly && planDay === "weekday" && occurrenceIsSaturday) {
-      toast.error("Use a Saturday-only plan for Saturday classes.");
-      return;
-    }
-    if (
-      !planIsWeekly &&
-      currentDayType &&
-      currentDayType !== (occurrenceIsSaturday ? "saturday" : "weekday")
-    ) {
-      toast.error("Select classes that match the plan's day.");
+    if (!classMatchesPlan(selectedPlan, occurrence)) {
+      toast.error(incompatibleClassMessage(selectedPlan, occurrence));
       return;
     }
 
@@ -393,7 +400,11 @@ export function ChangeEnrolmentDialog({
               Showing classes for {effectiveLevel?.name ?? "—"}
             </Badge>
           </div>
-          {scheduleBlocked ? <span className="text-destructive">Set student level first</span> : null}
+          {scheduleBlocked ? (
+            <span className="text-destructive">Set student level first</span>
+          ) : (
+            <span>{scheduleAvailabilityLabel}</span>
+          )}
         </div>
         {scheduleBlocked ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -408,6 +419,7 @@ export function ChangeEnrolmentDialog({
               defaultViewMode="week"
               mode="enrolmentChange"
               selectedTemplateIds={selectedTemplateIds}
+              classFilter={scheduleClassFilter}
               filters={{ levelId: effectiveLevelId, teacherId: null }}
             />
           </div>
@@ -597,4 +609,31 @@ function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate
     startTime: alignedStart,
     endTime: alignedEnd,
   };
+}
+
+function classMatchesPlan(plan: EnrolmentPlan, occurrence: Pick<NormalizedScheduleClass, "dayOfWeek" | "template">) {
+  const dayOfWeek =
+    typeof occurrence.dayOfWeek === "number" ? occurrence.dayOfWeek : occurrence.template?.dayOfWeek ?? null;
+  return isDayOfWeekCompatibleWithPlan(plan, dayOfWeek);
+}
+
+function incompatibleClassMessage(
+  plan: EnrolmentPlan,
+  occurrence: Pick<NormalizedScheduleClass, "dayOfWeek" | "template">
+) {
+  if (!classMatchesPlan(plan, occurrence)) {
+    return planDayCompatibilityMessage(plan);
+  }
+  return "Select classes that match the selected plan.";
+}
+
+function planDayCompatibilityMessage(plan: EnrolmentPlan) {
+  const constraint = resolvePlanDayConstraint(plan);
+  if (constraint === "saturday") {
+    return "Saturday-only plans can only be used for Saturday classes.";
+  }
+  if (constraint === "weekday") {
+    return "Use a Saturday-only plan for Saturday classes.";
+  }
+  return "Select classes that match the selected plan.";
 }

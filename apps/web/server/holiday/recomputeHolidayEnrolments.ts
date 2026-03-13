@@ -1,4 +1,4 @@
-import { EnrolmentStatus, type Prisma } from "@prisma/client";
+import { EnrolmentStatus, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -14,10 +14,14 @@ import type { HolidayRange } from "./holidayUtils";
 const BATCH_SIZE = 25;
 
 type HolidayScope = HolidayRange & { levelId?: string | null; templateId?: string | null };
+type RecomputeHolidayEnrolmentsOptions = {
+  tx?: Prisma.TransactionClient;
+};
 
 export async function recomputeHolidayEnrolments(
   holidays: HolidayScope[],
-  reason: "HOLIDAY_ADDED" | "HOLIDAY_REMOVED" | "HOLIDAY_UPDATED" = "HOLIDAY_UPDATED"
+  reason: "HOLIDAY_ADDED" | "HOLIDAY_REMOVED" | "HOLIDAY_UPDATED" = "HOLIDAY_UPDATED",
+  opts?: RecomputeHolidayEnrolmentsOptions
 ) {
   if (!holidays.length) return;
 
@@ -94,7 +98,8 @@ export async function recomputeHolidayEnrolments(
 
   if (!scopeClauses.length) return;
 
-  const enrolments = await prisma.enrolment.findMany({
+  const client: Prisma.TransactionClient | PrismaClient = opts?.tx ?? prisma;
+  const enrolments = await client.enrolment.findMany({
     where: {
       status: EnrolmentStatus.ACTIVE,
       startDate: { lte: maxEnd },
@@ -105,6 +110,16 @@ export async function recomputeHolidayEnrolments(
 
   for (let i = 0; i < enrolments.length; i += BATCH_SIZE) {
     const batch = enrolments.slice(i, i + BATCH_SIZE);
+    if (opts?.tx) {
+      for (const enrolment of batch) {
+        await recalculateEnrolmentCoverage(enrolment.id, reason, {
+          actorId: undefined,
+          tx: opts.tx,
+        });
+      }
+      continue;
+    }
+
     await Promise.all(
       batch.map((enrolment) => recalculateEnrolmentCoverage(enrolment.id, reason, { actorId: undefined }))
     );
