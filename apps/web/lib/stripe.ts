@@ -35,23 +35,39 @@ function readConnectType(): "standard" {
   return "standard";
 }
 
-const stripeSecretKey = requireEnv("STRIPE_SECRET_KEY");
-const appBaseUrl = readAppUrl();
-const connectAccountType = readConnectType();
+let stripeClient: Stripe | null = null;
 
-const configuredApiVersion = process.env.STRIPE_API_VERSION?.trim();
+function createStripeClient() {
+  const configuredApiVersion = process.env.STRIPE_API_VERSION?.trim();
 
-export const stripe = new Stripe(stripeSecretKey, {
-  ...(configuredApiVersion
-    ? {
-        // Keep this aligned with the Stripe version configured for the app.
-        apiVersion: configuredApiVersion as Stripe.StripeConfig["apiVersion"],
-      }
-    : {}),
+  return new Stripe(requireEnv("STRIPE_SECRET_KEY"), {
+    ...(configuredApiVersion
+      ? {
+          // Keep this aligned with the Stripe version configured for the app.
+          apiVersion: configuredApiVersion as Stripe.StripeConfig["apiVersion"],
+        }
+      : {}),
+  });
+}
+
+export function getStripeClient() {
+  if (!stripeClient) {
+    stripeClient = createStripeClient();
+  }
+
+  return stripeClient;
+}
+
+export const stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    const client = getStripeClient();
+    const value = Reflect.get(client as object, prop);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
 });
 
 export function getAppBaseUrl() {
-  return appBaseUrl;
+  return readAppUrl();
 }
 
 export function getStripeWebhookSecret() {
@@ -59,11 +75,11 @@ export function getStripeWebhookSecret() {
 }
 
 export function getSupportedStripeConnectAccountType() {
-  return connectAccountType;
+  return readConnectType();
 }
 
 export function getStripeDashboardUrl() {
-  return stripeSecretKey.startsWith("sk_test_")
+  return process.env.STRIPE_SECRET_KEY?.trim().startsWith("sk_test_")
     ? "https://dashboard.stripe.com/test"
     : "https://dashboard.stripe.com";
 }

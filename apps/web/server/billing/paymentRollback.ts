@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { BillingType, EnrolmentCreditEventType, InvoiceLineItemKind, InvoiceStatus, type Prisma } from "@prisma/client";
 
