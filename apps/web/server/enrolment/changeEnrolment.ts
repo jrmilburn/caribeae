@@ -2,31 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { EnrolmentStatus } from "@prisma/client";
-import { addDays, isAfter, isBefore, startOfDay } from "date-fns";
+import { isAfter, startOfDay } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { getSelectionRequirement, normalizeStartDate, resolvePlannedEndDate } from "@/server/enrolment/planRules";
-import { brisbaneStartOfDay, toBrisbaneDayKey } from "@/server/dates/brisbaneDay";
 import { validateSelection } from "@/server/enrolment/validateSelection";
-import {
-  CoverageWouldShortenError,
-  wouldShortenCoverage,
-} from "@/server/billing/recalculateEnrolmentCoverage";
-import { adjustCreditsForManualPaidThroughDate } from "@/server/billing/enrolmentBilling";
 import { describeTemplate } from "@/server/billing/paidThroughTemplateChange";
 import { EnrolmentValidationError, validateNoDuplicateEnrolments } from "./enrolmentValidation";
 import { assertPlanMatchesTemplates } from "./planCompatibility";
 import { getCapacityIssueForTemplateRange } from "@/server/class/capacity";
 import type { CapacityExceededDetails } from "@/lib/capacityError";
 import {
-  applyClassChangeSettlement,
-  buildClassChangeSettlementKey,
-  computeClassChangeSettlementForRange,
-  resolveChangeOverPaidThroughDate,
-  type ClassChangeSettlementSummary,
-} from "@/server/billing/classChangeSettlement";
+  confirmEnrolmentTransfer,
+  previewEnrolmentTransfer,
+  type EnrolmentTransferPreview,
+} from "@/server/enrolment/enrolmentTransfer";
 
 type ChangeEnrolmentInput = {
   enrolmentId: string;
@@ -34,8 +26,13 @@ type ChangeEnrolmentInput = {
   startDate?: string;
   effectiveLevelId?: string | null;
   planId?: string | null;
-  confirmShorten?: boolean;
   allowOverload?: boolean;
+  idempotencyKey?: string;
+  applyOverpaidCredit?: boolean;
+  takePaymentNow?: boolean;
+  paymentMethod?: string;
+  paymentNote?: string;
+  paymentPaidAt?: string;
 };
 
 type PreviewChangeEnrolmentInput = {
@@ -44,6 +41,7 @@ type PreviewChangeEnrolmentInput = {
   startDate?: string;
   effectiveLevelId?: string | null;
   planId?: string | null;
+  applyOverpaidCredit?: boolean;
 };
 
 type ChangeEnrolmentResult =
@@ -62,19 +60,16 @@ type ChangeEnrolmentResult =
         originalTemplates: string[];
         oldTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
         newTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
-        settlement: ClassChangeSettlementSummary;
-        settlementInvoiceId: string | null;
-        settlementPaymentId: string | null;
+        transferPreview: EnrolmentTransferPreview;
+        oldInvoiceId: string | null;
+        newInvoiceId: string | null;
+        creditPaymentId: string | null;
+        paymentId: string | null;
       };
     }
   | {
       ok: false;
       error:
-        | {
-            code: "COVERAGE_WOULD_SHORTEN";
-            oldDateKey: string | null;
-            newDateKey: string | null;
-          }
         | {
             code: "CAPACITY_EXCEEDED";
             details: CapacityExceededDetails;
@@ -322,110 +317,42 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         : null;
 
     const plannedEndDate = resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
-
-    const endBoundary = addDays(baseStart, -1);
-    const enrolmentStart = startOfDay(enrolment.startDate);
-    const effectiveEnd = isBefore(endBoundary, enrolmentStart) ? enrolmentStart : endBoundary;
-
-    const currentPaidThrough = resolveChangeOverPaidThroughDate(
-      enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null
-    );
-
-    const nextEnrolment = await tx.enrolment.create({
-      data: {
-        templateId: anchorTemplate?.id ?? enrolment.templateId,
-        studentId: enrolment.studentId,
-        startDate: baseStart,
-        endDate: plannedEndDate,
-        status: EnrolmentStatus.ACTIVE,
-        planId: selectedPlan.id,
-        billingGroupId: enrolment.billingGroupId ?? null,
-        paidThroughDate: currentPaidThrough,
-        paidThroughDateComputed: currentPaidThrough,
-        creditsRemaining: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
-        creditsBalanceCached: selectedPlan.billingType === "PER_CLASS" ? 0 : null,
-      },
-      include: {
-        student: true,
-        template: true,
-        plan: true,
-        classAssignments: {
-          include: {
-            template: true,
-          },
-        },
-      },
-    });
-
-    await tx.enrolmentClassAssignment.createMany({
-      data: templateIds.map((templateId) => ({
-        enrolmentId: nextEnrolment.id,
-        templateId,
-      })),
-      skipDuplicates: true,
-    });
-
-    if (selectedPlan.billingType === "PER_CLASS") {
-      await adjustCreditsForManualPaidThroughDate(tx, nextEnrolment, currentPaidThrough);
+    if (!input.idempotencyKey) {
+      throw new Error("Transfer idempotency key is required.");
     }
 
-    await tx.enrolment.update({
-      where: { id: enrolment.id },
-      data: {
-        endDate: effectiveEnd,
-        status: EnrolmentStatus.CHANGEOVER,
-        cancelledAt: null,
-      },
-    });
-
-    const settlement = await computeClassChangeSettlementForRange({
-      client: tx,
-      oldPlan: enrolment.plan,
-      newPlan: selectedPlan,
-      changeOverDate: baseStart,
-      paidThroughDate: currentPaidThrough,
-      templates: templates.map((template) => ({
-        id: template.id,
-        dayOfWeek: template.dayOfWeek ?? null,
-        levelId: template.levelId ?? null,
-      })),
-    });
-
-    if (!input.confirmShorten && wouldShortenCoverage(currentPaidThrough, settlement.paidThroughDate)) {
-      throw new CoverageWouldShortenError({
-        oldDateKey: currentPaidThrough ? toBrisbaneDayKey(brisbaneStartOfDay(currentPaidThrough)) : null,
-        newDateKey: settlement.paidThroughDate ? toBrisbaneDayKey(brisbaneStartOfDay(settlement.paidThroughDate)) : null,
-      });
-    }
-
-    const settlementKey = buildClassChangeSettlementKey({
-      enrolmentId: enrolment.id,
+    const transfer = await confirmEnrolmentTransfer({
+      oldEnrolmentId: enrolment.id,
       newPlanId: selectedPlan.id,
-      changeOverDate: baseStart,
-      paidThroughDate: currentPaidThrough,
-      templateIds,
-    });
-    if (settlement.differenceCents !== 0 && !enrolment.student?.familyId) {
-      throw new Error("Family not found for settlement.");
-    }
-
-    const settlementResult = await applyClassChangeSettlement({
+      newTemplates: templates.map((template) => ({
+        id: template.id,
+        levelId: template.levelId ?? null,
+        dayOfWeek: template.dayOfWeek ?? null,
+        startDate: template.startDate,
+        endDate: template.endDate,
+        startTime: template.startTime ?? null,
+        name: template.name ?? null,
+      })),
+      transferEffectiveAt: baseStart,
+      plannedEndDate,
+      anchorTemplateId: anchorTemplate?.id ?? enrolment.templateId,
+      applyOverpaidCredit: input.applyOverpaidCredit ?? true,
+      idempotencyKey: input.idempotencyKey,
+      takePaymentNow: input.takePaymentNow ?? false,
+      paymentMethod: input.paymentMethod,
+      paymentNote: input.paymentNote,
+      paymentPaidAt: input.paymentPaidAt ? normalizeStartDate(input.paymentPaidAt) : undefined,
       client: tx,
-      familyId: enrolment.student?.familyId ?? "",
-      enrolmentId: nextEnrolment.id,
-      settlement,
-      settlementKey,
-      planId: selectedPlan.id,
     });
 
     return {
       data: {
         enrolments: [
           {
-            id: nextEnrolment.id,
-            studentId: nextEnrolment.studentId,
-            familyId: nextEnrolment.student?.familyId ?? null,
-            templateId: nextEnrolment.templateId,
+            id: transfer.newEnrolmentId,
+            studentId: enrolment.studentId,
+            familyId: enrolment.student?.familyId ?? null,
+            templateId: anchorTemplate?.id ?? enrolment.templateId,
           },
         ],
         templateIds,
@@ -434,9 +361,11 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
         originalTemplates: enrolment.classAssignments.map((a) => a.templateId),
         oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
         newTemplates: templates.map((template) => describeTemplate(template)),
-        settlement,
-        settlementInvoiceId: settlementResult.invoiceId,
-        settlementPaymentId: settlementResult.paymentId,
+        transferPreview: transfer.preview,
+        oldInvoiceId: transfer.oldInvoiceId,
+        newInvoiceId: transfer.newInvoiceId,
+        creditPaymentId: transfer.creditPaymentId,
+        paymentId: transfer.paymentId,
       },
     };
   });
@@ -469,16 +398,6 @@ export async function changeEnrolment(input: ChangeEnrolmentInput): Promise<Chan
 
     return { ok: true as const, data: result.data };
   } catch (error) {
-    if (error instanceof CoverageWouldShortenError) {
-      return {
-        ok: false as const,
-        error: {
-          code: "COVERAGE_WOULD_SHORTEN",
-          oldDateKey: error.oldDateKey,
-          newDateKey: error.newDateKey,
-        },
-      };
-    }
     if (error instanceof Error) {
       return {
         ok: false as const,
@@ -608,47 +527,34 @@ export async function previewChangeEnrolment(input: PreviewChangeEnrolmentInput)
     }
   }
 
-  const oldTemplates = enrolment.classAssignments.length
-    ? enrolment.classAssignments.map((assignment) => assignment.template).filter(Boolean)
-    : enrolment.template
-      ? [enrolment.template]
-      : [];
   const templateEndDates = templates.map((template) => template.endDate).filter(Boolean) as Date[];
   const earliestEnd =
     templateEndDates.length > 0
       ? templateEndDates.reduce((acc, end) => (acc < end ? acc : end))
       : null;
-  resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
-
-  const oldPaidThrough = resolveChangeOverPaidThroughDate(
-    enrolment.paidThroughDate ?? enrolment.paidThroughDateComputed ?? null
-  );
-
-  const settlement = await computeClassChangeSettlementForRange({
-    client: prisma,
-    oldPlan: enrolment.plan,
-    newPlan: selectedPlan,
-    changeOverDate: baseStart,
-    paidThroughDate: oldPaidThrough,
-    templates: templates.map((template) => ({
+  const plannedEndDate = resolvePlannedEndDate(selectedPlan, baseStart, enrolment.endDate ?? null, earliestEnd);
+  const anchorTemplate = resolveAnchorTemplate(templates);
+  const preview = await previewEnrolmentTransfer({
+    oldEnrolmentId: enrolment.id,
+    newPlanId: selectedPlan.id,
+    newTemplates: templates.map((template) => ({
       id: template.id,
-      dayOfWeek: template.dayOfWeek ?? null,
       levelId: template.levelId ?? null,
+      dayOfWeek: template.dayOfWeek ?? null,
+      startDate: template.startDate,
+      endDate: template.endDate,
+      name: template.name ?? null,
     })),
+    transferEffectiveAt: baseStart,
+    plannedEndDate,
+    anchorTemplateId: anchorTemplate?.id ?? enrolment.templateId,
+    applyOverpaidCredit: input.applyOverpaidCredit ?? true,
+    client: prisma,
   });
-
-  const wouldShorten = wouldShortenCoverage(oldPaidThrough, settlement.paidThroughDate);
 
   return {
     ok: true as const,
-    data: {
-      oldPaidThroughDateKey: oldPaidThrough ? toBrisbaneDayKey(brisbaneStartOfDay(oldPaidThrough)) : null,
-      newPaidThroughDateKey: settlement.paidThroughDate ? toBrisbaneDayKey(brisbaneStartOfDay(settlement.paidThroughDate)) : null,
-      oldTemplates: oldTemplates.map((template) => describeTemplate(template)),
-      newTemplates: templates.map((template) => describeTemplate(template)),
-      wouldShorten,
-      settlement,
-    },
+    data: preview,
   };
 }
 

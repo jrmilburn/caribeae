@@ -434,6 +434,11 @@ model Enrolment {
   billingGroupId   String?
   isBillingPrimary Boolean @default(true)
   billingPrimaryId String?
+  transferFromEnrolmentId String?
+  transferFromEnrolment   Enrolment? @relation("EnrolmentTransferSource", fields: [transferFromEnrolmentId], references: [id], onDelete: SetNull)
+  transferredEnrolments   Enrolment[] @relation("EnrolmentTransferSource")
+  transferEffectiveAt     DateTime?
+  transferMetadata        Json?
 
   startDate   DateTime
   endDate     DateTime?
@@ -454,6 +459,8 @@ model Enrolment {
   classAssignments  EnrolmentClassAssignment[]
   creditEvents      EnrolmentCreditEvent[]
   coverageAudits    EnrolmentCoverageAudit[]
+  initiatedTransfers EnrolmentTransfer[] @relation("EnrolmentTransferOld")
+  resultingTransfers EnrolmentTransfer[] @relation("EnrolmentTransferNew")
 
   invoices Invoice[]
 
@@ -466,6 +473,45 @@ model Enrolment {
   @@index([templateId, startDate])
   @@index([templateId, endDate])
   @@index([billingGroupId])
+  @@index([transferFromEnrolmentId])
+  @@index([transferEffectiveAt])
+}
+
+model EnrolmentTransfer {
+  id String @id @default(cuid())
+
+  oldEnrolmentId String @unique
+  oldEnrolment   Enrolment @relation("EnrolmentTransferOld", fields: [oldEnrolmentId], references: [id], onDelete: Cascade)
+
+  newEnrolmentId String @unique
+  newEnrolment   Enrolment @relation("EnrolmentTransferNew", fields: [newEnrolmentId], references: [id], onDelete: Cascade)
+
+  familyId String?
+
+  transferEffectiveAt DateTime
+  idempotencyKey      String @unique
+
+  applyOverpaidCredit      Boolean @default(true)
+  takePaymentNow           Boolean @default(false)
+  oldOutstandingCents      Int     @default(0)
+  oldOverpaidCreditCents   Int     @default(0)
+  releasedPaymentCreditCents Int   @default(0)
+  newBlockChargeCents      Int     @default(0)
+  creditAppliedCents       Int     @default(0)
+  paymentAmountCents       Int     @default(0)
+
+  oldInvoiceId     String?
+  newInvoiceId     String?
+  creditPaymentId  String?
+  paymentId        String?
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId, createdAt])
+  @@index([transferEffectiveAt])
 }
 
 model EnrolmentCoverageAudit {

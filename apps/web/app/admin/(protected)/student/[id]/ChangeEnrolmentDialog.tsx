@@ -22,6 +22,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -41,6 +44,7 @@ import {
 } from "@/packages/schedule";
 import { getSelectionRequirement } from "@/server/enrolment/planRules";
 import { changeEnrolment, previewChangeEnrolment } from "@/server/enrolment/changeEnrolment";
+import type { EnrolmentTransferPreview } from "@/server/enrolment/enrolmentTransfer";
 import {
   isDayOfWeekCompatibleWithPlan,
   SATURDAY_DAY_INDEX,
@@ -50,8 +54,11 @@ import { dayOfWeekFromScheduleDate } from "./dayUtils";
 import { Badge } from "@/components/ui/badge";
 import { CapacityOverloadDialog } from "@/components/admin/CapacityOverloadDialog";
 import { parseCapacityError, type CapacityExceededDetails } from "@/lib/capacityError";
+import { formatCurrencyFromCents } from "@/lib/currency";
+import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 type EnrolmentWithPlan = Enrolment & { plan: EnrolmentPlan; templateId: string };
+const PAYMENT_METHODS = ["Cash", "Card", "Direct debit", "Client portal"] as const;
 
 export function ChangeEnrolmentDialog({
   enrolment,
@@ -80,15 +87,16 @@ export function ChangeEnrolmentDialog({
   const [startDate, setStartDate] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
   const [confirming, setConfirming] = React.useState<{
-    oldDateKey: string | null;
-    newDateKey: string | null;
-    oldTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
-    newTemplates: Array<{ id: string; name: string; dayOfWeek: number | null }>;
-    wouldShorten: boolean;
+    preview: EnrolmentTransferPreview;
+    applyOverpaidCredit: boolean;
+    takePaymentNow: boolean;
+    paymentMethod: (typeof PAYMENT_METHODS)[number];
+    paymentNote: string;
+    paymentPaidAt: string;
+    idempotencyKey: string;
   } | null>(null);
   const [capacityWarning, setCapacityWarning] = React.useState<{
     details: CapacityExceededDetails;
-    confirmShorten?: boolean;
   } | null>(null);
   const preferredLevelId = studentLevelId ?? enrolment.plan.levelId ?? null;
 
@@ -245,13 +253,17 @@ export function ChangeEnrolmentDialog({
     });
   };
 
-  const handleSave = async (confirmShorten?: boolean, allowOverload?: boolean) => {
+  const handleSave = async (allowOverload?: boolean) => {
     if (!effectiveLevelId) {
       toast.error("Set the student's level first.");
       return;
     }
     if (!canSubmit) {
       toast.error(selectionRequirement.helper);
+      return;
+    }
+    if (!confirming) {
+      toast.error("Preview the transfer first.");
       return;
     }
 
@@ -263,22 +275,17 @@ export function ChangeEnrolmentDialog({
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
         planId: planId || undefined,
-        confirmShorten,
         allowOverload,
+        idempotencyKey: confirming.idempotencyKey,
+        applyOverpaidCredit: confirming.applyOverpaidCredit,
+        takePaymentNow: confirming.takePaymentNow,
+        paymentMethod: confirming.takePaymentNow ? confirming.paymentMethod : undefined,
+        paymentNote: confirming.takePaymentNow ? confirming.paymentNote : undefined,
+        paymentPaidAt: confirming.takePaymentNow ? `${confirming.paymentPaidAt}T00:00:00` : undefined,
       });
       if (!result.ok) {
-        if (result.error.code === "COVERAGE_WOULD_SHORTEN") {
-          setConfirming({
-            oldDateKey: result.error.oldDateKey,
-            newDateKey: result.error.newDateKey,
-            oldTemplates: [],
-            newTemplates: [],
-            wouldShorten: true,
-          });
-          return;
-        }
         if (result.error.code === "CAPACITY_EXCEEDED") {
-          setCapacityWarning({ details: result.error.details, confirmShorten });
+          setCapacityWarning({ details: result.error.details });
           return;
         }
         toast.error(result.error.message);
@@ -292,7 +299,7 @@ export function ChangeEnrolmentDialog({
       console.error(err);
       const details = parseCapacityError(err);
       if (details) {
-        setCapacityWarning({ details, confirmShorten });
+        setCapacityWarning({ details });
         return;
       }
       toast.error(err instanceof Error ? err.message : "Unable to change enrolment.");
@@ -319,15 +326,18 @@ export function ChangeEnrolmentDialog({
         startDate: `${startDate}T00:00:00`,
         effectiveLevelId,
         planId: planId || undefined,
+        applyOverpaidCredit: true,
       });
 
       if (preview.ok) {
         setConfirming({
-          oldDateKey: preview.data.oldPaidThroughDateKey,
-          newDateKey: preview.data.newPaidThroughDateKey,
-          oldTemplates: preview.data.oldTemplates,
-          newTemplates: preview.data.newTemplates,
-          wouldShorten: preview.data.wouldShorten,
+          preview: preview.data,
+          applyOverpaidCredit: true,
+          takePaymentNow: false,
+          paymentMethod: "Cash",
+          paymentNote: "",
+          paymentPaidAt: new Date().toISOString().slice(0, 10),
+          idempotencyKey: crypto.randomUUID(),
         });
       }
     } catch (err) {
@@ -342,6 +352,11 @@ export function ChangeEnrolmentDialog({
     const dayLabel = template.dayOfWeek === null ? "—" : dayOfWeekToName(template.dayOfWeek);
     return `${template.name} · ${dayLabel}`;
   };
+
+  const transferBreakdown = React.useMemo(() => {
+    if (!confirming) return null;
+    return buildTransferAllocationPlan(confirming.preview, confirming.applyOverpaidCredit);
+  }, [confirming]);
 
   const mainContent = (
     <div className="space-y-3">
@@ -457,7 +472,7 @@ export function ChangeEnrolmentDialog({
             Cancel
           </Button>
           <Button onClick={() => void handlePreview()} disabled={!canSubmit}>
-            {saving ? "Saving..." : "Save changes"}
+            {saving ? "Loading..." : "Review transfer"}
           </Button>
         </div>
       </div>
@@ -466,22 +481,212 @@ export function ChangeEnrolmentDialog({
 
   const confirmationContent = (
     <>
-      <div className="space-y-2 text-sm">
+      <div className="space-y-4 text-sm">
         <div>
           <span className="font-medium">Current templates:</span>{" "}
-          {confirming?.oldTemplates.length
-            ? confirming.oldTemplates.map(formatTemplateLabel).join(", ")
+          {confirming?.preview.oldTemplates.length
+            ? confirming.preview.oldTemplates.map(formatTemplateLabel).join(", ")
             : "—"}
         </div>
         <div>
           <span className="font-medium">New templates:</span>{" "}
-          {confirming?.newTemplates.length
-            ? confirming.newTemplates.map(formatTemplateLabel).join(", ")
+          {confirming?.preview.newTemplates.length
+            ? confirming.preview.newTemplates.map(formatTemplateLabel).join(", ")
             : "—"}
         </div>
+        <div className="rounded-md border bg-muted/40 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Old outstanding
+              </div>
+              <div className="mt-1 font-semibold">
+                {formatCurrencyFromCents(confirming?.preview.oldOutstandingCents ?? 0)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                New block charge
+              </div>
+              <div className="mt-1 font-semibold">
+                {formatCurrencyFromCents(confirming?.preview.newBlockChargeCents ?? 0)}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Paid future credit
+              </div>
+              <div className="mt-1 font-semibold">
+                {formatCurrencyFromCents(-(confirming?.preview.oldOverpaidCreditCents ?? 0))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Prior invoice payments
+              </div>
+              <div className="mt-1 font-semibold">
+                {formatCurrencyFromCents(-(confirming?.preview.releasedPaymentCreditCents ?? 0))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 border-t pt-3">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">Total due today</span>
+              <span className="font-semibold">
+                {formatCurrencyFromCents(transferBreakdown?.totalDueTodayCents ?? 0)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-md border bg-background p-3">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="apply-transfer-credit"
+              checked={confirming?.applyOverpaidCredit ?? false}
+              onCheckedChange={(checked) =>
+                setConfirming((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        applyOverpaidCredit: Boolean(checked),
+                      }
+                    : prev
+                )
+              }
+            />
+            <div className="space-y-1">
+              <Label htmlFor="apply-transfer-credit">Apply old paid credit to the new invoice</Label>
+              <p className="text-xs text-muted-foreground">
+                Apply {formatCurrencyFromCents(-(confirming?.preview.oldOverpaidCreditCents ?? 0))} as transfer
+                account credit.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="take-transfer-payment"
+              checked={confirming?.takePaymentNow ?? false}
+              onCheckedChange={(checked) =>
+                setConfirming((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        takePaymentNow: Boolean(checked),
+                      }
+                    : prev
+                )
+              }
+            />
+            <div className="space-y-1">
+              <Label htmlFor="take-transfer-payment">Take payment now</Label>
+              <p className="text-xs text-muted-foreground">
+                Cash will allocate to the old balance first, then the new invoice.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md border bg-muted/20 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Recommended Allocation
+          </div>
+          <div className="mt-2 space-y-1 text-sm">
+            <div className="flex items-center justify-between">
+              <span>Existing payments to old invoice</span>
+              <span>{formatCurrencyFromCents(transferBreakdown?.recommendedAllocations.releasedPaymentToOldInvoiceCents ?? 0)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Existing payments to new invoice</span>
+              <span>{formatCurrencyFromCents(transferBreakdown?.recommendedAllocations.releasedPaymentToNewInvoiceCents ?? 0)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Transfer credit to new invoice</span>
+              <span>{formatCurrencyFromCents(transferBreakdown?.recommendedAllocations.overpaidCreditToNewInvoiceCents ?? 0)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Cash to old invoice</span>
+              <span>{formatCurrencyFromCents(transferBreakdown?.recommendedAllocations.cashToOldInvoiceCents ?? 0)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Cash to new invoice</span>
+              <span>{formatCurrencyFromCents(transferBreakdown?.recommendedAllocations.cashToNewInvoiceCents ?? 0)}</span>
+            </div>
+          </div>
+        </div>
+
+        {confirming?.takePaymentNow ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Payment method</Label>
+              <Select
+                value={confirming.paymentMethod}
+                onValueChange={(value) =>
+                  setConfirming((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          paymentMethod: value as (typeof PAYMENT_METHODS)[number],
+                        }
+                      : prev
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_METHODS.map((method) => (
+                    <SelectItem key={method} value={method}>
+                      {method}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="transfer-paid-at">Paid on</Label>
+              <Input
+                id="transfer-paid-at"
+                type="date"
+                value={confirming.paymentPaidAt}
+                onChange={(event) =>
+                  setConfirming((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          paymentPaidAt: event.target.value,
+                        }
+                      : prev
+                  )
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="transfer-payment-note">Payment note</Label>
+              <Input
+                id="transfer-payment-note"
+                value={confirming.paymentNote}
+                onChange={(event) =>
+                  setConfirming((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          paymentNote: event.target.value,
+                        }
+                      : prev
+                  )
+                }
+                placeholder="Optional admin note"
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div>
-          <span className="font-medium">Paid-through after change:</span>{" "}
-          {confirming?.newDateKey ?? "—"}
+          <span className="font-medium">Old paid through:</span>{" "}
+          {formatBrisbaneDate(confirming?.preview.oldPaidThroughDate ?? null)}
         </div>
       </div>
       {presentation === "sheet" ? (
@@ -495,12 +700,11 @@ export function ChangeEnrolmentDialog({
           </Button>
           <Button
             onClick={() => {
-              setConfirming(null);
-              void handleSave(true);
+              void handleSave();
             }}
             disabled={saving}
           >
-            Confirm change
+            Confirm transfer
           </Button>
         </SheetFooter>
       ) : (
@@ -514,12 +718,11 @@ export function ChangeEnrolmentDialog({
           </Button>
           <Button
             onClick={() => {
-              setConfirming(null);
-              void handleSave(true);
+              void handleSave();
             }}
             disabled={saving}
           >
-            Confirm change
+            Confirm transfer
           </Button>
         </DialogFooter>
       )}
@@ -558,11 +761,9 @@ export function ChangeEnrolmentDialog({
         <Sheet open={Boolean(confirming)} onOpenChange={(next) => (!next ? setConfirming(null) : null)}>
           <SheetContent side="right" className="w-full sm:max-w-md">
             <SheetHeader className="px-0">
-              <SheetTitle>Confirm paid-through change</SheetTitle>
+              <SheetTitle>Review transfer</SheetTitle>
               <SheetDescription>
-                {confirming?.wouldShorten
-                  ? "This class change will shorten the paid-through date."
-                  : "Review the paid-through update before confirming."}
+                Review the billing impact before moving this enrolment.
               </SheetDescription>
             </SheetHeader>
             {confirmationContent}
@@ -572,11 +773,9 @@ export function ChangeEnrolmentDialog({
         <Dialog open={Boolean(confirming)} onOpenChange={(next) => (!next ? setConfirming(null) : null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Confirm paid-through change</DialogTitle>
+              <DialogTitle>Review transfer</DialogTitle>
               <DialogDescription>
-                {confirming?.wouldShorten
-                  ? "This class change will shorten the paid-through date."
-                  : "Review the paid-through update before confirming."}
+                Review the billing impact before moving this enrolment.
               </DialogDescription>
             </DialogHeader>
             {confirmationContent}
@@ -591,13 +790,42 @@ export function ChangeEnrolmentDialog({
         presentation={presentation}
         onCancel={() => setCapacityWarning(null)}
         onConfirm={() => {
-          const pending = capacityWarning;
           setCapacityWarning(null);
-          void handleSave(pending?.confirmShorten, true);
+          void handleSave(true);
         }}
       />
     </>
   );
+}
+
+function buildTransferAllocationPlan(preview: EnrolmentTransferPreview, applyOverpaidCredit: boolean) {
+  let remainingOld = preview.oldOutstandingCents;
+  let remainingNew = preview.newBlockChargeCents;
+  let releasedRemaining = preview.releasedPaymentCreditCents;
+
+  const releasedPaymentToOldInvoiceCents = Math.min(releasedRemaining, remainingOld);
+  releasedRemaining -= releasedPaymentToOldInvoiceCents;
+  remainingOld -= releasedPaymentToOldInvoiceCents;
+
+  const releasedPaymentToNewInvoiceCents = Math.min(releasedRemaining, remainingNew);
+  releasedRemaining -= releasedPaymentToNewInvoiceCents;
+  remainingNew -= releasedPaymentToNewInvoiceCents;
+
+  const overpaidCreditToNewInvoiceCents = applyOverpaidCredit
+    ? Math.min(preview.oldOverpaidCreditCents, remainingNew)
+    : 0;
+  remainingNew -= overpaidCreditToNewInvoiceCents;
+
+  return {
+    totalDueTodayCents: remainingOld + remainingNew,
+    recommendedAllocations: {
+      releasedPaymentToOldInvoiceCents,
+      releasedPaymentToNewInvoiceCents,
+      overpaidCreditToNewInvoiceCents,
+      cashToOldInvoiceCents: remainingOld,
+      cashToNewInvoiceCents: remainingNew,
+    },
+  };
 }
 
 function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
