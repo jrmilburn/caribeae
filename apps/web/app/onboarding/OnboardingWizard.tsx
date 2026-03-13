@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { parseClerkError } from "@/lib/auth/clerkErrors";
 import { isValidE164, maskIdentifier, normalizeIdentifier, type IdentifierType } from "@/lib/auth/identity";
+import { splitName } from "@/lib/auth/name";
 import {
   availabilityDayOptions,
   availabilityWindowOptions,
@@ -49,6 +51,8 @@ Manual test checklist:
 - Primary phone only -> auto SMS -> verify -> redirected to /portal.
 - Secondary guardian fallback -> auto code -> verify -> redirected to /portal.
 - No guardian email/phone -> shows contact message, no auth attempt.
+- Clerk test mode: use a `+clerk_test` email alias and OTP `424242`.
+- Warning: Clerk development instances cap Clerk-delivered OTP email/SMS volume, so prefer test mode identifiers for QA.
 */
 
 type LevelOption = { id: string; name: string };
@@ -131,6 +135,24 @@ function formatList(values: string[]) {
   return values.join(", ");
 }
 
+const CLERK_SIGN_UP_FIELD_LABELS: Record<string, string> = {
+  first_name: "first name",
+  last_name: "last name",
+  email_address: "email address",
+  phone_number: "mobile number",
+  username: "username",
+  password: "password",
+  legal_accepted: "terms acceptance",
+};
+
+function formatClerkFieldLabel(field: string) {
+  return CLERK_SIGN_UP_FIELD_LABELS[field] ?? field.replace(/_/g, " ");
+}
+
+function getMissingClerkFields(signUpAttempt: { missingFields?: string[] | null }) {
+  return Array.from(new Set((signUpAttempt.missingFields ?? []).filter(Boolean)));
+}
+
 export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
   const router = useRouter();
   const { signOut } = useClerk();
@@ -156,6 +178,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
   const [isResending, setIsResending] = React.useState(false);
   const [isStartingOtp, setIsStartingOtp] = React.useState(false);
   const [verificationBlocked, setVerificationBlocked] = React.useState(false);
+  const [clerkMissingFields, setClerkMissingFields] = React.useState<string[]>([]);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
   const progressPercent = Math.round(((step + 1) / steps.length) * 100);
@@ -375,14 +398,14 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     return true;
   };
 
-  const persistAuthState = (next: OnboardingAuthState | null) => {
+  const persistAuthState = React.useCallback((next: OnboardingAuthState | null) => {
     setAuthState(next);
     if (next) {
       window.localStorage.setItem(ONBOARDING_AUTH_KEY, JSON.stringify(next));
     } else {
       window.localStorage.removeItem(ONBOARDING_AUTH_KEY);
     }
-  };
+  }, []);
 
   const selectIdentifier = React.useCallback((): { value: string; type: IdentifierType; source: IdentifierSource } | null => {
     const primaryPhone = contact.phone?.trim();
@@ -424,6 +447,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
       setIsStartingOtp(true);
       setAuthError(null);
       setVerificationBlocked(false);
+      setClerkMissingFields([]);
 
       try {
         const startRes = await fetch("/api/auth/start", {
@@ -467,11 +491,39 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
             });
           }
         } else {
+          const { firstName, lastName } = splitName(contact.guardianName);
+
           if (selection.type === "email") {
-            const signUpAttempt = await signUp.create({ emailAddress: normalized });
+            const signUpAttempt = await signUp.create({
+              emailAddress: normalized,
+              ...(firstName ? { firstName } : {}),
+              ...(lastName ? { lastName } : {}),
+            });
+            const missingFields = getMissingClerkFields(signUpAttempt);
+            // `missing_requirements` is expected until the identifier is verified. Only block when Clerk still reports
+            // unsatisfied required fields after we supply the known sign-up attributes.
+            if (signUpAttempt.status === "missing_requirements" && missingFields.length > 0) {
+              setClerkMissingFields(missingFields);
+              setAuthError(
+                `We need ${missingFields.map(formatClerkFieldLabel).join(", ")} before we can send your code.`
+              );
+              return;
+            }
             await signUpAttempt.prepareEmailAddressVerification({ strategy: "email_code" });
           } else {
-            const signUpAttempt = await signUp.create({ phoneNumber: normalized });
+            const signUpAttempt = await signUp.create({
+              phoneNumber: normalized,
+              ...(firstName ? { firstName } : {}),
+              ...(lastName ? { lastName } : {}),
+            });
+            const missingFields = getMissingClerkFields(signUpAttempt);
+            if (signUpAttempt.status === "missing_requirements" && missingFields.length > 0) {
+              setClerkMissingFields(missingFields);
+              setAuthError(
+                `We need ${missingFields.map(formatClerkFieldLabel).join(", ")} before we can send your code.`
+              );
+              return;
+            }
             await signUpAttempt.preparePhoneNumberVerification({ strategy: "phone_code" });
           }
         }
@@ -501,12 +553,12 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
           source: selection.source,
         });
       } catch (caught) {
-        setAuthError("Something went wrong. Please try again.");
+        setAuthError(parseClerkError(caught).message);
       } finally {
         setIsStartingOtp(false);
       }
     },
-    [authState, persistAuthState, signIn, signInLoaded, signUp, signUpLoaded]
+    [authState, contact.guardianName, persistAuthState, signIn, signInLoaded, signUp, signUpLoaded]
   );
 
   React.useEffect(() => {
@@ -573,7 +625,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
       setPending(null);
       router.replace("/portal");
     } catch (caught) {
-      setAuthError("We couldn't verify that code. Please try again.");
+      setAuthError(parseClerkError(caught).message);
     } finally {
       setIsVerifying(false);
     }
@@ -599,6 +651,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     setAuthError(null);
 
     try {
+      // Clerk development instances have OTP delivery caps, so QA should prefer Clerk test mode identifiers here.
       if (pending.flow === "signIn") {
         if (!signInLoaded || !signIn) throw new Error("Sign-in not ready");
         const factors = signIn.supportedFirstFactors ?? [];
@@ -636,7 +689,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
         persistAuthState({ ...authState, startedAt });
       }
     } catch (caught) {
-      setAuthError("Unable to resend the code. Please try again.");
+      setAuthError(parseClerkError(caught).message);
     } finally {
       setIsResending(false);
     }
@@ -675,7 +728,13 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     setSubmitting(true);
     const payload: OnboardingRequestInput = {
       contact,
-      students: students.map(({ id, ...rest }) => rest),
+      students: students.map((student) => ({
+        firstName: student.firstName,
+        lastName: student.lastName,
+        dateOfBirth: student.dateOfBirth,
+        experience: student.experience,
+        notes: student.notes,
+      })),
       availability,
     };
 
@@ -713,10 +772,11 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
       setPending(null);
       setAuthError(null);
       setVerificationBlocked(false);
+      setClerkMissingFields([]);
       setStep(verifyStepIndex);
       window.localStorage.removeItem(DRAFT_KEY);
       await startOtpFlow(selection, nextAuth);
-    } catch (caught) {
+    } catch {
       setSubmitError("Unable to submit. Please try again.");
     } finally {
       setSubmitting(false);
@@ -775,6 +835,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     setDigits(Array(OTP_LENGTH).fill(""));
     setAuthError(null);
     setVerificationBlocked(false);
+    setClerkMissingFields([]);
     setResendCountdown(RESEND_SECONDS);
     if (authState) {
       persistAuthState({ requestId: authState.requestId, familyId: authState.familyId });
@@ -1311,10 +1372,10 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
         if (verificationIsBlocked) {
           return (
             <div className="space-y-4 text-sm">
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <p className="font-medium text-destructive">We need a mobile number or email to verify.</p>
-              <p className="text-muted-foreground">Please talk to the admin to finish setup.</p>
-            </div>
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                <p className="font-medium text-destructive">We need a mobile number or email to verify.</p>
+                <p className="text-muted-foreground">Please talk to the admin to finish setup.</p>
+              </div>
               {canChangeIdentifier ? (
                 <Button
                   type="button"
@@ -1325,6 +1386,35 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                   Update contact details
                 </Button>
               ) : null}
+            </div>
+          );
+        }
+
+        if (clerkMissingFields.length > 0) {
+          return (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                <p className="font-medium text-destructive">
+                  We need a few more details before we can send your code.
+                </p>
+                <p className="text-muted-foreground">
+                  Clerk still requires the following fields for this sign-up:
+                </p>
+                <ul className="list-disc pl-5 text-muted-foreground">
+                  {clerkMissingFields.map((field) => (
+                    <li key={field}>{formatClerkFieldLabel(field)}</li>
+                  ))}
+                </ul>
+              </div>
+              <InlineErrorSlot message={authError} />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => handleChangeIdentifier("primaryEmail")}
+              >
+                Update primary guardian details
+              </Button>
             </div>
           );
         }

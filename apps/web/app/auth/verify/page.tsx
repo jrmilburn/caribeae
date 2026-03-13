@@ -6,6 +6,7 @@ import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
 import { AuthShell, InlineErrorSlot, LoadingButton, OtpInput } from "@/components/auth/AuthShell";
+import { parseClerkError } from "@/lib/auth/clerkErrors";
 import { maskIdentifier, type IdentifierType } from "@/lib/auth/identity";
 
 type PendingAuth = {
@@ -18,6 +19,12 @@ type PendingAuth = {
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
+
+/*
+Manual test checklist:
+- Clerk test mode: use a `+clerk_test` email alias and OTP `424242`.
+- Warning: Clerk development instances cap Clerk-delivered OTP email/SMS volume, so prefer test mode identifiers for QA.
+*/
 
 export default function VerifyPage() {
   const router = useRouter();
@@ -38,7 +45,7 @@ export default function VerifyPage() {
     try {
       const parsed = JSON.parse(raw) as PendingAuth;
       setPending(parsed);
-    } catch (caught) {
+    } catch {
       // ignore parsing errors
     }
   }, []);
@@ -115,7 +122,7 @@ export default function VerifyPage() {
       clearPending();
       router.replace("/portal");
     } catch (caught) {
-      setError("We couldn't verify that code. Please try again.");
+      setError(parseClerkError(caught).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -139,6 +146,7 @@ export default function VerifyPage() {
     setError(null);
 
     try {
+      // Clerk development instances have OTP delivery caps, so QA should prefer Clerk test mode identifiers here.
       if (pending.flow === "signIn") {
         if (!signInLoaded || !signIn) throw new Error("Sign-in not ready");
         const factors = signIn.supportedFirstFactors ?? [];
@@ -171,7 +179,7 @@ export default function VerifyPage() {
       }
       setResendCountdown(RESEND_SECONDS);
     } catch (caught) {
-      setError("Unable to resend the code. Please try again.");
+      setError(parseClerkError(caught).message);
     } finally {
       setIsResending(false);
     }

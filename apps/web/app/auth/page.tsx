@@ -7,6 +7,7 @@ import { useAuth, useSignIn, useSignUp } from "@clerk/nextjs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell, InlineErrorSlot, LoadingButton } from "@/components/auth/AuthShell";
+import { parseClerkError } from "@/lib/auth/clerkErrors";
 import {
   detectIdentifierType,
   isValidE164,
@@ -23,7 +24,27 @@ Manual test checklist:
 - Eligible phone -> receives SMS code -> verify -> redirected to /portal.
 - Ineligible identifier -> inline error with contact message (no Clerk call).
 - Resend code works with countdown, change identifier returns to /auth.
+- Clerk test mode: use a `+clerk_test` email alias and OTP `424242`.
+- Warning: Clerk development instances cap Clerk-delivered OTP email/SMS volume, so prefer test mode identifiers for QA.
 */
+
+const CLERK_SIGN_UP_FIELD_LABELS: Record<string, string> = {
+  first_name: "first name",
+  last_name: "last name",
+  email_address: "email address",
+  phone_number: "mobile number",
+  username: "username",
+  password: "password",
+  legal_accepted: "terms acceptance",
+};
+
+function formatClerkFieldLabel(field: string) {
+  return CLERK_SIGN_UP_FIELD_LABELS[field] ?? field.replace(/_/g, " ");
+}
+
+function getMissingClerkFields(signUpAttempt: { missingFields?: string[] | null }) {
+  return Array.from(new Set((signUpAttempt.missingFields ?? []).filter(Boolean)));
+}
 
 export default function AuthPage() {
   const router = useRouter();
@@ -33,11 +54,15 @@ export default function AuthPage() {
   const redirectingRef = React.useRef(false);
 
   const [identifier, setIdentifier] = React.useState("");
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName] = React.useState("");
+  const [signUpMissingFields, setSignUpMissingFields] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const detectedType = detectIdentifierType(identifier);
+  const needsNamePrompt = signUpMissingFields.includes("first_name") || signUpMissingFields.includes("last_name");
 
   React.useEffect(() => {
     inputRef.current?.focus();
@@ -60,7 +85,7 @@ export default function AuthPage() {
         } else {
           redirectingRef.current = false;
         }
-      } catch (error) {
+      } catch {
         redirectingRef.current = false;
       }
     };
@@ -127,6 +152,7 @@ export default function AuthPage() {
       }
 
       if (start.flow === "signIn") {
+        setSignUpMissingFields([]);
         const signInAttempt = await signIn.create({ identifier: normalized });
         const factors = signInAttempt.supportedFirstFactors ?? [];
 
@@ -150,11 +176,48 @@ export default function AuthPage() {
           });
         }
       } else {
+        const nextFirstName = firstName.trim();
+        const nextLastName = lastName.trim();
+        const isSamePendingIdentifier =
+          (type === "email" && signUp.emailAddress === normalized) || (type === "phone" && signUp.phoneNumber === normalized);
+
+        if (signUpMissingFields.includes("first_name") && !nextFirstName) {
+          setError("Enter a first name.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (signUpMissingFields.includes("last_name") && !nextLastName) {
+          setError("Enter a last name.");
+          setIsLoading(false);
+          return;
+        }
+
+        const signUpAttempt =
+          needsNamePrompt && isSamePendingIdentifier
+            ? await signUp.update({
+                ...(nextFirstName ? { firstName: nextFirstName } : {}),
+                ...(nextLastName ? { lastName: nextLastName } : {}),
+              })
+            : await signUp.create({
+                ...(type === "email" ? { emailAddress: normalized } : { phoneNumber: normalized }),
+                ...(nextFirstName ? { firstName: nextFirstName } : {}),
+                ...(nextLastName ? { lastName: nextLastName } : {}),
+              });
+
+        const missingFields = getMissingClerkFields(signUpAttempt);
+        if (missingFields.length > 0) {
+          setSignUpMissingFields(missingFields);
+          setError(`We need ${missingFields.map(formatClerkFieldLabel).join(", ")} before we can send your code.`);
+          setIsLoading(false);
+          return;
+        }
+
+        setSignUpMissingFields([]);
+
         if (type === "email") {
-          const signUpAttempt = await signUp.create({ emailAddress: normalized });
           await signUpAttempt.prepareEmailAddressVerification({ strategy: "email_code" });
         } else {
-          const signUpAttempt = await signUp.create({ phoneNumber: normalized });
           await signUpAttempt.preparePhoneNumberVerification({ strategy: "phone_code" });
         }
       }
@@ -172,7 +235,7 @@ export default function AuthPage() {
 
       router.push("/auth/verify");
     } catch (caught) {
-      setError("Something went wrong. Please try again.");
+      setError(parseClerkError(caught).message);
     } finally {
       setIsLoading(false);
     }
@@ -191,6 +254,11 @@ export default function AuthPage() {
             Welcome back
           </p>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in</h1>
+          {needsNamePrompt ? (
+            <p className="text-sm text-muted-foreground">
+              We need your name before we can create your login and send the verification code.
+            </p>
+          ) : null}
         </div>
 
         <form
@@ -207,6 +275,9 @@ export default function AuthPage() {
               onChange={(event) => {
                 setIdentifier(event.target.value);
                 if (error) setError(null);
+                if (signUpMissingFields.length > 0) {
+                  setSignUpMissingFields([]);
+                }
               }}
               type={detectedType === "email" ? "email" : "tel"}
               inputMode={detectedType === "email" ? "email" : "tel"}
@@ -218,11 +289,56 @@ export default function AuthPage() {
               disabled={isLoading}
               aria-invalid={Boolean(error)}
             />
-            <InlineErrorSlot message={error} />
           </div>
 
-          <LoadingButton type="submit" isLoading={isLoading} loadingText="Sending code">
-            Send code
+          {signUpMissingFields.length > 0 ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-medium text-slate-900">New login details needed</p>
+              <p className="mt-1 text-muted-foreground">
+                Clerk still requires {signUpMissingFields.map(formatClerkFieldLabel).join(", ")} for this sign-up.
+              </p>
+            </div>
+          ) : null}
+
+          {needsNamePrompt ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="firstName">First name</Label>
+                <Input
+                  id="firstName"
+                  value={firstName}
+                  autoComplete="given-name"
+                  onChange={(event) => {
+                    setFirstName(event.target.value);
+                    if (error) setError(null);
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="lastName">Last name</Label>
+                <Input
+                  id="lastName"
+                  value={lastName}
+                  autoComplete="family-name"
+                  onChange={(event) => {
+                    setLastName(event.target.value);
+                    if (error) setError(null);
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <InlineErrorSlot message={error} />
+
+          <LoadingButton
+            type="submit"
+            isLoading={isLoading}
+            loadingText={needsNamePrompt ? "Saving details" : "Sending code"}
+          >
+            {needsNamePrompt ? "Continue" : "Send code"}
           </LoadingButton>
         </form>
       </div>
