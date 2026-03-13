@@ -6,12 +6,16 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -28,6 +32,10 @@ import { WeeklyPlanSelect, type WeeklyPlanOption } from "@/components/admin/Week
 import { cn } from "@/lib/utils";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import {
+  computeAvailableInvoiceEarlyPaymentDiscountCents,
+  computeEarlyPaymentDiscountCents,
+} from "@/lib/billing/earlyPaymentDiscount";
 
 import type { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { FamilyBillingPosition } from "@/server/billing/getFamilyBillingPosition";
@@ -38,6 +46,11 @@ const PAYMENT_METHODS = ["Card", "Cash", "Direct debit", "Client portal"] as con
 type BillingData = Awaited<ReturnType<typeof getFamilyBillingData>>;
 
 type OpenInvoice = BillingData["openInvoices"][number] & { balanceCents?: number };
+
+type NormalizedOpenInvoice = OpenInvoice & {
+  balanceCents: number;
+  availableEarlyPaymentDiscountCents: number;
+};
 
 export type RecordPaymentSheetProps = {
   familyId: string;
@@ -72,12 +85,14 @@ export function RecordPaymentSheet({
   const [method, setMethod] = React.useState<PaymentMethod>("Cash");
   const [note, setNote] = React.useState("");
   const [paidDate, setPaidDate] = React.useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [applyEarlyPaymentDiscount, setApplyEarlyPaymentDiscount] = React.useState(false);
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
   const [customBlockLength, setCustomBlockLength] = React.useState("");
   const [selectedPlanId, setSelectedPlanId] = React.useState<string | null>(null);
+  const previousApplyEarlyPaymentDiscount = React.useRef(false);
   const [isSubmitting, startSubmit] = React.useTransition();
 
-  const normalizedOpenInvoices = React.useMemo(
+  const normalizedOpenInvoices = React.useMemo<NormalizedOpenInvoice[]>(
     () =>
       openInvoices.map((invoice) => ({
         ...invoice,
@@ -85,6 +100,10 @@ export function RecordPaymentSheet({
           typeof invoice.balanceCents === "number"
             ? invoice.balanceCents
             : Math.max(invoice.amountCents - invoice.amountPaidCents, 0),
+        availableEarlyPaymentDiscountCents: computeAvailableInvoiceEarlyPaymentDiscountCents({
+          lineItems: invoice.lineItems ?? [],
+          discountBps: invoice.enrolment?.plan?.earlyPaymentDiscountBps,
+        }),
       })),
     [openInvoices]
   );
@@ -103,6 +122,7 @@ export function RecordPaymentSheet({
               priceCents: enrolment.planPriceCents,
               blockClassCount: enrolment.blockClassCount,
               durationWeeks: enrolment.durationWeeks,
+              earlyPaymentDiscountBps: enrolment.earlyPaymentDiscountBps ?? 0,
             }
           : null,
         weeklyPlanOptions: enrolment.weeklyPlanOptions ?? [],
@@ -126,9 +146,11 @@ export function RecordPaymentSheet({
     setMethod("Cash");
     setNote("");
     setPaidDate(new Date().toISOString().slice(0, 10));
+    setApplyEarlyPaymentDiscount(false);
     setCustomBlockEnabled(false);
     setCustomBlockLength("");
     setSelectedPlanId(null);
+    previousApplyEarlyPaymentDiscount.current = false;
   }, [sheetOpen, normalizedOpenInvoices]);
 
   React.useEffect(() => {
@@ -141,16 +163,34 @@ export function RecordPaymentSheet({
           return;
         }
         const invoice = normalizedOpenInvoices.find((inv) => inv.id === invoiceId);
-        next[invoiceId] = invoice ? centsToDollarString(invoice.balanceCents) : "0.00";
+        next[invoiceId] = invoice
+          ? centsToDollarString(
+              Math.max(
+                invoice.balanceCents -
+                  (applyEarlyPaymentDiscount ? invoice.availableEarlyPaymentDiscountCents : 0),
+                0
+              )
+            )
+          : "0.00";
       });
       return next;
     });
-  }, [selected, sheetOpen, normalizedOpenInvoices]);
+  }, [applyEarlyPaymentDiscount, selected, sheetOpen, normalizedOpenInvoices]);
 
+  const isPayAheadTarget = applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED";
+  const getInvoicePayableCents = React.useCallback(
+    (invoice: NormalizedOpenInvoice) =>
+      Math.max(
+        invoice.balanceCents - (applyEarlyPaymentDiscount ? invoice.availableEarlyPaymentDiscountCents : 0),
+        0
+      ),
+    [applyEarlyPaymentDiscount]
+  );
   const selectedInvoices = normalizedOpenInvoices.filter((inv) => selected.includes(inv.id));
   const allocationCents = selectedInvoices.map((inv) => ({
     invoiceId: inv.id,
     cents: dollarsToCents(allocations[inv.id] ?? "0"),
+    invoice: inv,
   }));
   const allocatedTotalCents = allocationCents.reduce((sum, a) => sum + a.cents, 0);
   const explicitAmountCents = dollarsToCents(amount || "0");
@@ -160,13 +200,23 @@ export function RecordPaymentSheet({
   const activePlanId = selectedPlanId ?? selectedEnrolment?.plan?.id ?? null;
   const selectedWeeklyPlan = weeklyPlanOptions.find((plan) => plan.id === activePlanId) ?? null;
   const selectedPlan =
-    selectedWeeklyPlan ??
+    (selectedWeeklyPlan
+      ? {
+          id: selectedWeeklyPlan.id,
+          name: selectedWeeklyPlan.name,
+          priceCents: selectedWeeklyPlan.priceCents,
+          durationWeeks: selectedWeeklyPlan.durationWeeks ?? null,
+          earlyPaymentDiscountBps:
+            selectedWeeklyPlan.earlyPaymentDiscountBps ?? selectedEnrolment?.plan?.earlyPaymentDiscountBps ?? 0,
+        }
+      : null) ??
     (selectedEnrolment?.plan
       ? {
           id: selectedEnrolment.plan.id,
           name: selectedEnrolment.plan.name,
           priceCents: selectedEnrolment.plan.priceCents,
           durationWeeks: selectedEnrolment.plan.durationWeeks ?? null,
+          earlyPaymentDiscountBps: selectedEnrolment.plan.earlyPaymentDiscountBps ?? 0,
         }
       : null);
   const selectedPlanPriceCents = selectedPlan?.priceCents ?? null;
@@ -190,7 +240,68 @@ export function RecordPaymentSheet({
       : isWeeklyPlan && selectedPlan
         ? planAmountCents
         : explicitAmountCents;
-  const totalCents = applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents : amountCents;
+  const invoiceDiscountableAllocations = allocationCents.filter((allocation) => allocation.cents > 0);
+  const invoiceEarlyPaymentDiscountCents =
+    applyTarget === "ALLOCATE_INVOICES" && applyEarlyPaymentDiscount
+      ? invoiceDiscountableAllocations.reduce(
+          (sum, allocation) => sum + allocation.invoice.availableEarlyPaymentDiscountCents,
+          0
+        )
+      : 0;
+  const enrolmentEarlyPaymentDiscountCents =
+    isPayAheadTarget && selectedPlan
+      ? computeEarlyPaymentDiscountCents({
+          grossCents: amountCents,
+          discountBps: applyEarlyPaymentDiscount ? selectedPlan.earlyPaymentDiscountBps : 0,
+        })
+      : 0;
+  const earlyPaymentDiscountCents =
+    applyTarget === "ALLOCATE_INVOICES" ? invoiceEarlyPaymentDiscountCents : enrolmentEarlyPaymentDiscountCents;
+  const grossTotalCents =
+    applyTarget === "ALLOCATE_INVOICES" ? allocatedTotalCents + invoiceEarlyPaymentDiscountCents : amountCents;
+  const totalCents = Math.max(grossTotalCents - earlyPaymentDiscountCents, 0);
+  const earlyPaymentDiscountEligible =
+    applyTarget === "ALLOCATE_INVOICES"
+      ? selectedInvoices.some((invoice) => invoice.availableEarlyPaymentDiscountCents > 0)
+      : isPayAheadTarget
+        ? (selectedPlan?.earlyPaymentDiscountBps ?? 0) > 0
+        : false;
+
+  React.useEffect(() => {
+    if (!sheetOpen || applyTarget !== "ALLOCATE_INVOICES") {
+      previousApplyEarlyPaymentDiscount.current = applyEarlyPaymentDiscount;
+      return;
+    }
+
+    const previous = previousApplyEarlyPaymentDiscount.current;
+    if (previous === applyEarlyPaymentDiscount) return;
+
+    setAllocations((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      for (const invoice of normalizedOpenInvoices) {
+        if (!selected.includes(invoice.id)) continue;
+
+        const previousBalance = Math.max(
+          invoice.balanceCents - (previous ? invoice.availableEarlyPaymentDiscountCents : 0),
+          0
+        );
+        const nextBalance = Math.max(
+          invoice.balanceCents - (applyEarlyPaymentDiscount ? invoice.availableEarlyPaymentDiscountCents : 0),
+          0
+        );
+
+        if ((prev[invoice.id] ?? "") !== centsToDollarString(previousBalance)) continue;
+        next[invoice.id] = centsToDollarString(nextBalance);
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+
+    previousApplyEarlyPaymentDiscount.current = applyEarlyPaymentDiscount;
+  }, [applyEarlyPaymentDiscount, applyTarget, normalizedOpenInvoices, selected, sheetOpen]);
 
   React.useEffect(() => {
     if (!sheetOpen) return;
@@ -239,8 +350,7 @@ export function RecordPaymentSheet({
         return;
       }
       const exceedsBalance = allocationCents.some((allocation) => {
-        const invoice = selectedInvoices.find((inv) => inv.id === allocation.invoiceId);
-        return invoice ? allocation.cents > invoice.balanceCents : false;
+        return allocation.cents > getInvoicePayableCents(allocation.invoice);
       });
       if (exceedsBalance) {
         toast.error("Allocation cannot exceed the invoice balance.");
@@ -272,6 +382,7 @@ export function RecordPaymentSheet({
                 }))
               : undefined,
           enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+          applyEarlyPaymentDiscount,
           customBlockLength: customBlockEnabled && isBlockPlan && customBlockValue ? customBlockValue : undefined,
           planId: isWeeklyPlan && selectedPlan ? selectedPlan.id : undefined,
           idempotencyKey: crypto.randomUUID(),
@@ -287,6 +398,32 @@ export function RecordPaymentSheet({
     });
   };
 
+  const openInvoiceCount = normalizedOpenInvoices.filter((invoice) => invoice.balanceCents > 0).length;
+  const paymentSummaryText =
+    applyTarget === "ALLOCATE_INVOICES"
+      ? `${openInvoiceCount} open invoice${openInvoiceCount === 1 ? "" : "s"} ready to allocate.`
+      : applyTarget === "UNALLOCATED"
+        ? "Record this payment as unallocated family credit."
+        : selectedEnrolment
+          ? `Pay ahead for ${selectedEnrolment.label}.`
+          : "Pay ahead for the selected enrolment.";
+  const applyTargetDescription =
+    applyTarget === "ALLOCATE_INVOICES"
+      ? "Settle current invoices now."
+      : applyTarget === "UNALLOCATED"
+        ? "Store the payment as family credit to apply later."
+        : `Prepay future coverage or credits for ${selectedEnrolment?.label ?? "the selected enrolment"}.`;
+  const earlyPaymentDiscountMessage =
+    earlyPaymentDiscountCents > 0
+      ? `Discount ${formatCurrencyFromCents(-earlyPaymentDiscountCents)} from the enrolment plan configuration.`
+      : earlyPaymentDiscountEligible
+        ? "This target is eligible for the plan's configured early payment discount."
+        : applyTarget === "ALLOCATE_INVOICES"
+          ? "Selected invoices do not currently have an early payment discount available."
+          : isPayAheadTarget
+            ? "This pay-ahead plan does not have an early payment discount configured."
+            : "Early payment discounts are only available for invoices or pay-ahead enrolments.";
+
   return (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       {trigger === null ? null : (
@@ -299,21 +436,50 @@ export function RecordPaymentSheet({
         </SheetTrigger>
       )}
 
-      <SheetContent side="right" className="w-full p-6 sm:max-w-xl sm:px-8">
+      <SheetContent side="right" className="w-full overflow-y-auto p-6 sm:max-w-xl sm:px-8">
         <SheetHeader>
           <SheetTitle>Take payment</SheetTitle>
           <SheetDescription>
-            Use this for payments due now. Use pay ahead when you need to prepay future coverage.
+            Settle open invoices, record family credit, or pay ahead for a specific enrolment.
           </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div className="rounded-xl border border-border/80 bg-muted/20 px-4 py-3">
             <div className="text-sm font-medium text-foreground">Payment summary</div>
-            <div className="mt-1 text-sm text-muted-foreground">
-              {normalizedOpenInvoices.filter((invoice) => invoice.balanceCents > 0).length} open invoice
-              {normalizedOpenInvoices.filter((invoice) => invoice.balanceCents > 0).length === 1 ? "" : "s"} ready to
-              allocate.
+            <div className="mt-1 text-sm text-muted-foreground">{paymentSummaryText}</div>
+            <div
+              className={cn(
+                "mt-3 grid gap-3",
+                earlyPaymentDiscountCents > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"
+              )}
+            >
+              <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Gross
+                </div>
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {formatCurrencyFromCents(grossTotalCents)}
+                </div>
+              </div>
+              {earlyPaymentDiscountCents > 0 ? (
+                <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Early discount
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatCurrencyFromCents(-earlyPaymentDiscountCents)}
+                  </div>
+                </div>
+              ) : null}
+              <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Amount to record
+                </div>
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {formatCurrencyFromCents(totalCents)}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -324,27 +490,61 @@ export function RecordPaymentSheet({
                 <SelectValue placeholder="Select apply target" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALLOCATE_INVOICES">Open invoices</SelectItem>
-                <SelectItem value="UNALLOCATED">Family credit</SelectItem>
-                {enrolmentOptions.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel>Standard</SelectLabel>
+                  <SelectItem value="ALLOCATE_INVOICES">Open invoices</SelectItem>
+                  <SelectItem value="UNALLOCATED">Family credit</SelectItem>
+                </SelectGroup>
+                {enrolmentOptions.length > 0 ? (
+                  <>
+                    <SelectSeparator />
+                    <SelectGroup>
+                      <SelectLabel>Pay ahead</SelectLabel>
+                      {enrolmentOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {`Pay ahead · ${option.label}`}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </>
+                ) : null}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">{applyTargetDescription}</p>
           </div>
 
-          {applyTarget !== "ALLOCATE_INVOICES" &&
-          applyTarget !== "UNALLOCATED" &&
-          isWeeklyPlan &&
-          weeklyPlanOptions.length > 1 ? (
+          {isPayAheadTarget && isWeeklyPlan && weeklyPlanOptions.length > 1 ? (
             <WeeklyPlanSelect
               value={activePlanId ?? ""}
               onValueChange={(value) => setSelectedPlanId(value)}
               options={weeklyPlanOptions}
               label="Pay-ahead plan"
             />
+          ) : null}
+
+          {applyTarget !== "UNALLOCATED" ? (
+            <div className="rounded-xl border border-border/80 bg-background px-4 py-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="apply-early-payment-discount"
+                  className="mt-0.5"
+                  checked={applyEarlyPaymentDiscount}
+                  onCheckedChange={(checked) => setApplyEarlyPaymentDiscount(Boolean(checked))}
+                  disabled={!earlyPaymentDiscountEligible}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="apply-early-payment-discount" className="leading-5">
+                    Apply early payment discount
+                  </Label>
+                  <p className="text-sm text-muted-foreground">{earlyPaymentDiscountMessage}</p>
+                  {isPayAheadTarget && selectedPlan && (selectedPlan.earlyPaymentDiscountBps ?? 0) > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Plan discount: {(selectedPlan.earlyPaymentDiscountBps / 100).toFixed(2)}%
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {applyTarget === "ALLOCATE_INVOICES" ? (
@@ -368,7 +568,7 @@ export function RecordPaymentSheet({
                     </TableRow>
                   ) : (
                     normalizedOpenInvoices.map((invoice) => {
-                      const balance = invoice.balanceCents;
+                      const balance = getInvoicePayableCents(invoice);
                       const allocationValue = allocations[invoice.id] ?? "";
                       const coverageLabel =
                         invoice.coverageStart && invoice.coverageEnd
@@ -388,6 +588,12 @@ export function RecordPaymentSheet({
                           <TableCell className="space-y-1">
                             <div className="text-sm font-medium">Invoice {invoice.id}</div>
                             <div className="text-xs text-muted-foreground">Due {formatDate(invoice.dueAt)}</div>
+                            {applyEarlyPaymentDiscount && invoice.availableEarlyPaymentDiscountCents > 0 ? (
+                              <div className="text-xs text-muted-foreground">
+                                Includes early discount of{" "}
+                                {formatCurrencyFromCents(-invoice.availableEarlyPaymentDiscountCents)}
+                              </div>
+                            ) : null}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{coverageLabel}</TableCell>
                           <TableCell className="text-right text-sm font-semibold">
@@ -515,9 +721,17 @@ export function RecordPaymentSheet({
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-3">
-            <div className="text-sm text-muted-foreground">Total payment</div>
-            <div className="text-lg font-semibold">{formatCurrencyFromCents(totalCents)}</div>
+          <div className="rounded-lg border bg-muted/50 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">Amount to record</div>
+              <div className="text-lg font-semibold">{formatCurrencyFromCents(totalCents)}</div>
+            </div>
+            {earlyPaymentDiscountCents > 0 ? (
+              <div className="mt-1 text-xs text-muted-foreground">
+                Gross {formatCurrencyFromCents(grossTotalCents)} · Early discount{" "}
+                {formatCurrencyFromCents(-earlyPaymentDiscountCents)}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex justify-end gap-2">

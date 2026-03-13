@@ -958,7 +958,7 @@ model Payment {
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
   amountCents                     Int
-  grossAmountCents                Int
+  grossAmountCents                Int           @default(0)
   earlyPaymentDiscountApplied     Boolean       @default(false)
   earlyPaymentDiscountAmountCents Int           @default(0)
   paidAt                          DateTime      @default(now())

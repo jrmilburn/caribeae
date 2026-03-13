@@ -8,6 +8,7 @@ export type WeeklyPlanOption = Pick<
   | "name"
   | "priceCents"
   | "durationWeeks"
+  | "earlyPaymentDiscountBps"
   | "sessionsPerWeek"
   | "alternatingWeeks"
   | "isSaturdayOnly"

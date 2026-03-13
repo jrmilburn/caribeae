@@ -10,6 +10,7 @@ export type WeeklyPlanOption = {
   name: string;
   priceCents: number;
   durationWeeks: number | null;
+  earlyPaymentDiscountBps?: number;
 };
 
 type WeeklyPlanSelectProps = {
