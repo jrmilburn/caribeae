@@ -10,6 +10,7 @@ import { z } from "zod";
 type EnrolmentPlanInput = {
   name: string;
   priceCents: number;
+  earlyPaymentDiscountBps?: number;
   levelId: string;
   billingType: BillingType;
   enrolmentType: EnrolmentType;
@@ -27,6 +28,7 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
   const schema = z.object({
     name: z.string().min(1),
     priceCents: z.number().int().positive(),
+    earlyPaymentDiscountBps: z.number().int().min(0).max(10000).optional(),
     levelId: z.string().min(1),
     billingType: z.nativeEnum(BillingType),
     enrolmentType: z.nativeEnum(EnrolmentType),
@@ -51,6 +53,7 @@ export async function updateEnrolmentPlan(id: string, input: EnrolmentPlanInput)
     data: {
       name: parsed.name,
       priceCents: parsed.priceCents,
+      earlyPaymentDiscountBps: parsed.earlyPaymentDiscountBps ?? 0,
       levelId: parsed.levelId,
       billingType: parsed.billingType,
       enrolmentType: parsed.enrolmentType,

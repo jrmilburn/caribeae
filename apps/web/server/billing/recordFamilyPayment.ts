@@ -19,6 +19,7 @@ const recordPaymentSchema = z
     paidAt: z.coerce.date().optional(),
     method: z.string().trim().max(100).optional(),
     note: z.string().trim().max(1000).optional(),
+    applyEarlyPaymentDiscount: z.boolean().optional(),
     allocations: z.array(allocationSchema).optional(),
     enrolmentId: z.string().min(1).optional(),
     customBlockLength: z.number().int().positive().optional(),
@@ -60,6 +61,7 @@ export async function recordFamilyPayment(input: RecordFamilyPaymentInput) {
       paidAt: payload.paidAt,
       method: payload.method,
       note: payload.note,
+      applyEarlyPaymentDiscount: payload.applyEarlyPaymentDiscount,
       enrolmentId: payload.enrolmentId,
       customBlockLength: payload.customBlockLength,
       planId: payload.planId,
@@ -75,6 +77,7 @@ export async function recordFamilyPayment(input: RecordFamilyPaymentInput) {
     paidAt: payload.paidAt,
     method: payload.method,
     note: payload.note,
+    applyEarlyPaymentDiscount: payload.applyEarlyPaymentDiscount,
     idempotencyKey: payload.idempotencyKey,
     skipAuth: true,
   }).then((res) => res.payment);

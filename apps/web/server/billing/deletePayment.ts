@@ -5,8 +5,11 @@ import { PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-
-import { adjustInvoicePayment } from "./utils";
+import {
+  recomputeEntitlementsForEnrolment,
+  recomputeInvoicePaymentState,
+  unique,
+} from "@/server/billing/paymentRollback";
 
 export async function deletePayment(paymentId: string) {
   await getOrCreateUser();
@@ -14,7 +17,15 @@ export async function deletePayment(paymentId: string) {
 
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { allocations: true },
+    include: {
+      allocations: true,
+      appliedDiscountLineItems: {
+        select: {
+          id: true,
+          invoiceId: true,
+        },
+      },
+    },
   });
 
   if (!payment) throw new Error("Payment not found.");
@@ -23,18 +34,38 @@ export async function deletePayment(paymentId: string) {
   }
 
   return prisma.$transaction(async (tx) => {
+    const invoiceIds = unique([
+      ...payment.allocations.map((allocation) => allocation.invoiceId),
+      ...payment.appliedDiscountLineItems.map((lineItem) => lineItem.invoiceId),
+    ]);
+
     if (payment.allocations.length > 0) {
-      for (const allocation of payment.allocations) {
-        await adjustInvoicePayment(tx, allocation.invoiceId, -allocation.amountCents);
-      }
       await tx.paymentAllocation.deleteMany({
         where: { paymentId },
+      });
+    }
+    if (payment.appliedDiscountLineItems.length > 0) {
+      await tx.invoiceLineItem.deleteMany({
+        where: { appliedByPaymentId: paymentId },
       });
     }
 
     await tx.payment.delete({
       where: { id: paymentId },
     });
+
+    const updatedInvoices = [];
+    for (const invoiceId of invoiceIds) {
+      const recalculated = await recomputeInvoicePaymentState(tx, invoiceId);
+      if (recalculated) {
+        updatedInvoices.push(recalculated);
+      }
+    }
+
+    const enrolmentIds = unique(updatedInvoices.map((invoice) => invoice.enrolmentId).filter(Boolean) as string[]);
+    for (const enrolmentId of enrolmentIds) {
+      await recomputeEntitlementsForEnrolment(tx, enrolmentId);
+    }
 
     return { success: true };
   });

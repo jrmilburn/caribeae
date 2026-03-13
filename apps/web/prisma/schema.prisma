@@ -563,9 +563,10 @@ enum BillingType {
 model EnrolmentPlan {
   id String @id @default(cuid())
 
-  name           String
-  priceCents     Int     @default(0)
-  isSaturdayOnly Boolean @default(false)
+  name                    String
+  priceCents              Int     @default(0)
+  earlyPaymentDiscountBps Int     @default(0)
+  isSaturdayOnly          Boolean @default(false)
   alternatingWeeks Boolean @default(false)
 
   enrolmentType   EnrolmentType @default(BLOCK)
@@ -956,17 +957,21 @@ model Payment {
   familyId String
   family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
 
-  amountCents    Int
-  paidAt         DateTime      @default(now())
-  method         String?
-  note           String?
-  idempotencyKey String?
-  status         PaymentStatus @default(COMPLETED)
-  reversedAt     DateTime?
-  reversalReason String?
+  amountCents                     Int
+  grossAmountCents                Int
+  earlyPaymentDiscountApplied     Boolean       @default(false)
+  earlyPaymentDiscountAmountCents Int           @default(0)
+  paidAt                          DateTime      @default(now())
+  method                          String?
+  note                            String?
+  idempotencyKey                  String?
+  status                          PaymentStatus @default(COMPLETED)
+  reversedAt                      DateTime?
+  reversalReason                  String?
 
-  allocations    PaymentAllocation[]
-  stripePayments StripePayment[]     @relation("StripePaymentSettlement")
+  allocations              PaymentAllocation[]
+  appliedDiscountLineItems InvoiceLineItem[] @relation("InvoiceLineItemAppliedByPayment")
+  stripePayments           StripePayment[]   @relation("StripePaymentSettlement")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1075,6 +1080,9 @@ model InvoiceLineItem {
   student   Student? @relation(fields: [studentId], references: [id])
   studentId String?
 
+  appliedByPaymentId String?
+  appliedByPayment   Payment? @relation("InvoiceLineItemAppliedByPayment", fields: [appliedByPaymentId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1084,6 +1092,7 @@ model InvoiceLineItem {
   @@index([enrolmentId])
   @@index([planId])
   @@index([studentId])
+  @@index([appliedByPaymentId])
 }
 
 model EnrolmentCreditEvent {

@@ -65,6 +65,17 @@ export async function updatePayment(paymentId: string, input: UpdatePaymentInput
     acc[allocation.invoiceId] = (acc[allocation.invoiceId] ?? 0) + allocation.amountCents;
     return acc;
   }, {});
+  const allocationKeys = Array.from(new Set([...Object.keys(previousAllocations), ...Object.keys(aggregated)]));
+  const allocationsChanged = allocationKeys.some(
+    (invoiceId) => (previousAllocations[invoiceId] ?? 0) !== (aggregated[invoiceId] ?? 0)
+  );
+
+  if (
+    payment.earlyPaymentDiscountApplied &&
+    (payload.familyId !== payment.familyId || payload.amountCents !== payment.amountCents || allocationsChanged)
+  ) {
+    throw new Error("Discounted payments cannot change amount or allocations. Undo and recreate the payment instead.");
+  }
 
   const invoiceIds = Array.from(new Set(allocations.map((a) => a.invoiceId)));
   if (invoiceIds.length > 0) {
@@ -93,6 +104,22 @@ export async function updatePayment(paymentId: string, input: UpdatePaymentInput
   }
 
   return prisma.$transaction(async (tx) => {
+    if (payment.earlyPaymentDiscountApplied) {
+      return tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          familyId: payload.familyId,
+          amountCents: payment.amountCents,
+          grossAmountCents: payment.grossAmountCents,
+          earlyPaymentDiscountApplied: payment.earlyPaymentDiscountApplied,
+          earlyPaymentDiscountAmountCents: payment.earlyPaymentDiscountAmountCents,
+          paidAt: payment.paidAt ?? paidAt,
+          method: payload.method?.trim() || undefined,
+          note: payload.note?.trim() || undefined,
+        },
+      });
+    }
+
     if (payment.allocations.length > 0) {
       for (const allocation of payment.allocations) {
         await adjustInvoicePayment(tx, allocation.invoiceId, -allocation.amountCents);
@@ -107,6 +134,9 @@ export async function updatePayment(paymentId: string, input: UpdatePaymentInput
       data: {
         familyId: payload.familyId,
         amountCents: payload.amountCents,
+        grossAmountCents: payload.amountCents,
+        earlyPaymentDiscountApplied: false,
+        earlyPaymentDiscountAmountCents: 0,
         paidAt,
         method: payload.method?.trim() || undefined,
         note: payload.note?.trim() || undefined,

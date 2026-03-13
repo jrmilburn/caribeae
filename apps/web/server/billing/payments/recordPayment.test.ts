@@ -251,6 +251,7 @@ function seedWeeklyEnrolment(db: FakeDb, options?: { paidThroughDate?: Date | nu
       durationWeeks: 1,
       sessionsPerWeek: 1,
       priceCents: 2500,
+      earlyPaymentDiscountBps: 0,
       blockClassCount: null,
       isSaturdayOnly: false,
       alternatingWeeks: false,
@@ -290,6 +291,7 @@ function seedCreditEnrolment(db: FakeDb, options?: { creditsRemaining?: number }
       durationWeeks: null,
       sessionsPerWeek: null,
       priceCents: 4000,
+      earlyPaymentDiscountBps: 0,
       blockClassCount: 4,
       isSaturdayOnly: false,
       alternatingWeeks: false,
@@ -476,6 +478,52 @@ test("custom block length uses prorated payment and credits", async () => {
 
   assert.strictEqual(db.__data.payments[0].amountCents, 6000);
   assert.strictEqual(db.__data.invoices[0].creditsPurchased, 6);
+});
+
+test("early payment discount is computed server-side and written to the receipt invoice", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db);
+  enrolment.plan.earlyPaymentDiscountBps = 1000;
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    applyEarlyPaymentDiscount: true,
+    idempotencyKey: "early-discount",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(db.__data.payments[0].grossAmountCents, 2500);
+  assert.strictEqual(db.__data.payments[0].amountCents, 2250);
+  assert.strictEqual(db.__data.payments[0].earlyPaymentDiscountApplied, true);
+  assert.strictEqual(db.__data.payments[0].earlyPaymentDiscountAmountCents, 250);
+  assert.strictEqual(db.__data.invoices[0].amountCents, 2250);
+  assert.strictEqual(db.__data.paymentAllocations[0].amountCents, 2250);
+  assert.strictEqual(db.__data.invoiceLineItems[0].amountCents, 2500);
+  assert.strictEqual(db.__data.invoiceLineItems[1].description, "Early payment discount");
+  assert.strictEqual(db.__data.invoiceLineItems[1].amountCents, -250);
+  assert.strictEqual(db.__data.invoiceLineItems[1].appliedByPaymentId, db.__data.payments[0].id);
+});
+
+test("plan discount flag is ignored when the plan has no configured discount", async () => {
+  const db = createFakeClient();
+  const enrolment = seedWeeklyEnrolment(db);
+
+  await recordPayment({
+    familyId: "family-1",
+    amountCents: 2500,
+    enrolmentId: enrolment.id,
+    applyEarlyPaymentDiscount: true,
+    idempotencyKey: "no-discount-configured",
+    client: asRecordPaymentClient(db),
+  });
+
+  assert.strictEqual(db.__data.payments[0].grossAmountCents, 2500);
+  assert.strictEqual(db.__data.payments[0].amountCents, 2500);
+  assert.strictEqual(db.__data.payments[0].earlyPaymentDiscountApplied, false);
+  assert.strictEqual(db.__data.payments[0].earlyPaymentDiscountAmountCents, 0);
+  assert.strictEqual(db.__data.invoiceLineItems.length, 1);
 });
 
 test("custom block length cannot be below plan block length", async () => {

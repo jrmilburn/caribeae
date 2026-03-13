@@ -9,6 +9,10 @@ import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
 import { nextInvoiceStatus } from "./utils";
 import { applyPaidInvoiceToEnrolment } from "@/server/invoicing/applyPaidInvoiceToEnrolment";
+import {
+  computeAvailableInvoiceEarlyPaymentDiscountCents,
+  EARLY_PAYMENT_DISCOUNT_LINE_ITEM_DESCRIPTION,
+} from "@/lib/billing/earlyPaymentDiscount";
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
 
@@ -29,7 +33,14 @@ type LineItemInput = {
 type InvoiceWithEntitlement = Prisma.InvoiceGetPayload<{
   include: {
     enrolment: { include: { plan: true } };
-    lineItems: { select: { id: true; kind: true } };
+    lineItems: {
+      select: {
+        id: true;
+        kind: true;
+        description: true;
+        amountCents: true;
+      };
+    };
   };
 }>;
 
@@ -63,6 +74,7 @@ type CreatePaymentAndAllocateInput = {
   paidAt?: Date;
   method?: string;
   note?: string;
+  applyEarlyPaymentDiscount?: boolean;
   allocations?: PaymentAllocationInput[];
   strategy?: "oldest-open-first";
   idempotencyKey?: string;
@@ -73,6 +85,7 @@ type CreatePaymentAndAllocateInput = {
 type AllocationBuildResult = {
   allocations: PaymentAllocationInput[];
   invoices: InvoiceWithEntitlement[];
+  earlyPaymentDiscountsByInvoiceId: Record<string, number>;
 };
 
 function getClient(client?: PrismaClientOrTx) {
@@ -238,46 +251,141 @@ function aggregateAllocations(allocations: PaymentAllocationInput[]) {
   return Object.entries(aggregated).map(([invoiceId, amountCents]) => ({ invoiceId, amountCents }));
 }
 
+function getAvailableEarlyPaymentDiscountCents(invoice: InvoiceWithEntitlement, applyEarlyPaymentDiscount?: boolean) {
+  if (!applyEarlyPaymentDiscount) return 0;
+  return computeAvailableInvoiceEarlyPaymentDiscountCents({
+    lineItems: invoice.lineItems,
+    discountBps: invoice.enrolment?.plan?.earlyPaymentDiscountBps,
+  });
+}
+
+function getEffectiveInvoiceBalanceCents(invoice: InvoiceWithEntitlement, applyEarlyPaymentDiscount?: boolean) {
+  const availableDiscountCents = getAvailableEarlyPaymentDiscountCents(invoice, applyEarlyPaymentDiscount);
+  return Math.max(invoice.amountCents - invoice.amountPaidCents - availableDiscountCents, 0);
+}
+
+async function applyEarlyPaymentDiscountLineItems(
+  tx: Prisma.TransactionClient,
+  paymentId: string,
+  invoices: InvoiceWithEntitlement[],
+  earlyPaymentDiscountsByInvoiceId: Record<string, number>
+) {
+  const invoiceIds = Object.keys(earlyPaymentDiscountsByInvoiceId);
+  if (invoiceIds.length === 0) return;
+
+  for (const invoice of invoices) {
+    const discountCents = earlyPaymentDiscountsByInvoiceId[invoice.id] ?? 0;
+    if (discountCents <= 0) continue;
+
+    await tx.invoiceLineItem.create({
+      data: {
+        invoiceId: invoice.id,
+        kind: InvoiceLineItemKind.DISCOUNT,
+        description: EARLY_PAYMENT_DISCOUNT_LINE_ITEM_DESCRIPTION,
+        quantity: 1,
+        unitPriceCents: -discountCents,
+        amountCents: -discountCents,
+        enrolmentId: invoice.enrolmentId,
+        planId: invoice.enrolment?.planId ?? null,
+        studentId: null,
+        appliedByPaymentId: paymentId,
+      },
+    });
+
+    const updatedInvoice = await recalculateInvoiceTotals(invoice.id, { client: tx, skipAuth: true });
+    if (updatedInvoice.status !== InvoiceStatus.PAID || invoice.status === InvoiceStatus.PAID) {
+      continue;
+    }
+
+    const invoiceWithEntitlements = await tx.invoice.findUnique({
+      where: { id: invoice.id },
+      include: {
+        enrolment: {
+          include: {
+            plan: true,
+            template: true,
+            classAssignments: {
+              include: {
+                template: true,
+              },
+            },
+          },
+        },
+        lineItems: {
+          select: {
+            kind: true,
+            quantity: true,
+            enrolmentId: true,
+            planId: true,
+            blocksBilled: true,
+            billingType: true,
+          },
+        },
+      },
+    });
+
+    if (invoiceWithEntitlements) {
+      await applyPaidInvoiceToEnrolment(invoiceWithEntitlements.id, {
+        client: tx,
+        invoice: invoiceWithEntitlements,
+      });
+    }
+  }
+}
+
 async function buildOldestOpenAllocations(
   tx: Prisma.TransactionClient,
   familyId: string,
-  amountCents: number
+  amountCents: number,
+  options?: { applyEarlyPaymentDiscount?: boolean }
 ): Promise<AllocationBuildResult> {
-  if (amountCents <= 0) return { allocations: [], invoices: [] };
+  if (amountCents <= 0) return { allocations: [], invoices: [], earlyPaymentDiscountsByInvoiceId: {} };
   const invoices = await tx.invoice.findMany({
     where: { familyId, status: { in: [InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] } },
-    include: { enrolment: { include: { plan: true } }, lineItems: { select: { id: true, kind: true } } },
+    include: {
+      enrolment: { include: { plan: true } },
+      lineItems: { select: { id: true, kind: true, description: true, amountCents: true } },
+    },
     orderBy: [{ dueAt: "asc" }, { issuedAt: "asc" }],
   });
 
   let remaining = amountCents;
   const allocations: PaymentAllocationInput[] = [];
+  const earlyPaymentDiscountsByInvoiceId: Record<string, number> = {};
 
   for (const invoice of invoices) {
     if (remaining <= 0) break;
-    const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+    const availableDiscountCents = getAvailableEarlyPaymentDiscountCents(invoice, options?.applyEarlyPaymentDiscount);
+    const balance = getEffectiveInvoiceBalanceCents(invoice, options?.applyEarlyPaymentDiscount);
     if (balance <= 0) continue;
     const apply = Math.min(balance, remaining);
     allocations.push({ invoiceId: invoice.id, amountCents: apply });
+    if (availableDiscountCents > 0) {
+      earlyPaymentDiscountsByInvoiceId[invoice.id] = availableDiscountCents;
+    }
     remaining -= apply;
   }
 
-  return { allocations, invoices };
+  return { allocations, invoices, earlyPaymentDiscountsByInvoiceId };
 }
 
 async function validateAllocations(
   tx: Prisma.TransactionClient,
   familyId: string,
-  allocations: PaymentAllocationInput[]
+  allocations: PaymentAllocationInput[],
+  options?: { applyEarlyPaymentDiscount?: boolean }
 ): Promise<AllocationBuildResult> {
-  if (!allocations.length) return { allocations: [], invoices: [] };
+  if (!allocations.length) return { allocations: [], invoices: [], earlyPaymentDiscountsByInvoiceId: {} };
 
   const aggregated = aggregateAllocations(allocations);
   const invoiceIds = aggregated.map((a) => a.invoiceId);
 
   const invoices = await tx.invoice.findMany({
     where: { id: { in: invoiceIds } },
-    include: { enrolment: { include: { plan: true } }, lineItems: { select: { id: true, kind: true } } },
+    include: {
+      enrolment: { include: { plan: true } },
+      lineItems: { select: { id: true, kind: true, description: true, amountCents: true } },
+    },
   });
 
   if (invoices.length !== invoiceIds.length) {
@@ -285,6 +393,7 @@ async function validateAllocations(
   }
 
   const requestedByInvoice = new Map(aggregated.map((a) => [a.invoiceId, a.amountCents]));
+  const earlyPaymentDiscountsByInvoiceId: Record<string, number> = {};
 
   for (const invoice of invoices) {
     if (invoice.familyId !== familyId) {
@@ -294,13 +403,17 @@ async function validateAllocations(
       throw new Error("Cannot allocate payments to void invoices.");
     }
     const requested = requestedByInvoice.get(invoice.id) ?? 0;
-    const balance = Math.max(invoice.amountCents - invoice.amountPaidCents, 0);
+    const availableDiscountCents = getAvailableEarlyPaymentDiscountCents(invoice, options?.applyEarlyPaymentDiscount);
+    const balance = getEffectiveInvoiceBalanceCents(invoice, options?.applyEarlyPaymentDiscount);
     if (requested > balance) {
       throw new Error("Allocation exceeds the invoice balance.");
     }
+    if (availableDiscountCents > 0) {
+      earlyPaymentDiscountsByInvoiceId[invoice.id] = availableDiscountCents;
+    }
   }
 
-  return { allocations: aggregated, invoices };
+  return { allocations: aggregated, invoices, earlyPaymentDiscountsByInvoiceId };
 }
 
 async function persistAllocations(
@@ -424,11 +537,38 @@ export async function createPaymentAndAllocate(input: CreatePaymentAndAllocateIn
         };
       }
     }
+    let allocations: PaymentAllocationInput[] = [];
+    let invoices: InvoiceWithEntitlement[] = [];
+    let earlyPaymentDiscountsByInvoiceId: Record<string, number> = {};
+
+    if (input.allocations?.length) {
+      const manual = await validateAllocations(tx, input.familyId, input.allocations, {
+        applyEarlyPaymentDiscount: input.applyEarlyPaymentDiscount,
+      });
+      allocations = manual.allocations;
+      invoices = manual.invoices;
+      earlyPaymentDiscountsByInvoiceId = manual.earlyPaymentDiscountsByInvoiceId;
+    } else if (input.strategy === "oldest-open-first") {
+      const auto = await buildOldestOpenAllocations(tx, input.familyId, input.amountCents, {
+        applyEarlyPaymentDiscount: input.applyEarlyPaymentDiscount,
+      });
+      allocations = auto.allocations;
+      invoices = auto.invoices;
+      earlyPaymentDiscountsByInvoiceId = auto.earlyPaymentDiscountsByInvoiceId;
+    }
+
+    const earlyPaymentDiscountAmountCents = Object.values(earlyPaymentDiscountsByInvoiceId).reduce(
+      (sum, amountCents) => sum + amountCents,
+      0
+    );
 
     const payment = await tx.payment.create({
       data: {
         familyId: input.familyId,
         amountCents: input.amountCents,
+        grossAmountCents: input.amountCents + earlyPaymentDiscountAmountCents,
+        earlyPaymentDiscountApplied: earlyPaymentDiscountAmountCents > 0,
+        earlyPaymentDiscountAmountCents,
         paidAt: input.paidAt ?? new Date(),
         method: input.method?.trim() || undefined,
         note: input.note?.trim() || undefined,
@@ -436,18 +576,7 @@ export async function createPaymentAndAllocate(input: CreatePaymentAndAllocateIn
       },
     });
 
-    let allocations: PaymentAllocationInput[] = [];
-    let invoices: InvoiceWithEntitlement[] = [];
-
-    if (input.allocations?.length) {
-      const manual = await validateAllocations(tx, input.familyId, input.allocations);
-      allocations = manual.allocations;
-      invoices = manual.invoices;
-    } else if (input.strategy === "oldest-open-first") {
-      const auto = await buildOldestOpenAllocations(tx, input.familyId, input.amountCents);
-      allocations = auto.allocations;
-      invoices = auto.invoices;
-    }
+    await applyEarlyPaymentDiscountLineItems(tx, payment.id, invoices, earlyPaymentDiscountsByInvoiceId);
 
     const { allocatedCents } = await persistAllocations(tx, {
       paymentId: payment.id,

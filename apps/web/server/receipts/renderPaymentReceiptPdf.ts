@@ -82,11 +82,19 @@ export async function renderPaymentReceiptPdf(data: PaymentReceiptData): Promise
 
   builder.addTable(
     ["", ""],
-    [
-      ["Amount", formatCurrencyFromCents(data.payment.amountCents)],
-      ["Paid at", formatDate(data.payment.paidAt)],
-      ["Method", coalesce(data.payment.method)],
-    ],
+    data.payment.earlyPaymentDiscountApplied
+      ? [
+          ["Gross", formatCurrencyFromCents(data.payment.grossAmountCents)],
+          ["Early payment discount", formatCurrencyFromCents(-data.payment.earlyPaymentDiscountAmountCents)],
+          ["Net paid", formatCurrencyFromCents(data.payment.amountCents)],
+          ["Paid at", formatDate(data.payment.paidAt)],
+          ["Method", coalesce(data.payment.method)],
+        ]
+      : [
+          ["Amount", formatCurrencyFromCents(data.payment.amountCents)],
+          ["Paid at", formatDate(data.payment.paidAt)],
+          ["Method", coalesce(data.payment.method)],
+        ],
     [
       { width: 22, align: "left" },
       { width: 78, align: "left" },

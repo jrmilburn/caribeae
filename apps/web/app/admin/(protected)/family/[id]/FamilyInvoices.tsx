@@ -478,6 +478,7 @@ export default function FamilyInvoices({
         toast.success("Payment updated.");
       } else {
         normalized.enrolmentId = payload.enrolmentId;
+        normalized.applyEarlyPaymentDiscount = payload.applyEarlyPaymentDiscount;
         normalized.idempotencyKey = payload.idempotencyKey;
         await createPayment(normalized);
         toast.success("Payment recorded.");
@@ -809,10 +810,24 @@ export default function FamilyInvoices({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div
+                className={cn(
+                  "grid gap-3",
+                  selectedPayment.earlyPaymentDiscountApplied ? "sm:grid-cols-5" : "sm:grid-cols-3"
+                )}
+              >
                 <Meta label="Paid on" value={formatDate(selectedPayment.paidAt)} />
                 <Meta label="Method" value={formatPaymentMethod(selectedPayment.method) ?? "Manual"} />
                 <Meta label="Status" value={formatSentenceCase(selectedPayment.status ?? "RECORDED")} />
+                {selectedPayment.earlyPaymentDiscountApplied ? (
+                  <>
+                    <Meta label="Gross" value={formatCurrencyFromCents(selectedPayment.grossAmountCents)} />
+                    <Meta
+                      label="Discount"
+                      value={formatCurrencyFromCents(-selectedPayment.earlyPaymentDiscountAmountCents)}
+                    />
+                  </>
+                ) : null}
               </div>
 
               {describePaymentNote(selectedPayment) ? (

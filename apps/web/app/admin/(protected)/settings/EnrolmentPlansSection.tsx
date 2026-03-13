@@ -150,6 +150,9 @@ export function EnrolmentPlansSection({ plans, levels }: { plans: PlanWithLevel[
                               {plan.alternatingWeeks ? (
                                 <Badge variant="outline">Alt weeks</Badge>
                               ) : null}
+                              {plan.earlyPaymentDiscountBps > 0 ? (
+                                <Badge variant="outline">{(plan.earlyPaymentDiscountBps / 100).toFixed(2)}% early</Badge>
+                              ) : null}
                             </div>
                           </td>
                           <td className="max-w-0 px-3 py-4 text-sm text-foreground">

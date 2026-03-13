@@ -26,6 +26,25 @@ export async function getFamilyBillingData(familyId: string) {
         coverageStart: true,
         coverageEnd: true,
         creditsPurchased: true,
+        enrolment: {
+          select: {
+            id: true,
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                earlyPaymentDiscountBps: true,
+              },
+            },
+          },
+        },
+        lineItems: {
+          select: {
+            kind: true,
+            description: true,
+            amountCents: true,
+          },
+        },
       },
     }),
     prisma.payment.findMany({
@@ -53,7 +72,16 @@ export async function getFamilyBillingData(familyId: string) {
       select: {
         id: true,
         student: { select: { name: true } },
-        plan: { select: { name: true, billingType: true, priceCents: true, blockClassCount: true } },
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            billingType: true,
+            priceCents: true,
+            blockClassCount: true,
+            earlyPaymentDiscountBps: true,
+          },
+        },
         status: true,
         paidThroughDate: true,
         endDate: true,

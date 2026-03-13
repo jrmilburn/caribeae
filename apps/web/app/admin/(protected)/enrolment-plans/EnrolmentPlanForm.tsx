@@ -29,6 +29,7 @@ import { runMutationWithToast } from "@/lib/toast/mutationToast";
 type PlanFormState = {
   name: string;
   priceCents: string;
+  earlyPaymentDiscountBps: string;
   levelId: string;
   billingType: BillingType;
   enrolmentType: EnrolmentType;
@@ -62,6 +63,7 @@ export function EnrolmentPlanForm({
   const [form, setForm] = React.useState<PlanFormState>(() => ({
     name: "",
     priceCents: "0",
+    earlyPaymentDiscountBps: "0",
     levelId: levels[0]?.id ?? "",
     billingType: "PER_CLASS",
     enrolmentType: "BLOCK",
@@ -78,6 +80,7 @@ export function EnrolmentPlanForm({
       setForm({
         name: plan.name,
         priceCents: String(plan.priceCents),
+        earlyPaymentDiscountBps: String(plan.earlyPaymentDiscountBps ?? 0),
         levelId: plan.levelId,
         billingType: plan.billingType,
         enrolmentType: plan.enrolmentType,
@@ -91,6 +94,7 @@ export function EnrolmentPlanForm({
       setForm({
         name: "",
         priceCents: "0",
+        earlyPaymentDiscountBps: "0",
         levelId: levels[0]?.id ?? "",
         billingType: "PER_CLASS",
         enrolmentType: "BLOCK",
@@ -107,6 +111,7 @@ export function EnrolmentPlanForm({
   const requiresDuration = form.billingType === "PER_WEEK";
   const requiresBlockCount = form.billingType === "PER_CLASS";
   const parsedPrice = Number(form.priceCents);
+  const parsedEarlyPaymentDiscountBps = Number(form.earlyPaymentDiscountBps);
   const parsedDuration = Number(form.durationWeeks);
   const parsedBlockCount = Number(form.blockClassCount);
   const parsedSessionsPerWeek = Number(form.sessionsPerWeek);
@@ -117,6 +122,9 @@ export function EnrolmentPlanForm({
     form.levelId &&
     parsedPrice > 0 &&
     Number.isFinite(parsedPrice) &&
+    Number.isFinite(parsedEarlyPaymentDiscountBps) &&
+    parsedEarlyPaymentDiscountBps >= 0 &&
+    parsedEarlyPaymentDiscountBps <= 10000 &&
     (!requiresDuration || (Number.isFinite(parsedDuration) && parsedDuration > 0)) &&
     (!requiresBlockCount || (Number.isFinite(parsedBlockCount) && parsedBlockCount > 0)) &&
     (!hasSessionsInput || (Number.isFinite(parsedSessionsPerWeek) && parsedSessionsPerWeek > 0));
@@ -128,6 +136,7 @@ export function EnrolmentPlanForm({
     const payload = {
       name: form.name.trim(),
       priceCents: Number(form.priceCents),
+      earlyPaymentDiscountBps: parsedEarlyPaymentDiscountBps,
       levelId: form.levelId,
       billingType: form.billingType,
       enrolmentType: form.enrolmentType,
@@ -205,6 +214,18 @@ export function EnrolmentPlanForm({
                 onChange={(e) => setForm((p) => ({ ...p, priceCents: e.target.value }))}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Early payment discount (basis points)</Label>
+            <Input
+              inputMode="numeric"
+              min="0"
+              max="10000"
+              value={form.earlyPaymentDiscountBps}
+              onChange={(e) => setForm((p) => ({ ...p, earlyPaymentDiscountBps: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">0 to 10000. Example: 500 = 5%, 1000 = 10%.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

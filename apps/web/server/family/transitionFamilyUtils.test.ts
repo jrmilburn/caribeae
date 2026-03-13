@@ -19,6 +19,7 @@ const weeklyPlan: EnrolmentPlan = {
   id: "plan-weekly",
   name: "Weekly",
   priceCents: 5000,
+  earlyPaymentDiscountBps: 0,
   isSaturdayOnly: false,
   alternatingWeeks: false,
   enrolmentType: "CLASS",

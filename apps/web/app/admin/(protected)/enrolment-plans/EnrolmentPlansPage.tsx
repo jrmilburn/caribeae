@@ -108,6 +108,9 @@ export default function EnrolmentPlansPage({ plans, levels }: { plans: PlanWithL
                           {plan.alternatingWeeks ? (
                             <Badge variant="outline">Alt weeks</Badge>
                           ) : null}
+                          {plan.earlyPaymentDiscountBps > 0 ? (
+                            <Badge variant="outline">{(plan.earlyPaymentDiscountBps / 100).toFixed(2)}% early</Badge>
+                          ) : null}
                         </div>
                       </TableCell>
                       <TableCell>{plan.level.name}</TableCell>

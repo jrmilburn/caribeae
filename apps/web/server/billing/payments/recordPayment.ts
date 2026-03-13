@@ -12,6 +12,10 @@ import { buildHolidayScopeWhere } from "@/server/holiday/holidayScope";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
 import { buildCustomPayAheadNote } from "@/lib/billing/customPayAheadNote";
 import { computeBlockPayAheadCoverage } from "@/lib/billing/payAheadCalculator";
+import {
+  computeEarlyPaymentDiscountCents,
+  EARLY_PAYMENT_DISCOUNT_LINE_ITEM_DESCRIPTION,
+} from "@/lib/billing/earlyPaymentDiscount";
 import { assertWeeklyPlanSelection, resolveEnrolmentTemplates } from "@/server/billing/weeklyPlanSelection";
 import { recalculateAwayAdjustedPaidThroughForEnrolment } from "@/server/away/creditConsumption";
 
@@ -24,6 +28,7 @@ export type RecordPaymentInput = {
   method?: string;
   note?: string;
   enrolmentId?: string;
+  applyEarlyPaymentDiscount?: boolean;
   customBlockLength?: number | null;
   planId?: string;
   idempotencyKey?: string;
@@ -60,6 +65,9 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
         data: {
           familyId: input.familyId,
           amountCents: input.amountCents,
+          grossAmountCents: input.amountCents,
+          earlyPaymentDiscountApplied: false,
+          earlyPaymentDiscountAmountCents: 0,
           paidAt,
           method: input.method?.trim() || undefined,
           note: input.note?.trim() || undefined,
@@ -73,7 +81,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       where: { id: input.enrolmentId },
       include: {
         plan: true,
-        student: { select: { familyId: true } },
+        student: { select: { id: true, familyId: true } },
         template: { select: { id: true, dayOfWeek: true, name: true, startTime: true, levelId: true } },
         classAssignments: {
           include: { template: { select: { id: true, dayOfWeek: true, startTime: true, levelId: true } } },
@@ -137,17 +145,28 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
       blockLength: planBlockLength,
       customBlockLength: customBlockLength ?? undefined,
     });
-    const paymentAmountCents =
+    const grossAmountCents =
       plan.billingType === BillingType.PER_WEEK && input.planId
         ? plan.priceCents
         : plan.billingType === BillingType.PER_CLASS && customBlockLength
           ? pricing.totalCents
           : input.amountCents;
+    const earlyPaymentDiscountAmountCents =
+      input.applyEarlyPaymentDiscount && plan.earlyPaymentDiscountBps > 0
+        ? computeEarlyPaymentDiscountCents({
+            grossCents: grossAmountCents,
+            discountBps: plan.earlyPaymentDiscountBps,
+          })
+        : 0;
+    const paymentAmountCents = Math.max(grossAmountCents - earlyPaymentDiscountAmountCents, 0);
 
     const payment = await tx.payment.create({
       data: {
         familyId: input.familyId,
         amountCents: paymentAmountCents,
+        grossAmountCents,
+        earlyPaymentDiscountApplied: earlyPaymentDiscountAmountCents > 0,
+        earlyPaymentDiscountAmountCents,
         paidAt,
         method: input.method?.trim() || undefined,
         note: input.note?.trim() || undefined,
@@ -307,11 +326,30 @@ export async function recordPayment(input: RecordPaymentInput): Promise<{
               })}`
             : plan.name,
         quantity: 1,
-        unitPriceCents: payment.amountCents,
-        amountCents: payment.amountCents,
+        unitPriceCents: grossAmountCents,
+        amountCents: grossAmountCents,
         enrolmentId: enrolment.id,
+        planId: plan.id,
+        studentId: enrolment.student.id,
       },
     });
+
+    if (earlyPaymentDiscountAmountCents > 0) {
+      await tx.invoiceLineItem.create({
+        data: {
+          invoiceId: receiptInvoice.id,
+          kind: InvoiceLineItemKind.DISCOUNT,
+          description: EARLY_PAYMENT_DISCOUNT_LINE_ITEM_DESCRIPTION,
+          quantity: 1,
+          unitPriceCents: -earlyPaymentDiscountAmountCents,
+          amountCents: -earlyPaymentDiscountAmountCents,
+          enrolmentId: enrolment.id,
+          planId: plan.id,
+          studentId: enrolment.student.id,
+          appliedByPaymentId: payment.id,
+        },
+      });
+    }
 
     await tx.paymentAllocation.create({
       data: {

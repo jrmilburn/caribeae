@@ -56,6 +56,9 @@ export type PaymentReceiptData = {
   payment: {
     id: string;
     amountCents: number;
+    grossAmountCents: number;
+    earlyPaymentDiscountApplied: boolean;
+    earlyPaymentDiscountAmountCents: number;
     paidAt: Date | null;
     method?: string | null;
     note?: string | null;
@@ -106,6 +109,9 @@ export async function getPaymentReceiptData(rawPaymentId: string): Promise<Payme
     payment: {
       id: payment.id,
       amountCents: payment.amountCents,
+      grossAmountCents: payment.grossAmountCents,
+      earlyPaymentDiscountApplied: payment.earlyPaymentDiscountApplied,
+      earlyPaymentDiscountAmountCents: payment.earlyPaymentDiscountAmountCents,
       paidAt: payment.paidAt,
       method: payment.method,
       note: payment.note,

@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +32,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { centsToDollarString, dollarsToCents, formatCurrencyFromCents } from "@/lib/currency";
 import { calculateBlockPricing, resolveBlockLength } from "@/lib/billing/blockPricing";
+import {
+  computeAvailableInvoiceEarlyPaymentDiscountCents,
+  computeEarlyPaymentDiscountCents,
+} from "@/lib/billing/earlyPaymentDiscount";
 
 import { getFamilyBillingData } from "@/server/billing/getFamilyBillingData";
 import type { BillingPayment } from "@/server/billing/types";
@@ -49,6 +54,7 @@ type Props = {
     note?: string | null;
     allocations?: Array<{ invoiceId: string; amountCents: number }>;
     enrolmentId?: string;
+    applyEarlyPaymentDiscount?: boolean;
     customBlockLength?: number;
     idempotencyKey?: string;
   }) => Promise<void>;
@@ -63,6 +69,7 @@ type InvoiceOption = {
   amountCents: number;
   amountPaidCents: number;
   balanceCents: number;
+  availableEarlyPaymentDiscountCents: number;
 };
 
 function formatSentenceCase(value: string) {
@@ -91,13 +98,27 @@ export function PaymentForm({
   const [allocations, setAllocations] = React.useState<Record<string, string>>({});
   const [invoiceOptions, setInvoiceOptions] = React.useState<InvoiceOption[]>([]);
   const [enrolmentOptions, setEnrolmentOptions] = React.useState<
-    Array<{ id: string; label: string; plan?: { billingType: string; priceCents: number; blockClassCount: number | null } }>
+    Array<{
+      id: string;
+      label: string;
+      plan?: {
+        billingType: string;
+        priceCents: number;
+        blockClassCount: number | null;
+        earlyPaymentDiscountBps: number;
+      };
+    }>
   >([]);
   const [applyTarget, setApplyTarget] = React.useState<string>("ALLOCATE_INVOICES");
   const [loadingInvoices, setLoadingInvoices] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [applyEarlyPaymentDiscount, setApplyEarlyPaymentDiscount] = React.useState(
+    payment?.earlyPaymentDiscountApplied ?? false
+  );
   const [customBlockEnabled, setCustomBlockEnabled] = React.useState(false);
   const [customBlockLength, setCustomBlockLength] = React.useState("");
+  const previousApplyEarlyPaymentDiscount = React.useRef(payment?.earlyPaymentDiscountApplied ?? false);
+  const discountLocked = Boolean(payment?.earlyPaymentDiscountApplied);
 
   React.useEffect(() => {
     if (!open) return;
@@ -108,8 +129,10 @@ export function PaymentForm({
     setPaidOn(payment?.paidAt ? format(payment.paidAt, "yyyy-MM-dd") : new Date().toISOString().slice(0, 10));
     const hasAllocations = (payment?.allocations?.length ?? 0) > 0;
     setApplyTarget(payment ? (hasAllocations ? "ALLOCATE_INVOICES" : "UNALLOCATED") : "ALLOCATE_INVOICES");
+    setApplyEarlyPaymentDiscount(payment?.earlyPaymentDiscountApplied ?? false);
     setCustomBlockEnabled(false);
     setCustomBlockLength("");
+    previousApplyEarlyPaymentDiscount.current = payment?.earlyPaymentDiscountApplied ?? false;
 
     const existingAllocations: Record<string, string> = {};
     payment?.allocations?.forEach((allocation) => {
@@ -150,6 +173,10 @@ export function PaymentForm({
               invoice.amountCents - invoice.amountPaidCents + (previousAllocations.get(invoice.id) ?? 0),
               0
             ),
+            availableEarlyPaymentDiscountCents: computeAvailableInvoiceEarlyPaymentDiscountCents({
+              lineItems: invoice.lineItems,
+              discountBps: invoice.enrolment?.plan?.earlyPaymentDiscountBps,
+            }),
           })) ?? [];
 
         const existingFromPayment =
@@ -163,6 +190,7 @@ export function PaymentForm({
               alloc.invoice.amountCents - alloc.invoice.amountPaidCents + (previousAllocations.get(alloc.invoice.id) ?? 0),
               0
             ),
+            availableEarlyPaymentDiscountCents: 0,
           })) ?? [];
 
         const merged = new Map<string, InvoiceOption>();
@@ -183,10 +211,20 @@ export function PaymentForm({
     [invoiceOptions, allocations]
   );
 
+  const getInvoiceBalanceCents = React.useCallback(
+    (invoice: InvoiceOption) =>
+      Math.max(
+        invoice.balanceCents -
+          (applyEarlyPaymentDiscount && !discountLocked ? invoice.availableEarlyPaymentDiscountCents : 0),
+        0
+      ),
+    [applyEarlyPaymentDiscount, discountLocked]
+  );
+
   const allocationCents = selectedInvoices.map((inv) => ({
     invoiceId: inv.id,
     amountCents: dollarsToCents(allocations[inv.id] ?? "0"),
-    balanceCents: inv.balanceCents,
+    balanceCents: getInvoiceBalanceCents(inv),
   }));
 
   const totalAllocationCents = allocationCents.reduce((sum, a) => sum + a.amountCents, 0);
@@ -203,7 +241,29 @@ export function PaymentForm({
           customBlockLength: customBlockEnabled ? customBlockValue ?? undefined : undefined,
         })
       : null;
-  const amountCents = customBlockEnabled && blockPricing ? blockPricing.totalCents : dollarsToCents(amount || "0");
+  const enteredAmountCents =
+    applyTarget === "ALLOCATE_INVOICES"
+      ? totalAllocationCents
+      : customBlockEnabled && blockPricing
+        ? blockPricing.totalCents
+        : dollarsToCents(amount || "0");
+  const enrolmentEarlyPaymentDiscountCents =
+    applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" && selectedEnrolment?.plan
+      ? computeEarlyPaymentDiscountCents({
+          grossCents: enteredAmountCents,
+          discountBps: applyEarlyPaymentDiscount ? selectedEnrolment.plan.earlyPaymentDiscountBps : 0,
+        })
+      : 0;
+  const invoiceEarlyPaymentDiscountCents =
+    applyTarget === "ALLOCATE_INVOICES" && applyEarlyPaymentDiscount && !discountLocked
+      ? selectedInvoices.reduce((sum, invoice) => sum + invoice.availableEarlyPaymentDiscountCents, 0)
+      : 0;
+  const earlyPaymentDiscountCents = payment?.earlyPaymentDiscountAmountCents ??
+    (applyTarget === "ALLOCATE_INVOICES" ? invoiceEarlyPaymentDiscountCents : enrolmentEarlyPaymentDiscountCents);
+  const grossAmountCents = payment?.grossAmountCents ??
+    (applyTarget === "ALLOCATE_INVOICES" ? totalAllocationCents + invoiceEarlyPaymentDiscountCents : enteredAmountCents);
+  const amountCents = payment?.amountCents ?? Math.max(grossAmountCents - earlyPaymentDiscountCents, 0);
+  const canSubmitAmount = applyTarget === "ALLOCATE_INVOICES" ? totalAllocationCents > 0 : enteredAmountCents > 0;
 
   React.useEffect(() => {
     if (!open) return;
@@ -217,6 +277,40 @@ export function PaymentForm({
     }
   }, [applyTarget, open, isBlockPlan, planBlockLength, customBlockEnabled]);
 
+  React.useEffect(() => {
+    if (!open || applyTarget !== "ALLOCATE_INVOICES" || discountLocked) {
+      previousApplyEarlyPaymentDiscount.current = applyEarlyPaymentDiscount;
+      return;
+    }
+
+    const previous = previousApplyEarlyPaymentDiscount.current;
+    if (previous === applyEarlyPaymentDiscount) return;
+
+    setAllocations((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      for (const invoice of invoiceOptions) {
+        if (prev[invoice.id] == null) continue;
+        const previousBalance = Math.max(
+          invoice.balanceCents - (previous ? invoice.availableEarlyPaymentDiscountCents : 0),
+          0
+        );
+        const nextBalance = Math.max(
+          invoice.balanceCents - (applyEarlyPaymentDiscount ? invoice.availableEarlyPaymentDiscountCents : 0),
+          0
+        );
+        if ((prev[invoice.id] ?? "") !== centsToDollarString(previousBalance)) continue;
+        next[invoice.id] = centsToDollarString(nextBalance);
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+
+    previousApplyEarlyPaymentDiscount.current = applyEarlyPaymentDiscount;
+  }, [applyEarlyPaymentDiscount, applyTarget, discountLocked, invoiceOptions, open]);
+
   const toggleInvoice = (invoiceId: string) => {
     setAllocations((prev) => {
       const copy = { ...prev };
@@ -224,7 +318,7 @@ export function PaymentForm({
         delete copy[invoiceId];
       } else {
         const invoice = invoiceOptions.find((inv) => inv.id === invoiceId);
-        copy[invoiceId] = invoice ? centsToDollarString(invoice.balanceCents) : "0.00";
+        copy[invoiceId] = invoice ? centsToDollarString(getInvoiceBalanceCents(invoice)) : "0.00";
       }
       return copy;
     });
@@ -236,7 +330,7 @@ export function PaymentForm({
       toast.error("Choose a family first.");
       return;
     }
-    if (amountCents <= 0) {
+    if (!canSubmitAmount) {
       toast.error("Enter a payment amount.");
       return;
     }
@@ -247,17 +341,18 @@ export function PaymentForm({
         amountCents: dollarsToCents(value || "0"),
       }))
       .filter((allocation) => allocation.amountCents > 0);
+    const submitAmountCents = applyTarget === "ALLOCATE_INVOICES" ? totalAllocationCents : enteredAmountCents;
 
     if (applyTarget === "ALLOCATE_INVOICES" && allocationsPayload.length > 0) {
       const allocationTotal = allocationsPayload.reduce((sum, a) => sum + a.amountCents, 0);
-      if (allocationTotal !== amountCents) {
+      if (allocationTotal !== submitAmountCents) {
         toast.error("Allocation total must match the payment amount.");
         return;
       }
       const exceeds = allocationsPayload.some((allocation) => {
         const invoice = invoiceOptions.find((inv) => inv.id === allocation.invoiceId);
         if (!invoice) return false;
-        return allocation.amountCents > invoice.balanceCents;
+        return allocation.amountCents > getInvoiceBalanceCents(invoice);
       });
       if (exceeds) {
         toast.error("Allocation exceeds the invoice balance.");
@@ -281,12 +376,13 @@ export function PaymentForm({
     try {
       await onSubmit({
         familyId,
-        amountCents,
+        amountCents: submitAmountCents,
         paidAt: paidOn ? new Date(paidOn) : undefined,
         method: method.trim() || undefined,
         note: note.trim() || undefined,
         allocations: applyTarget === "ALLOCATE_INVOICES" ? allocationsPayload : undefined,
         enrolmentId: applyTarget !== "ALLOCATE_INVOICES" && applyTarget !== "UNALLOCATED" ? applyTarget : undefined,
+        applyEarlyPaymentDiscount,
         customBlockLength: customBlockEnabled && isBlockPlan && customBlockValue ? customBlockValue : undefined,
         idempotencyKey: crypto.randomUUID(),
       });
@@ -326,6 +422,12 @@ export function PaymentForm({
                 ? `Allocated ${formatCurrencyFromCents(totalAllocationCents)}`
                 : "Applies to the selected target."}
             </div>
+            {earlyPaymentDiscountCents > 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Gross {formatCurrencyFromCents(grossAmountCents)} · Early discount{" "}
+                {formatCurrencyFromCents(-earlyPaymentDiscountCents)}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -364,11 +466,20 @@ export function PaymentForm({
               inputMode="decimal"
               step="0.01"
               min="0"
-              value={customBlockEnabled && blockPricing ? centsToDollarString(blockPricing.totalCents) : amount}
+              value={
+                applyTarget === "ALLOCATE_INVOICES"
+                  ? centsToDollarString(amountCents)
+                  : customBlockEnabled && blockPricing
+                    ? centsToDollarString(blockPricing.totalCents)
+                    : amount
+              }
               onChange={(e) => setAmount(e.target.value)}
-              disabled={customBlockEnabled && isBlockPlan}
+              disabled={applyTarget === "ALLOCATE_INVOICES" || (customBlockEnabled && isBlockPlan) || discountLocked}
               placeholder="0.00"
             />
+            {applyTarget === "ALLOCATE_INVOICES" ? (
+              <p className="text-xs text-muted-foreground">Calculated from the invoice allocations below.</p>
+            ) : null}
           </div>
         </div>
 
@@ -384,6 +495,7 @@ export function PaymentForm({
               <button
                 type="button"
                 className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                disabled={discountLocked}
                 onClick={() => {
                   if (!customBlockEnabled) {
                     setCustomBlockLength(String(planBlockLength));
@@ -405,6 +517,7 @@ export function PaymentForm({
                     min={planBlockLength}
                     value={customBlockLength}
                     onChange={(e) => setCustomBlockLength(e.target.value)}
+                    disabled={discountLocked}
                   />
                 </div>
                 {blockPricing ? (
@@ -415,6 +528,39 @@ export function PaymentForm({
                 ) : null}
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {applyTarget !== "UNALLOCATED" ? (
+          <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="apply-early-payment-discount"
+                className="mt-0.5"
+                checked={applyEarlyPaymentDiscount}
+                onCheckedChange={(checked) => setApplyEarlyPaymentDiscount(Boolean(checked))}
+                disabled={Boolean(payment) || discountLocked}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="apply-early-payment-discount" className="leading-5">
+                  Apply early payment discount
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {earlyPaymentDiscountCents > 0
+                    ? `Discount ${formatCurrencyFromCents(-earlyPaymentDiscountCents)} from the enrolment plan configuration.`
+                    : discountLocked
+                      ? "This payment already applied an early payment discount."
+                      : payment
+                        ? "Early payment discount is only available when recording a new payment."
+                      : "No early payment discount is currently available for the selected target."}
+                </p>
+                {discountLocked ? (
+                  <p className="text-xs text-muted-foreground">
+                    Amount and allocations are locked for discounted payments. Undo and recreate the payment to change it.
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
@@ -457,6 +603,7 @@ export function PaymentForm({
               invoiceOptions.map((invoice) => {
                 const selected = allocations[invoice.id] != null;
                 const allocationValue = allocations[invoice.id] ?? "";
+                const visibleBalanceCents = getInvoiceBalanceCents(invoice);
 
                 return (
                   <label
@@ -469,6 +616,7 @@ export function PaymentForm({
                         className="mt-1 h-4 w-4 rounded border-muted-foreground/60"
                         checked={selected}
                         onChange={() => toggleInvoice(invoice.id)}
+                        disabled={discountLocked}
                         aria-label={`Select invoice due ${invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "with no due date"}`}
                       />
 
@@ -477,8 +625,14 @@ export function PaymentForm({
                           Invoice due {invoice.dueAt ? format(invoice.dueAt, "d MMM yyyy") : "—"}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {formatSentenceCase(invoice.status)} · Balance {formatCurrencyFromCents(invoice.balanceCents)}
+                          {formatSentenceCase(invoice.status)} · Balance {formatCurrencyFromCents(visibleBalanceCents)}
                         </div>
+                        {applyEarlyPaymentDiscount && invoice.availableEarlyPaymentDiscountCents > 0 ? (
+                          <div className="text-xs text-muted-foreground">
+                            Includes early payment discount of{" "}
+                            {formatCurrencyFromCents(-invoice.availableEarlyPaymentDiscountCents)}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -496,7 +650,7 @@ export function PaymentForm({
                             [invoice.id]: e.target.value,
                           }))
                         }
-                        disabled={!selected}
+                        disabled={!selected || discountLocked}
                       />
                     </div>
                   </label>
@@ -521,7 +675,12 @@ export function PaymentForm({
 
           <div className="space-y-2">
             <Label>Paid on</Label>
-            <Input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+            <Input
+              type="date"
+              value={paidOn}
+              onChange={(e) => setPaidOn(e.target.value)}
+              disabled={discountLocked}
+            />
           </div>
         </div>
 
@@ -554,7 +713,7 @@ export function PaymentForm({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting || !familyId || !amount}>
+          <Button type="submit" disabled={submitting || !familyId || !canSubmitAmount}>
             {submitting ? "Saving..." : payment ? "Save payment" : "Record payment"}
           </Button>
         </div>
