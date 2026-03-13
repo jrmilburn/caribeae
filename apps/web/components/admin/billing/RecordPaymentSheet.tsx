@@ -319,6 +319,8 @@ export function RecordPaymentSheet({
     if (!sheetOpen) return;
     if (!isWeeklyPlan || !selectedEnrolment?.plan) {
       setSelectedPlanId(null);
+      if (!selectedEnrolment?.plan) return;
+      setAmount(centsToDollarString(selectedEnrolment.plan.priceCents));
       return;
     }
     setSelectedPlanId(selectedEnrolment.plan.id);
