@@ -11,7 +11,7 @@ import type {
 } from "./schedule-types";
 import { formatHolidayLabel } from "./holiday-utils";
 import {
-  SCHEDULE_TIME_ZONE,
+  alignScheduleEntryToDate,
   dayOfWeekToColumnIndex,
   scheduleDateKey,
   scheduleMinutesSinceMidnight,
@@ -324,8 +324,7 @@ export default function WeekView(props: WeekViewProps) {
                     style={{
                       top: `${Math.max(
                         0,
-                        ((dropTarget.start.getHours() * 60 + dropTarget.start.getMinutes()) - GRID_START_MIN) *
-                          minuteHeight
+                        (scheduleMinutesSinceMidnight(dropTarget.start) - GRID_START_MIN) * minuteHeight
                       )}px`,
                       height: `${dropTarget.duration * minuteHeight}px`,
                     }}
@@ -334,28 +333,17 @@ export default function WeekView(props: WeekViewProps) {
 
                 {/* Class blocks */}
                 {dayClasses.map((c) => {
+                  const displayClass = alignScheduleEntryToDate(c, weekDates[dayIndex]);
                   const colors = getTeacherColor(c.teacher?.id);
                   const isCancelled = Boolean(c.cancelled);
                   const canDrag = isDraggable && !isCancelled;
-                  const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
+                  const startMinutes = scheduleMinutesSinceMidnight(displayClass.startTime);
                   const top = (startMinutes - GRID_START_MIN) * minuteHeight;
                   const laneWidthPct = 100 / c.laneCount;
                   const widthPct = laneWidthPct / c.laneColumns;
                   const leftPct = c.laneIndex * laneWidthPct + c.laneOffset * widthPct;
                   const isSelected = selectedTemplateIds?.includes(c.templateId ?? c.id) ?? false;
                   const headerDateKey = scheduleDateKey(weekDates[dayIndex]);
-                  const derivedDateKey = scheduleDateKey(c.startTime);
-                  if (headerDateKey !== derivedDateKey) {
-                    console.warn("[schedule] column date mismatch", {
-                      templateId: c.templateId ?? c.id,
-                      dayOfWeek: c.dayOfWeek,
-                      colIdx: dayIndex,
-                      headerDateKey,
-                      derivedDateKey,
-                      tz: SCHEDULE_TIME_ZONE,
-                      startMinutes: scheduleMinutesSinceMidnight(c.startTime),
-                    });
-                  }
 
                   return (
                     <div
@@ -374,7 +362,7 @@ export default function WeekView(props: WeekViewProps) {
                       onDragEnd={canDrag ? () => finishDrag() : undefined}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onClassClick?.(c, {
+                        onClassClick?.(displayClass, {
                           columnDate: weekDates[dayIndex],
                           columnDateKey: headerDateKey,
                           columnIndex: dayIndex,
@@ -396,16 +384,16 @@ export default function WeekView(props: WeekViewProps) {
                         left: `calc(${leftPct}% + 3px)`,
                       }}
                       title={c.cancellationReason ?? c.level?.name ?? "Class"}
-                    >
-                      <div className="flex flex-col gap-1 overflow-hidden leading-tight text-xs">
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <div className={cn("font-medium truncate", isCancelled ? "text-destructive" : colors.text)}>
-                            {c.level?.name ?? "Class"}
+                      >
+                        <div className="flex flex-col gap-1 overflow-hidden leading-tight text-xs">
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <div className={cn("font-medium truncate", isCancelled ? "text-destructive" : colors.text)}>
+                              {c.level?.name ?? "Class"}
+                            </div>
+                            <div className="ml-auto whitespace-nowrap text-muted-foreground">
+                              {format(displayClass.startTime, "h:mm a")} – {format(displayClass.endTime, "h:mm a")}
+                            </div>
                           </div>
-                          <div className="ml-auto whitespace-nowrap text-muted-foreground">
-                            {format(c.startTime, "h:mm a")} – {format(c.endTime, "h:mm a")}
-                          </div>
-                        </div>
                         {isCancelled ? (
                           <div className="text-[11px] font-semibold text-destructive">
                             Cancelled{c.cancellationReason ? ` — ${c.cancellationReason}` : ""}

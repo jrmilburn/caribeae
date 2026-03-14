@@ -91,6 +91,24 @@ export function scheduleMinutesSinceMidnight(
   return parts.hour * 60 + parts.minute;
 }
 
+export function alignScheduleEntryToDate<T extends { startTime: Date | string; endTime: Date | string }>(
+  value: T,
+  date: Date,
+  timeZone: string = SCHEDULE_TIME_ZONE
+): Omit<T, "startTime" | "endTime"> & { startTime: Date; endTime: Date } {
+  const startTime = asDate(value.startTime);
+  const endTime = asDate(value.endTime);
+  const durationMin = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60)));
+  const alignedStart = scheduleDateAtMinutes(date, scheduleMinutesSinceMidnight(startTime, timeZone), timeZone);
+  const alignedEnd = new Date(alignedStart.getTime() + durationMin * 60 * 1000);
+
+  return {
+    ...value,
+    startTime: alignedStart,
+    endTime: alignedEnd,
+  };
+}
+
 export function enumerateScheduleDatesInclusive(start: Date | string, end: Date | string): Date[] {
   const startDate = normalizeToScheduleMidnight(start);
   const endDate = normalizeToScheduleMidnight(end);

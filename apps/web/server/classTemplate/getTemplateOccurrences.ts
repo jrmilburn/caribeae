@@ -17,14 +17,6 @@ export async function getTemplateOccurrences(params: {
 }): Promise<TemplateOccurrence[]> {
   const range = normalizeDateRange(params);
 
-  console.log("[schedule] getTemplateOccurrences", {
-    fromParam: params.from,
-    toParam: params.to,
-    normalizedFrom: range.from.toISOString(),
-    normalizedTo: range.to.toISOString(),
-    levelId: params.levelId ?? null,
-  });
-
   const templates = await prisma.classTemplate.findMany({
     where: {
       active: true,
@@ -38,7 +30,6 @@ export async function getTemplateOccurrences(params: {
   const occurrences = expandTemplatesToOccurrences(templates, range);
 
   if (!occurrences.length) {
-    console.log("[schedule] no occurrences generated", { templateCount: templates.length });
     return occurrences;
   }
 
@@ -107,13 +98,6 @@ export async function getTemplateOccurrences(params: {
   const filtered = params.makeupOnly
     ? withMakeupSpots.filter((occurrence) => (occurrence.makeupSpotsAvailable ?? 0) > 0)
     : withMakeupSpots;
-
-  console.log("[schedule] occurrences generated", {
-    templateCount: templates.length,
-    substitutionCount: substitutions.length,
-    cancellationCount: cancellations.length,
-    occurrenceCount: filtered.length,
-  });
 
   return filtered;
 }

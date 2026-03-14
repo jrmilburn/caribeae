@@ -39,10 +39,9 @@ import { findMatchingFamilies } from "@/server/onboarding/findMatchingFamilies";
 import { updateOnboardingStatus } from "@/server/onboarding/updateOnboardingStatus";
 import { acceptOnboardingRequest } from "@/server/onboarding/acceptOnboardingRequest";
 import {
+  alignScheduleEntryToDate,
   formatScheduleWeekdayTime,
-  scheduleDateAtMinutes,
   scheduleDateKey,
-  scheduleMinutesSinceMidnight,
   ScheduleView,
   type NormalizedScheduleClass,
   type ScheduleClassClickContext,
@@ -109,15 +108,20 @@ function buildSelectionSummary(selectedTemplates: Record<string, NormalizedSched
   });
 }
 
-function alignOccurrenceToColumn(occurrence: NormalizedScheduleClass, columnDate: Date) {
-  const startMinutes = scheduleMinutesSinceMidnight(occurrence.startTime);
-  const alignedStart = scheduleDateAtMinutes(columnDate, startMinutes);
-  const alignedEnd = new Date(alignedStart.getTime() + occurrence.durationMin * 60 * 1000);
-  return {
-    ...occurrence,
-    startTime: alignedStart,
-    endTime: alignedEnd,
-  };
+function applyAssignmentUpdate(
+  assignment: AssignmentDraft,
+  update: React.SetStateAction<AssignmentDraft>
+) {
+  return typeof update === "function"
+    ? (update as (prev: AssignmentDraft) => AssignmentDraft)(assignment)
+    : update;
+}
+
+function getAutoStartDate(selectedTemplates: Record<string, NormalizedScheduleClass>) {
+  const sortedDates = Object.values(selectedTemplates)
+    .map((template) => scheduleDateKey(template.startTime))
+    .sort();
+  return sortedDates[0] ?? null;
 }
 
 function ScheduleSelectionDialog({
@@ -133,7 +137,7 @@ function ScheduleSelectionDialog({
   levels: Level[];
   assignment: AssignmentDraft;
   plan: EnrolmentPlan | null;
-  onUpdate: (updater: (prev: AssignmentDraft) => AssignmentDraft) => void;
+  onUpdate: React.Dispatch<React.SetStateAction<AssignmentDraft>>;
 }) {
   const selectionRequirement = plan
     ? getSelectionRequirement(plan)
@@ -179,9 +183,8 @@ function ScheduleSelectionDialog({
       return;
     }
 
-    const alignedOccurrence =
-      context?.columnDate ? alignOccurrenceToColumn(occurrence, context.columnDate) : occurrence;
-    const occurrenceDateKey = context?.columnDateKey ?? scheduleDateKey(occurrence.startTime);
+    const alignedOccurrence = context?.columnDate ? alignScheduleEntryToDate(occurrence, context.columnDate) : occurrence;
+    const occurrenceDateKey = context?.columnDateKey ?? scheduleDateKey(alignedOccurrence.startTime);
 
     onUpdate((prev) => {
       const alreadySelected = Boolean(prev.selectedTemplates[occurrence.templateId]);
@@ -308,9 +311,10 @@ function StudentAssignmentCard({
   assignment: AssignmentDraft;
   plans: (EnrolmentPlan & { level: Level })[];
   levels: Level[];
-  onUpdate: (next: AssignmentDraft) => void;
+  onUpdate: React.Dispatch<React.SetStateAction<AssignmentDraft>>;
 }) {
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const updateAssignment = React.useEffectEvent(onUpdate);
 
   const selectedTemplates = assignment.selectedTemplates;
   const selectedTemplateIds = Object.keys(selectedTemplates);
@@ -333,22 +337,32 @@ function StudentAssignmentCard({
   );
 
   React.useEffect(() => {
-    if (!availablePlans.find((plan) => plan.id === assignment.planId)) {
-      onUpdate({ ...assignment, planId: availablePlans[0]?.id ?? "" });
-    }
-  }, [assignment, availablePlans, onUpdate]);
+    const fallbackPlanId = availablePlans[0]?.id ?? "";
+    updateAssignment((prev) => {
+      if (availablePlans.find((plan) => plan.id === prev.planId)) {
+        return prev;
+      }
+      if (prev.planId === fallbackPlanId) {
+        return prev;
+      }
+      return { ...prev, planId: fallbackPlanId };
+    });
+  }, [availablePlans]);
+
+  const autoStartDate = React.useMemo(() => {
+    if (assignment.startDateTouched) return null;
+    return getAutoStartDate(selectedTemplates);
+  }, [assignment.startDateTouched, selectedTemplates]);
 
   React.useEffect(() => {
-    if (!selectedTemplateIds.length || assignment.startDateTouched) return;
-    const sortedDates = selectedTemplateIds
-      .map((id) => selectedTemplates[id]?.startTime)
-      .filter(Boolean)
-      .map((date) => scheduleDateKey(date as Date))
-      .sort();
-    if (sortedDates.length) {
-      onUpdate({ ...assignment, startDate: sortedDates[0] });
-    }
-  }, [assignment, onUpdate, selectedTemplateIds, selectedTemplates]);
+    if (!autoStartDate) return;
+    updateAssignment((prev) => {
+      if (prev.startDateTouched || prev.startDate === autoStartDate) {
+        return prev;
+      }
+      return { ...prev, startDate: autoStartDate };
+    });
+  }, [autoStartDate]);
 
   return (
     <Card className="border-dashed">
@@ -362,7 +376,12 @@ function StudentAssignmentCard({
           <Label>Student level</Label>
           <Select
             value={assignment.levelId ?? ""}
-            onValueChange={(value) => onUpdate({ ...assignment, levelId: value || null })}
+            onValueChange={(value) =>
+              onUpdate((prev) => {
+                const nextLevelId = value || null;
+                return prev.levelId === nextLevelId ? prev : { ...prev, levelId: nextLevelId };
+              })
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Select level" />
@@ -381,7 +400,9 @@ function StudentAssignmentCard({
           <Label>Enrolment plan</Label>
           <Select
             value={assignment.planId}
-            onValueChange={(value) => onUpdate({ ...assignment, planId: value })}
+            onValueChange={(value) =>
+              onUpdate((prev) => (prev.planId === value ? prev : { ...prev, planId: value }))
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Select plan" />
@@ -423,7 +444,13 @@ function StudentAssignmentCard({
             type="date"
             value={assignment.startDate}
             onChange={(event) =>
-              onUpdate({ ...assignment, startDate: event.target.value, startDateTouched: true })
+              onUpdate((prev) => {
+                const nextStartDate = event.target.value;
+                if (prev.startDate === nextStartDate && prev.startDateTouched) {
+                  return prev;
+                }
+                return { ...prev, startDate: nextStartDate, startDateTouched: true };
+              })
             }
           />
         </div>
@@ -434,7 +461,7 @@ function StudentAssignmentCard({
           levels={levels}
           assignment={assignment}
           plan={selectedPlan}
-          onUpdate={(updater) => onUpdate(updater(assignment))}
+          onUpdate={onUpdate}
         />
       </CardContent>
     </Card>
@@ -701,10 +728,22 @@ function AcceptOnboardingDialog({
                     assignment={assignment}
                     plans={enrolmentPlans}
                     levels={levels}
-                    onUpdate={(next) =>
-                      setAssignments((prev) =>
-                        prev.map((item) => (item.studentIndex === assignment.studentIndex ? next : item))
-                      )
+                    onUpdate={(update) =>
+                      setAssignments((prev) => {
+                        let changed = false;
+                        const nextAssignments = prev.map((item) => {
+                          if (item.studentIndex !== assignment.studentIndex) {
+                            return item;
+                          }
+                          const nextItem = applyAssignmentUpdate(item, update);
+                          if (nextItem === item) {
+                            return item;
+                          }
+                          changed = true;
+                          return nextItem;
+                        });
+                        return changed ? nextAssignments : prev;
+                      })
                     }
                   />
                 ))}

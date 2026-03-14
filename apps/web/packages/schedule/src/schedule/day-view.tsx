@@ -10,7 +10,12 @@ import type {
   ScheduleClassClickContext,
 } from "./schedule-types";
 import { formatHolidayLabel } from "./holiday-utils";
-import { dayOfWeekToColumnIndex, scheduleDateKey } from "./schedule-date-utils";
+import {
+  alignScheduleEntryToDate,
+  dayOfWeekToColumnIndex,
+  scheduleDateKey,
+  scheduleMinutesSinceMidnight,
+} from "./schedule-date-utils";
 
 const GRID_START_HOUR = 5;
 const GRID_START_MIN = GRID_START_HOUR * 60;
@@ -230,8 +235,7 @@ export default function DayView(props: DayViewProps) {
               style={{
                 top: `${Math.max(
                   0,
-                  ((dropTarget.start.getHours() * 60 + dropTarget.start.getMinutes()) - GRID_START_MIN) *
-                    minuteHeight
+                  (scheduleMinutesSinceMidnight(dropTarget.start) - GRID_START_MIN) * minuteHeight
                 )}px`,
                 height: `${dropTarget.duration * minuteHeight}px`,
               }}
@@ -240,10 +244,11 @@ export default function DayView(props: DayViewProps) {
 
           {/* Class blocks */}
           {classes.map((c) => {
+            const displayClass = alignScheduleEntryToDate(c, dayDate);
             const colors = getTeacherColor(c.teacher?.id);
             const isCancelled = Boolean(c.cancelled);
             const canDrag = isDraggable && !isCancelled;
-            const startMinutes = c.startTime.getHours() * 60 + c.startTime.getMinutes();
+            const startMinutes = scheduleMinutesSinceMidnight(displayClass.startTime);
             const top = (startMinutes - GRID_START_MIN) * minuteHeight;
             const laneWidthPct = 100 / c.laneCount;
             const widthPct = laneWidthPct / c.laneColumns;
@@ -276,7 +281,7 @@ export default function DayView(props: DayViewProps) {
                 // If cards accept drops, you'll "drop onto a card" and it can snap back.
                 onClick={(e) => {
                   e.stopPropagation();
-                  onClassClick?.(c, {
+                  onClassClick?.(displayClass, {
                     columnDate: dayDate,
                     columnDateKey: scheduleDateKey(dayDate),
                     columnIndex: dayOfWeekToColumnIndex(dayOfWeek),
@@ -305,7 +310,7 @@ export default function DayView(props: DayViewProps) {
                       {c.level?.name ?? "Class"}
                     </div>
                     <div className="ml-auto whitespace-nowrap text-muted-foreground">
-                      {format(c.startTime, "h:mm a")} – {format(c.endTime, "h:mm a")}
+                      {format(displayClass.startTime, "h:mm a")} – {format(displayClass.endTime, "h:mm a")}
                     </div>
                   </div>
                   {isCancelled ? (
