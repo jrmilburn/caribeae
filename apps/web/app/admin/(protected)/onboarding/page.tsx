@@ -1,5 +1,8 @@
 import { parsePaginationSearchParams } from "@/server/pagination";
-import { listOnboardingRequests } from "@/server/onboarding/listOnboardingRequests";
+import {
+  listOnboardingRequests,
+  type OnboardingRequestStatus,
+} from "@/server/onboarding/listOnboardingRequests";
 import { prisma } from "@/lib/prisma";
 import { OnboardingReviewClient } from "./OnboardingReviewClient";
 
@@ -32,12 +35,12 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
   const { q, cursor, pageSize } = parsePaginationSearchParams(params);
   const view = parseView(first(params.view));
   const reviewedStatus = view === "reviewed" ? parseReviewedStatus(first(params.status)) : null;
-  const statuses =
+  const statuses: OnboardingRequestStatus[] =
     view === "reviewed"
       ? reviewedStatus
         ? [reviewedStatus]
-        : (["ACCEPTED", "DECLINED"] as const)
-      : (["NEW"] as const);
+        : ["ACCEPTED", "DECLINED"]
+      : ["NEW"];
 
   const [requests, levels, enrolmentPlans] = await Promise.all([
     listOnboardingRequests({
@@ -45,7 +48,7 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
       cursor,
       filters: {
         q,
-        statuses: [...statuses],
+        statuses,
       },
     }),
     prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
