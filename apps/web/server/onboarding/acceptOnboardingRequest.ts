@@ -68,6 +68,11 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
   const emergencyContactName = parsed.contact.emergencyContactName?.trim() || null;
   const emergencyContactPhone = parsed.contact.emergencyContactPhone?.trim() || null;
   const address = parsed.contact.address?.trim() || null;
+  const primaryEmail = parsed.contact.email?.trim() || null;
+  const primaryPhone = parsed.contact.phone?.trim() || null;
+  const secondaryContactName = parsed.contact.secondaryContactName?.trim() || null;
+  const secondaryEmail = parsed.contact.secondaryEmail?.trim() || null;
+  const secondaryPhone = parsed.contact.secondaryPhone?.trim() || null;
 
   const assignments = payload.assignments ?? [];
   const assignmentByIndex = new Map(assignments.map((assignment) => [assignment.studentIndex, assignment]));
@@ -92,11 +97,11 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
           data: {
             name: resolveFamilyName(parsed.contact.guardianName),
             primaryContactName: parsed.contact.guardianName,
-            primaryEmail: parsed.contact.email,
-            primaryPhone: parsed.contact.phone,
-            secondaryContactName: parsed.contact.secondaryContactName,
-            secondaryEmail: parsed.contact.secondaryEmail,
-            secondaryPhone: parsed.contact.secondaryPhone,
+            primaryEmail,
+            primaryPhone,
+            secondaryContactName,
+            secondaryEmail,
+            secondaryPhone,
             medicalContactName: emergencyContactName,
             medicalContactPhone: emergencyContactPhone,
             address,
@@ -110,7 +115,22 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
         if (!existing) {
           throw new Error("Selected family not found.");
         }
-        createdFamilyName = existing.name;
+        const updatedFamily = await tx.family.update({
+          where: { id: familyId },
+          data: {
+            primaryContactName: parsed.contact.guardianName,
+            primaryEmail,
+            primaryPhone,
+            secondaryContactName,
+            secondaryEmail,
+            secondaryPhone,
+            medicalContactName: emergencyContactName,
+            medicalContactPhone: emergencyContactPhone,
+            address,
+          },
+          select: { name: true },
+        });
+        createdFamilyName = updatedFamily.name;
       }
 
       const students = await Promise.all(

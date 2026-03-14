@@ -13,6 +13,12 @@ export async function POST() {
   if (access.status === "SIGNED_OUT") {
     return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
   }
+  if (access.status === "PENDING_APPROVAL") {
+    return NextResponse.json(
+      { error: "Your onboarding request is still awaiting approval." },
+      { status: 403 }
+    );
+  }
   if (access.status !== "OK") {
     return NextResponse.json({ error: "Unable to verify your family account." }, { status: 403 });
   }

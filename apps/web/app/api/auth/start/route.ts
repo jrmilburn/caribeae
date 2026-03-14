@@ -6,6 +6,7 @@ import { getClientIp } from "@/server/auth/getClientIp";
 import { findEligibleFamily } from "@/server/auth/eligibility";
 import { createPendingAuth } from "@/server/auth/pendingAuth";
 import { normalizeIdentifier, type IdentifierType } from "@/lib/auth/identity";
+import { findPendingOnboardingRequest } from "@/server/onboarding/pendingAccess";
 
 export const runtime = "nodejs";
 
@@ -37,8 +38,11 @@ export async function POST(req: Request) {
 
   const normalized = normalizeIdentifier(payload.identifier, payload.type);
   const family = await findEligibleFamily({ identifier: normalized, type: payload.type });
+  const pendingRequest = family
+    ? null
+    : await findPendingOnboardingRequest({ identifier: normalized, type: payload.type });
 
-  if (!family) {
+  if (!family && !pendingRequest) {
     return NextResponse.json({ ok: false, error: NOT_ELIGIBLE_MESSAGE }, { status: 403 });
   }
 
@@ -52,7 +56,8 @@ export async function POST(req: Request) {
   const flow = userList.data.length > 0 ? "signIn" : "signUp";
 
   const token = await createPendingAuth({
-    familyId: family.id,
+    familyId: family?.id ?? null,
+    onboardingRequestId: pendingRequest?.id ?? null,
     identifier: normalized,
     type: payload.type,
     flow,

@@ -22,7 +22,7 @@ export default async function Home() {
   }
 
   const access = await getFamilyForCurrentUser();
-  if (access.status === "OK") {
+  if (access.status === "OK" || access.status === "PENDING_APPROVAL") {
     redirect("/portal");
   }
 

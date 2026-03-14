@@ -20,6 +20,10 @@ export default async function PortalBillingPage({ searchParams }: PageProps) {
     redirect("/auth");
   }
 
+  if (access.status === "PENDING_APPROVAL") {
+    redirect("/portal");
+  }
+
   if (access.status !== "OK") {
     redirect("/auth/error");
   }

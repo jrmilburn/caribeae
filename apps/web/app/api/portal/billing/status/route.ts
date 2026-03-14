@@ -10,6 +10,9 @@ export async function GET(request: Request) {
   if (access.status === "SIGNED_OUT") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (access.status === "PENDING_APPROVAL") {
+    return NextResponse.json({ error: "Awaiting approval" }, { status: 403 });
+  }
   if (access.status !== "OK") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

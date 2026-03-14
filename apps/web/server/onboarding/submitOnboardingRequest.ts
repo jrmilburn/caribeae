@@ -6,8 +6,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isValidE164, normalizeEmail, normalizePhone } from "@/lib/auth/identity";
 import { publicOnboardingRequestSchema } from "@/lib/onboarding/schema";
-import { findEligibleFamilyForIdentifiers } from "@/server/auth/eligibility";
-import { resolveFamilyName } from "@/server/onboarding/resolveFamilyName";
 import {
   createOnboardingUpdateToken,
   verifyOnboardingUpdateToken,
@@ -53,15 +51,13 @@ function checkRateLimit(key: string) {
   return { ok: true } as const;
 }
 
-const submitResultSchema = z.object({
-  ok: z.boolean(),
-  id: z.string().optional(),
-  familyId: z.string().optional(),
-  updateToken: z.string().optional(),
-  error: z.string().optional(),
-});
-
-export type SubmitOnboardingResult = z.infer<typeof submitResultSchema>;
+export type SubmitOnboardingResult = {
+  ok: boolean;
+  id?: string;
+  familyId?: string;
+  updateToken?: string;
+  error?: string;
+};
 
 const submitSchema = publicOnboardingRequestSchema.extend({
   requestId: z.string().trim().optional().nullable(),
@@ -104,12 +100,13 @@ export async function submitOnboardingRequest(
   const address = payload.contact.address?.trim() || null;
   const secondaryContactName = payload.contact.secondaryContactName?.trim() || null;
 
-  if (payload.requestId && payload.familyId) {
+  if (payload.requestId) {
     const request = await prisma.onboardingRequest.findUnique({
       where: { id: payload.requestId },
       select: {
         id: true,
         familyId: true,
+        status: true,
         updateTokenHash: true,
         updateTokenExpiresAt: true,
       },
@@ -117,7 +114,8 @@ export async function submitOnboardingRequest(
 
     if (
       !request ||
-      request.familyId !== payload.familyId ||
+      request.status !== "NEW" ||
+      (payload.familyId && request.familyId && request.familyId !== payload.familyId) ||
       !verifyOnboardingUpdateToken({
         token: payload.updateToken ?? undefined,
         hash: request.updateTokenHash ?? undefined,
@@ -130,114 +128,60 @@ export async function submitOnboardingRequest(
     const rotated = createOnboardingUpdateToken();
 
     try {
-      await prisma.$transaction([
-        prisma.family.update({
-          where: { id: payload.familyId },
-          data: {
-            primaryContactName: payload.contact.guardianName,
-            primaryEmail: normalizedEmail,
-            primaryPhone: normalizedPhone,
-            secondaryContactName,
-            secondaryEmail: normalizedSecondaryEmail,
-            secondaryPhone: normalizedSecondaryPhone,
-            medicalContactName: emergencyContactName,
-            medicalContactPhone: emergencyContactPhone,
-            address,
-          },
-        }),
-        prisma.onboardingRequest.update({
-          where: { id: payload.requestId },
-          data: {
-            guardianName: payload.contact.guardianName,
-            phone: normalizedPhone ?? (payload.contact.phone?.trim() || null),
-            email: normalizedEmail,
-            secondaryContactName,
-            secondaryEmail: normalizedSecondaryEmail,
-            secondaryPhone: normalizedSecondaryPhone,
-            emergencyContactName,
-            emergencyContactPhone,
-            address,
-            studentsJson: payload.students,
-            availabilityJson: payload.availability,
-            updateTokenHash: rotated.hash,
-            updateTokenExpiresAt: rotated.expiresAt,
-          },
-        }),
-      ]);
+      await prisma.onboardingRequest.update({
+        where: { id: payload.requestId },
+        data: {
+          guardianName: payload.contact.guardianName,
+          phone: normalizedPhone ?? (payload.contact.phone?.trim() || null),
+          email: normalizedEmail,
+          secondaryContactName,
+          secondaryEmail: normalizedSecondaryEmail,
+          secondaryPhone: normalizedSecondaryPhone,
+          emergencyContactName,
+          emergencyContactPhone,
+          address,
+          studentsJson: payload.students,
+          availabilityJson: payload.availability,
+          updateTokenHash: rotated.hash,
+          updateTokenExpiresAt: rotated.expiresAt,
+        },
+      });
       return {
         ok: true,
         id: payload.requestId,
-        familyId: payload.familyId,
+        familyId: request.familyId ?? undefined,
         updateToken: rotated.token,
       };
-    } catch (error) {
+    } catch {
       return { ok: false, error: "Unable to update the request." };
     }
   }
 
-  const existingFamily = await findEligibleFamilyForIdentifiers(
-    [
-      ...(normalizedEmail ? [normalizedEmail] : []),
-      ...(normalizedSecondaryEmail ? [normalizedSecondaryEmail] : []),
-    ],
-    [
-      ...(normalizedPhone ? [normalizedPhone] : []),
-      ...(normalizedSecondaryPhone ? [normalizedSecondaryPhone] : []),
-    ]
-  );
-
-  const created = await prisma.$transaction(async (tx) => {
-    let familyId = existingFamily?.id ?? null;
-
-    const updateToken = createOnboardingUpdateToken();
-
-    if (!familyId) {
-      const family = await tx.family.create({
-        data: {
-          name: resolveFamilyName(payload.contact.guardianName),
-          primaryContactName: payload.contact.guardianName,
-          primaryEmail: normalizedEmail,
-          primaryPhone: normalizedPhone,
-          secondaryContactName,
-          secondaryEmail: normalizedSecondaryEmail,
-          secondaryPhone: normalizedSecondaryPhone,
-          medicalContactName: emergencyContactName,
-          medicalContactPhone: emergencyContactPhone,
-          address,
-        },
-        select: { id: true },
-      });
-      familyId = family.id;
-    }
-
-    const onboarding = await tx.onboardingRequest.create({
-      data: {
-        guardianName: payload.contact.guardianName,
-        phone: normalizedPhone ?? (payload.contact.phone?.trim() || null),
-        email: normalizedEmail,
-        secondaryContactName,
-        secondaryEmail: normalizedSecondaryEmail,
-        secondaryPhone: normalizedSecondaryPhone,
-        emergencyContactName,
-        emergencyContactPhone,
-        address,
-        studentsJson: payload.students,
-        availabilityJson: payload.availability,
-        updateTokenHash: updateToken.hash,
-        updateTokenExpiresAt: updateToken.expiresAt,
-        status: "NEW",
-        familyId,
-      },
-      select: { id: true, familyId: true },
-    });
-
-    return { ...onboarding, updateToken: updateToken.token };
+  const updateToken = createOnboardingUpdateToken();
+  const created = await prisma.onboardingRequest.create({
+    data: {
+      guardianName: payload.contact.guardianName,
+      phone: normalizedPhone ?? (payload.contact.phone?.trim() || null),
+      email: normalizedEmail,
+      secondaryContactName,
+      secondaryEmail: normalizedSecondaryEmail,
+      secondaryPhone: normalizedSecondaryPhone,
+      emergencyContactName,
+      emergencyContactPhone,
+      address,
+      studentsJson: payload.students,
+      availabilityJson: payload.availability,
+      updateTokenHash: updateToken.hash,
+      updateTokenExpiresAt: updateToken.expiresAt,
+      status: "NEW",
+    },
+    select: { id: true, familyId: true },
   });
 
   return {
     ok: true,
     id: created.id,
     familyId: created.familyId ?? undefined,
-    updateToken: created.updateToken,
+    updateToken: updateToken.token,
   };
 }

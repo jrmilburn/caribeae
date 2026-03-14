@@ -11,7 +11,7 @@ import {
 
 const schema = z.object({
   requestId: z.string().min(1),
-  familyId: z.string().min(1),
+  familyId: z.string().min(1).optional().nullable(),
   identifier: z.string().min(1),
   type: z.enum(["email", "phone"]),
   updateToken: z.string().min(1),
@@ -37,12 +37,13 @@ export async function updateOnboardingContact(input: z.infer<typeof schema>): Pr
 
   const request = await prisma.onboardingRequest.findUnique({
     where: { id: payload.requestId },
-    select: { id: true, familyId: true, updateTokenHash: true, updateTokenExpiresAt: true },
+    select: { id: true, familyId: true, status: true, updateTokenHash: true, updateTokenExpiresAt: true },
   });
 
   if (
     !request ||
-    request.familyId !== payload.familyId ||
+    request.status !== "NEW" ||
+    (payload.familyId && request.familyId && request.familyId !== payload.familyId) ||
     !verifyOnboardingUpdateToken({
       token: payload.updateToken,
       hash: request.updateTokenHash ?? undefined,
@@ -52,33 +53,24 @@ export async function updateOnboardingContact(input: z.infer<typeof schema>): Pr
     return { ok: false, error: "Unable to update contact details." };
   }
 
-  const updateFamily: Record<string, string> = {};
   const updateRequest: Record<string, string> = {};
 
   if (payload.type === "email") {
-    updateFamily.primaryEmail = normalized;
     updateRequest.email = normalized;
   } else {
-    updateFamily.primaryPhone = normalized;
     updateRequest.phone = normalized;
   }
 
   const rotated = createOnboardingUpdateToken();
 
-  await prisma.$transaction([
-    prisma.family.update({
-      where: { id: payload.familyId },
-      data: updateFamily,
-    }),
-    prisma.onboardingRequest.update({
-      where: { id: payload.requestId },
-      data: {
-        ...updateRequest,
-        updateTokenHash: rotated.hash,
-        updateTokenExpiresAt: rotated.expiresAt,
-      },
-    }),
-  ]);
+  await prisma.onboardingRequest.update({
+    where: { id: payload.requestId },
+    data: {
+      ...updateRequest,
+      updateTokenHash: rotated.hash,
+      updateTokenExpiresAt: rotated.expiresAt,
+    },
+  });
 
   return { ok: true, normalized, updateToken: rotated.token };
 }

@@ -86,7 +86,7 @@ type IdentifierSource = "primaryEmail" | "primaryPhone" | "secondaryEmail" | "se
 
 type OnboardingAuthState = {
   requestId: string;
-  familyId: string;
+  familyId?: string;
   updateToken?: string;
   identifier?: string;
   type?: IdentifierType;
@@ -196,7 +196,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     if (authStored) {
       try {
         const parsed = JSON.parse(authStored) as OnboardingAuthState;
-        if (parsed.requestId && parsed.familyId) {
+        if (parsed.requestId) {
           setAuthState(parsed);
           setStep(steps.length - 1);
           if (parsed.identifier && parsed.type && parsed.flow) {
@@ -750,7 +750,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
         setSubmitError(result.error ?? "Unable to submit.");
         return;
       }
-      if (!result.familyId || !result.id || !result.updateToken) {
+      if (!result.id || !result.updateToken) {
         setSubmitError("Please contact Caribeae to finish setup.");
         return;
       }
@@ -838,7 +838,11 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
     setClerkMissingFields([]);
     setResendCountdown(RESEND_SECONDS);
     if (authState) {
-      persistAuthState({ requestId: authState.requestId, familyId: authState.familyId });
+      persistAuthState({
+        requestId: authState.requestId,
+        familyId: authState.familyId,
+        updateToken: authState.updateToken,
+      });
     }
     setStep(resolveContactStepForSource(source));
   };

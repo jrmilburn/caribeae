@@ -4,10 +4,15 @@ import { auth, clerkClient, currentUser } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
 import { findEligibleFamilyForUser } from "@/server/auth/resolveFamily";
+import { findPendingOnboardingRequestForUser } from "@/server/onboarding/pendingAccess";
 
 export type FamilyAccessResult =
   | { status: "SIGNED_OUT" }
   | { status: "NO_MATCH" }
+  | {
+      status: "PENDING_APPROVAL";
+      onboarding: { requestId: string; guardianName: string; familyName: string; submittedAt: Date };
+    }
   | { status: "OK"; family: { id: string; name: string } };
 
 export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
@@ -31,25 +36,38 @@ export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
   const clerkUser = await currentUser();
   const family = await findEligibleFamilyForUser(clerkUser);
 
-  if (!family) {
-    if (sessionId) {
-      await sessions.revokeSession(sessionId).catch(() => null);
+  if (family) {
+    try {
+      await prisma.user.upsert({
+        where: { clerkId: userId },
+        create: { clerkId: userId, familyId: family.id },
+        update: { familyId: family.id },
+      });
+    } catch {
+      if (sessionId) {
+        await sessions.revokeSession(sessionId).catch(() => null);
+      }
+      return { status: "NO_MATCH" };
     }
-    return { status: "NO_MATCH" };
+
+    return { status: "OK", family };
   }
 
-  try {
-    await prisma.user.upsert({
-      where: { clerkId: userId },
-      create: { clerkId: userId, familyId: family.id },
-      update: { familyId: family.id },
-    });
-  } catch (error) {
-    if (sessionId) {
-      await sessions.revokeSession(sessionId).catch(() => null);
-    }
-    return { status: "NO_MATCH" };
+  const pendingRequest = await findPendingOnboardingRequestForUser(clerkUser);
+  if (pendingRequest) {
+    return {
+      status: "PENDING_APPROVAL",
+      onboarding: {
+        requestId: pendingRequest.id,
+        guardianName: pendingRequest.guardianName,
+        familyName: pendingRequest.familyName,
+        submittedAt: pendingRequest.createdAt,
+      },
+    };
   }
 
-  return { status: "OK", family };
+  if (sessionId) {
+    await sessions.revokeSession(sessionId).catch(() => null);
+  }
+  return { status: "NO_MATCH" };
 }

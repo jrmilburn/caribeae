@@ -21,7 +21,11 @@ function isActivePath(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export function PortalTopBar() {
+export function PortalTopBar({
+  items = NAV_ITEMS,
+}: {
+  items?: Array<{ href: string; label: string }>;
+}) {
   const pathname = usePathname();
   const { signOut } = useClerk();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -54,7 +58,7 @@ export function PortalTopBar() {
             </Link>
 
             <nav className="hidden sm:flex sm:space-x-8" aria-label="Portal">
-              {NAV_ITEMS.map((item) => {
+              {items.map((item) => {
                 const active = isActivePath(pathname, item.href);
                 return (
                   <Link
@@ -105,7 +109,7 @@ export function PortalTopBar() {
       {mobileOpen ? (
         <div id="portal-mobile-nav" className="border-t border-gray-200 bg-white sm:hidden">
           <div className="space-y-1 px-2 py-3">
-            {NAV_ITEMS.map((item) => {
+            {items.map((item) => {
               const active = isActivePath(pathname, item.href);
               return (
                 <Link

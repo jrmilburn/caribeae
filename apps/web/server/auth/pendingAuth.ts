@@ -7,7 +7,8 @@ import { getRedis } from "@/server/security/redis";
 const PENDING_AUTH_TTL_MS = 15 * 60 * 1000;
 
 type PendingAuth = {
-  familyId: string;
+  familyId?: string | null;
+  onboardingRequestId?: string | null;
   identifier: string;
   type: IdentifierType;
   flow: "signIn" | "signUp";

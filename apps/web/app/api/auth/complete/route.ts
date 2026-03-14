@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeEmail, normalizePhone } from "@/lib/auth/identity";
 import { consumePendingAuth } from "@/server/auth/pendingAuth";
 import { findEligibleFamilyForUser } from "@/server/auth/resolveFamily";
+import { findPendingOnboardingRequestForUser } from "@/server/onboarding/pendingAccess";
 
 export const runtime = "nodejs";
 
@@ -63,9 +64,10 @@ export async function POST() {
 
   const familyId = pending?.familyId ?? null;
   let resolvedFamilyId = familyId;
+  let pendingApproval = false;
+  let clerkUser = pending ? await currentUser() : null;
 
   if (pending) {
-    const clerkUser = await currentUser();
     if (!matchesPendingIdentifier(clerkUser, pending)) {
       if (sessionId) {
         await sessions.revokeSession(sessionId).catch(() => null);
@@ -77,12 +79,28 @@ export async function POST() {
   }
 
   if (!resolvedFamilyId) {
-    const clerkUser = await currentUser();
+    clerkUser = clerkUser ?? (await currentUser());
     const family = await findEligibleFamilyForUser(clerkUser);
     resolvedFamilyId = family?.id ?? null;
   }
 
-  if (!resolvedFamilyId) {
+  if (!resolvedFamilyId && pending?.onboardingRequestId) {
+    const matchedRequest = await prisma.onboardingRequest.findFirst({
+      where: {
+        id: pending.onboardingRequestId,
+        status: "NEW",
+      },
+      select: { id: true },
+    });
+    pendingApproval = Boolean(matchedRequest);
+  }
+
+  if (!resolvedFamilyId && !pendingApproval) {
+    clerkUser = clerkUser ?? (await currentUser());
+    pendingApproval = Boolean(await findPendingOnboardingRequestForUser(clerkUser));
+  }
+
+  if (!resolvedFamilyId && !pendingApproval) {
     if (sessionId) {
       await sessions.revokeSession(sessionId).catch(() => null);
     }
@@ -94,10 +112,10 @@ export async function POST() {
   try {
     await prisma.user.upsert({
       where: { clerkId: userId },
-      create: { clerkId: userId, familyId: resolvedFamilyId },
-      update: { familyId: resolvedFamilyId },
+      create: resolvedFamilyId ? { clerkId: userId, familyId: resolvedFamilyId } : { clerkId: userId },
+      update: resolvedFamilyId ? { familyId: resolvedFamilyId } : {},
     });
-  } catch (error) {
+  } catch {
     if (sessionId) {
       await sessions.revokeSession(sessionId).catch(() => null);
     }
