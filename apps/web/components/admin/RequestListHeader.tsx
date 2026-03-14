@@ -18,8 +18,8 @@ type RequestListHeaderProps = {
   title: string;
   totalCount: number;
   searchPlaceholder: string;
-  filterValue: string;
-  filterOptions: readonly FilterOption[];
+  filterValue?: string;
+  filterOptions?: readonly FilterOption[];
   allFilterValue?: string;
   filterParam?: string;
   filterWidthClassName?: string;
@@ -121,31 +121,33 @@ export function RequestListHeader({
           ) : null}
         </div>
 
-        <Select
-          value={filterValue}
-          onValueChange={(value) => {
-            const params = new URLSearchParams(searchParams.toString());
-            if (value === allFilterValue) {
-              params.delete(filterParam);
-            } else {
-              params.set(filterParam, value);
-            }
-            params.delete("cursor");
-            params.delete("cursors");
-            replaceWithParams(params);
-          }}
-        >
-          <SelectTrigger className={cn("h-9 w-[160px]", filterWidthClassName)}>
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {filterOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {filterValue && filterOptions?.length ? (
+          <Select
+            value={filterValue}
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams.toString());
+              if (value === allFilterValue) {
+                params.delete(filterParam);
+              } else {
+                params.set(filterParam, value);
+              }
+              params.delete("cursor");
+              params.delete("cursors");
+              replaceWithParams(params);
+            }}
+          >
+            <SelectTrigger className={cn("h-9 w-[160px]", filterWidthClassName)}>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {filterOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
       </div>
     </div>
   );

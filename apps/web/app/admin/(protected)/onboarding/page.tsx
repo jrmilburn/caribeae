@@ -16,8 +16,13 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function parseStatus(value: string | undefined) {
-  if (value === "NEW" || value === "ACCEPTED" || value === "DECLINED") return value;
+function parseView(value: string | undefined) {
+  if (value === "reviewed") return "reviewed" as const;
+  return "pending" as const;
+}
+
+function parseReviewedStatus(value: string | undefined) {
+  if (value === "ACCEPTED" || value === "DECLINED") return value;
   return null;
 }
 
@@ -25,7 +30,14 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
   const resolved = await searchParams;
   const params = resolved ?? {};
   const { q, cursor, pageSize } = parsePaginationSearchParams(params);
-  const status = parseStatus(first(params.status));
+  const view = parseView(first(params.view));
+  const reviewedStatus = view === "reviewed" ? parseReviewedStatus(first(params.status)) : null;
+  const statuses =
+    view === "reviewed"
+      ? reviewedStatus
+        ? [reviewedStatus]
+        : (["ACCEPTED", "DECLINED"] as const)
+      : (["NEW"] as const);
 
   const [requests, levels, enrolmentPlans] = await Promise.all([
     listOnboardingRequests({
@@ -33,7 +45,7 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
       cursor,
       filters: {
         q,
-        status,
+        statuses: [...statuses],
       },
     }),
     prisma.level.findMany({ orderBy: { levelOrder: "asc" } }),
@@ -49,7 +61,10 @@ export default async function OnboardingAdminPage({ searchParams }: PageProps) {
       totalCount={requests.totalCount}
       nextCursor={requests.nextCursor}
       pageSize={pageSize}
-      statusFilter={status}
+      view={view}
+      reviewedStatusFilter={reviewedStatus}
+      pendingCount={requests.tabCounts.pending}
+      reviewedCount={requests.tabCounts.reviewed}
       levels={levels}
       enrolmentPlans={enrolmentPlans}
     />

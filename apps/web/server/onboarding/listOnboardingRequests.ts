@@ -23,8 +23,10 @@ export type OnboardingRequestSummary = {
   familyId: string | null;
 };
 
+export type OnboardingRequestStatus = OnboardingRequestSummary["status"];
+
 export type OnboardingRequestFilters = {
-  status?: "NEW" | "ACCEPTED" | "DECLINED" | null;
+  statuses?: OnboardingRequestStatus[] | null;
   q?: string | null;
 };
 
@@ -32,7 +34,12 @@ export async function listOnboardingRequests(args?: {
   pageSize?: number;
   cursor?: string | null;
   filters?: OnboardingRequestFilters;
-}): Promise<{ items: OnboardingRequestSummary[]; totalCount: number; nextCursor: string | null }> {
+}): Promise<{
+  items: OnboardingRequestSummary[];
+  totalCount: number;
+  nextCursor: string | null;
+  tabCounts: { pending: number; reviewed: number };
+}> {
   noStore();
 
   await getOrCreateUser();
@@ -42,22 +49,33 @@ export async function listOnboardingRequests(args?: {
   const cursor = args?.cursor ?? null;
   const filters = args?.filters;
 
+  const searchWhere: Prisma.OnboardingRequestWhereInput = {};
   const where: Prisma.OnboardingRequestWhereInput = {};
-  if (filters?.status) {
-    where.status = filters.status;
-  }
   if (filters?.q) {
-    where.OR = [
+    searchWhere.OR = [
       { guardianName: { contains: filters.q, mode: "insensitive" } },
       { email: { contains: filters.q, mode: "insensitive" } },
       { phone: { contains: filters.q, mode: "insensitive" } },
     ];
   }
+  Object.assign(where, searchWhere);
+  if (filters?.statuses?.length === 1) {
+    where.status = filters.statuses[0];
+  } else if (filters?.statuses?.length) {
+    where.status = { in: filters.statuses };
+  }
 
-  const [items, totalCount] = await Promise.all([
+  const reviewedStatuses: OnboardingRequestStatus[] = ["ACCEPTED", "DECLINED"];
+  const reviewedOnly =
+    Boolean(filters?.statuses?.length) && filters?.statuses?.every((status) => status !== "NEW");
+  const orderBy: Prisma.OnboardingRequestOrderByWithRelationInput[] = reviewedOnly
+    ? [{ reviewedAt: "desc" }, { createdAt: "desc" }]
+    : [{ createdAt: "desc" }];
+
+  const [items, totalCount, pendingCount, reviewedCount] = await Promise.all([
     prisma.onboardingRequest.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       take: pageSize + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
@@ -77,6 +95,18 @@ export async function listOnboardingRequests(args?: {
       },
     }),
     prisma.onboardingRequest.count({ where }),
+    prisma.onboardingRequest.count({
+      where: {
+        ...searchWhere,
+        status: "NEW",
+      },
+    }),
+    prisma.onboardingRequest.count({
+      where: {
+        ...searchWhere,
+        status: { in: reviewedStatuses },
+      },
+    }),
   ]);
 
   const hasNext = items.length > pageSize;
@@ -101,5 +131,9 @@ export async function listOnboardingRequests(args?: {
     })),
     totalCount,
     nextCursor,
+    tabCounts: {
+      pending: pendingCount,
+      reviewed: reviewedCount,
+    },
   };
 }

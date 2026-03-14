@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { ClipboardList } from "lucide-react";
 import { toast } from "sonner";
@@ -56,11 +56,12 @@ import type { OnboardingFamilyMatch } from "@/server/onboarding/findMatchingFami
 const studentsSchema = z.array(onboardingStudentSchema);
 
 const statusOptions = [
-  { value: "all", label: "All" },
-  { value: "NEW", label: "New" },
+  { value: "all", label: "All reviewed" },
   { value: "ACCEPTED", label: "Accepted" },
   { value: "DECLINED", label: "Declined" },
 ] as const;
+
+type OnboardingListView = "pending" | "reviewed";
 
 type OnboardingRequest = Omit<OnboardingRequestSummary, "students" | "availability"> & {
   students: OnboardingStudentInput[];
@@ -727,7 +728,10 @@ export function OnboardingReviewClient({
   totalCount,
   nextCursor,
   pageSize,
-  statusFilter,
+  view,
+  reviewedStatusFilter,
+  pendingCount,
+  reviewedCount,
   levels,
   enrolmentPlans,
 }: {
@@ -735,13 +739,18 @@ export function OnboardingReviewClient({
   totalCount: number;
   nextCursor: string | null;
   pageSize: number;
-  statusFilter: "NEW" | "ACCEPTED" | "DECLINED" | null;
+  view: OnboardingListView;
+  reviewedStatusFilter: "ACCEPTED" | "DECLINED" | null;
+  pendingCount: number;
+  reviewedCount: number;
   levels: Level[];
   enrolmentPlans: (EnrolmentPlan & { level: Level })[];
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [acceptOpen, setAcceptOpen] = React.useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const parsedRequests = React.useMemo(() => {
     return requests.map((request) => ({
@@ -752,6 +761,38 @@ export function OnboardingReviewClient({
   }, [requests]);
 
   const selected = parsedRequests.find((request) => request.id === selectedId) ?? null;
+
+  const replaceWithParams = React.useCallback(
+    (params: URLSearchParams) => {
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [pathname, router]
+  );
+
+  const handleViewChange = React.useCallback(
+    (nextValue: string) => {
+      const nextView: OnboardingListView = nextValue === "reviewed" ? "reviewed" : "pending";
+      const params = new URLSearchParams(searchParams.toString());
+
+      if (nextView === "reviewed") {
+        params.set("view", "reviewed");
+        if (params.get("status") === "NEW") {
+          params.delete("status");
+        }
+      } else {
+        params.delete("view");
+        params.delete("status");
+      }
+
+      params.delete("cursor");
+      params.delete("cursors");
+      setSelectedId(null);
+      setAcceptOpen(false);
+      replaceWithParams(params);
+    },
+    [replaceWithParams, searchParams]
+  );
 
   const handleDecline = async (request: OnboardingRequest) => {
     const ok = window.confirm("Decline this onboarding request?");
@@ -777,11 +818,32 @@ export function OnboardingReviewClient({
         title="Onboarding requests"
         totalCount={totalCount}
         searchPlaceholder="Search by guardian, phone, or email..."
-        filterValue={statusFilter ?? "all"}
-        filterOptions={statusOptions}
+        filterValue={view === "reviewed" ? reviewedStatusFilter ?? "all" : undefined}
+        filterOptions={view === "reviewed" ? statusOptions : undefined}
         allFilterValue="all"
         filterWidthClassName="w-[150px]"
       />
+
+      <div className="border-b bg-background/95 px-4 py-3">
+        <div className="mx-auto w-full max-w-7xl">
+          <Tabs value={view} onValueChange={handleViewChange} className="gap-0">
+            <TabsList className="h-auto w-fit justify-start rounded-lg bg-muted/60 p-1">
+              <TabsTrigger
+                value="pending"
+                className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Needs review ({pendingCount})
+              </TabsTrigger>
+              <TabsTrigger
+                value="reviewed"
+                className="h-9 px-4 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Reviewed ({reviewedCount})
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -791,9 +853,13 @@ export function OnboardingReviewClient({
                 <div className="mb-4 flex size-12 items-center justify-center rounded-full border bg-background shadow-sm">
                   <ClipboardList className="size-5 text-muted-foreground" />
                 </div>
-                <h3 className="text-base font-semibold text-foreground">No onboarding requests yet</h3>
+                <h3 className="text-base font-semibold text-foreground">
+                  {view === "reviewed" ? "No reviewed onboarding requests" : "No onboarding requests waiting for review"}
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  New family applications will appear here once submitted.
+                  {view === "reviewed"
+                    ? "Accepted and declined requests will appear here after they have been reviewed."
+                    : "New family applications will appear here once submitted."}
                 </p>
               </div>
             </div>
@@ -814,7 +880,11 @@ export function OnboardingReviewClient({
                         <h3 className="truncate text-sm font-semibold text-foreground">{request.guardianName}</h3>
                         <Badge variant={statusBadge(request.status)}>{request.status}</Badge>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{format(request.createdAt, "d MMM yyyy, h:mm a")}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {view === "reviewed" && request.reviewedAt
+                          ? `Reviewed ${format(request.reviewedAt, "d MMM yyyy, h:mm a")}`
+                          : `Submitted ${format(request.createdAt, "d MMM yyyy, h:mm a")}`}
+                      </p>
                       <p className="mt-1 truncate text-sm text-muted-foreground">
                         {formatPhone(request.phone)} · {request.email ?? "—"}
                       </p>
@@ -857,7 +927,9 @@ export function OnboardingReviewClient({
               <SheetHeader>
                 <SheetTitle>{selected.guardianName}</SheetTitle>
                 <SheetDescription>
-                  Submitted {format(selected.createdAt, "d MMM yyyy, h:mm a")}
+                  {selected.reviewedAt
+                    ? `Reviewed ${format(selected.reviewedAt, "d MMM yyyy, h:mm a")}`
+                    : `Submitted ${format(selected.createdAt, "d MMM yyyy, h:mm a")}`}
                 </SheetDescription>
               </SheetHeader>
 
