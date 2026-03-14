@@ -25,7 +25,6 @@ import { useClerk, useUser } from "@clerk/nextjs";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { BackButton } from "@/components/navigation/BackButton";
 import {
   Sheet,
   SheetContent,
@@ -46,6 +45,7 @@ type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  attentionKey?: keyof AdminNavbarAttention;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -54,19 +54,25 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Families", href: "/admin/family", icon: Users },
   { label: "Classes", href: "/admin/class", icon: BookOpen },
 
-  { label: "Messages", href: "/admin/messages", icon: Inbox },
-  { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
-  { label: "Waitlist", href: "/admin/waitlist", icon: Clock },
+  { label: "Messages", href: "/admin/messages", icon: Inbox, attentionKey: "messages" },
+  { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList, attentionKey: "onboarding" },
+  { label: "Waitlist", href: "/admin/waitlist", icon: Clock, attentionKey: "waitlist" },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
+export type AdminNavbarAttention = {
+  onboarding?: boolean;
+  messages?: boolean;
+  waitlist?: boolean;
+};
 
 type AppNavbarProps = {
   children?: React.ReactNode;
   brandName?: string;
+  attention?: AdminNavbarAttention;
 };
 
-export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) {
+export function AppNavbar({ children, brandName = "Caribeae", attention }: AppNavbarProps) {
   const pathname = usePathname();
 
   return (
@@ -86,7 +92,7 @@ export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) 
           <nav className="relative flex flex-1 flex-col">
             <ul role="list" className="flex flex-1 flex-col gap-y-6">
               <li>
-                <SidebarNav pathname={pathname} />
+                <SidebarNav attention={attention} pathname={pathname} />
               </li>
               <li className="-mx-2 mt-auto pt-2">
                 <div className="px-2">
@@ -101,7 +107,7 @@ export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-end border-b border-border bg-background/80 px-3 backdrop-blur md:hidden">
           <div className="mr-auto md:hidden">
-            <MobileNavSheet brandName={brandName} pathname={pathname} />
+            <MobileNavSheet attention={attention} brandName={brandName} pathname={pathname} />
           </div>
 
           <AccountMenu />
@@ -118,9 +124,11 @@ export function AppNavbar({ children, brandName = "Caribeae" }: AppNavbarProps) 
 }
 
 function SidebarNav({
+  attention,
   pathname,
   className,
 }: {
+  attention?: AdminNavbarAttention;
   pathname: string;
   className?: string;
 }) {
@@ -129,6 +137,7 @@ function SidebarNav({
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
+        const showAttention = item.attentionKey ? attention?.[item.attentionKey] : false;
 
         return (
           <li key={item.href}>
@@ -148,6 +157,12 @@ function SidebarNav({
                 )}
               />
               <span className="truncate">{item.label}</span>
+              {showAttention ? (
+                <>
+                  <span className="ml-auto size-2.5 shrink-0 rounded-full bg-rose-500" aria-hidden="true" />
+                  <span className="sr-only">{item.label} has new items requiring attention</span>
+                </>
+              ) : null}
             </Link>
           </li>
         );
@@ -157,9 +172,11 @@ function SidebarNav({
 }
 
 function MobileNavSheet({
+  attention,
   brandName,
   pathname,
 }: {
+  attention?: AdminNavbarAttention;
   brandName: string;
   pathname: string;
 }) {
@@ -190,7 +207,7 @@ function MobileNavSheet({
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 py-4">
-            <SidebarNav pathname={pathname} />
+            <SidebarNav attention={attention} pathname={pathname} />
           </nav>
 
           <div className="border-t border-border p-3">

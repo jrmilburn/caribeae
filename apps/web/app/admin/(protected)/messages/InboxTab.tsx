@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { InboxConversation, ConversationMessage } from "@/server/messages/actions";
 import { loadConversation, sendToConversation, linkConversationToFamily } from "@/server/messages/actions";
+import { useRouter } from "next/navigation";
 
 import { PendingLabelSwap } from "@/components/loading/LoadingSystem";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ type InboxTabProps = {
 };
 
 export function InboxTab({ conversations, families }: InboxTabProps) {
+  const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [activeId, setActiveId] = React.useState<string | null>(conversations[0]?.id ?? null);
 
@@ -33,6 +35,12 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
 
   const [selectedFamily, setSelectedFamily] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+
+  const refreshAdminChrome = React.useCallback((clearedUnread: boolean) => {
+    if (clearedUnread) {
+      router.refresh();
+    }
+  }, [router]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -66,13 +74,14 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
     startLoading(async () => {
       try {
         const data = await loadConversation(activeId);
-        setMessages(data);
+        setMessages(data.messages);
+        refreshAdminChrome(data.clearedUnread);
       } catch {
         // Silent fail; you can add toast if you want
         setMessages([]);
       }
     });
-  }, [activeId]);
+  }, [activeId, refreshAdminChrome]);
 
   const handleSend = () => {
     if (!activeId) return;
@@ -114,7 +123,8 @@ export function InboxTab({ conversations, families }: InboxTabProps) {
 
       // Refresh to get real provider status + message id
       const updated = await loadConversation(activeId);
-      setMessages(updated);
+      setMessages(updated.messages);
+      refreshAdminChrome(updated.clearedUnread);
     });
   };
 

@@ -6,13 +6,15 @@ import { AppNavbar } from "@/components/navbar/navbar";
 import { AppFooter } from "./footer";
 import { SettingsShell } from "./settings/SettingsShell";
 import { ensureAdminAccess } from "@/server/admin/ensureAdminAccess";
+import { getAdminNavAttention } from "@/server/admin/getAdminNavAttention";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   await ensureAdminAccess();
+  const attention = await getAdminNavAttention();
 
   return (
     <Suspense fallback={<PageLoading label="Loading admin workspace" />}>
-      <AppNavbar>
+      <AppNavbar attention={attention}>
         <div className="flex h-full min-h-0 flex-col">
           <main className="min-h-0 flex-1 overflow-y-auto">
             <SettingsShell>{children}</SettingsShell>

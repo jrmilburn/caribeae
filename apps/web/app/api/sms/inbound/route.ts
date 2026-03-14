@@ -60,30 +60,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const family = await findFamilyByPhone(from);
-  const conversation = await prisma.conversation.upsert({
-    where: { phoneNumber: from },
-    update: { ...(family?.id ? { familyId: family.id } : {}), updatedAt: new Date() },
-    create: { phoneNumber: from, familyId: family?.id ?? null },
-  });
-
   const createdAt = new Date();
   const monthKey = getBrisbaneMonthKey(createdAt);
-  const created = await prisma.message.create({
-    data: {
-      direction: "INBOUND",
-      channel: "SMS",
-      body,
-      fromNumber: from,
-      toNumber: to,
-      providerSid: messageSid,
-      conversationId: conversation.id,
-      familyId: conversation.familyId,
-      status: "DELIVERED",
-      createdAt,
-      unitCost: INBOUND_SMS_UNIT_COST,
-      monthKey,
-    },
+  const family = await findFamilyByPhone(from);
+  const { conversation, created } = await prisma.$transaction(async (tx) => {
+    const conversation = await tx.conversation.upsert({
+      where: { phoneNumber: from },
+      update: {
+        ...(family?.id ? { familyId: family.id } : {}),
+        hasUnreadMessages: true,
+        updatedAt: createdAt,
+      },
+      create: {
+        phoneNumber: from,
+        familyId: family?.id ?? null,
+        hasUnreadMessages: true,
+        updatedAt: createdAt,
+      },
+    });
+
+    const created = await tx.message.create({
+      data: {
+        direction: "INBOUND",
+        channel: "SMS",
+        body,
+        fromNumber: from,
+        toNumber: to,
+        providerSid: messageSid,
+        conversationId: conversation.id,
+        familyId: conversation.familyId,
+        status: "DELIVERED",
+        createdAt,
+        unitCost: INBOUND_SMS_UNIT_COST,
+        monthKey,
+      },
+    });
+
+    return { conversation, created };
   });
 
   await supaServer.channel(convoTopic(conversation.id)).send({

@@ -65,24 +65,42 @@ export type ConversationMessage = {
   errorMessage?: string | null;
 };
 
-export async function loadConversation(conversationId: string): Promise<ConversationMessage[]> {
+export async function loadConversation(conversationId: string): Promise<{
+  messages: ConversationMessage[];
+  clearedUnread: boolean;
+}> {
   await requireAdmin();
-  const rows = await prisma.message.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: "asc" },
-    take: 500,
-  });
-  return rows.map((m) => ({
-    id: m.id,
-    createdAt: m.createdAt.toISOString(),
-    direction: m.direction,
-    body: m.body,
-    channel: m.channel,
-    from: m.fromNumber ?? m.fromEmail ?? null,
-    to: m.toNumber ?? m.toEmail ?? null,
-    status: m.status,
-    errorMessage: m.errorMessage,
-  }));
+  const [rows, updated] = await prisma.$transaction([
+    prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
+      take: 500,
+    }),
+    prisma.conversation.updateMany({
+      where: {
+        id: conversationId,
+        hasUnreadMessages: true,
+      },
+      data: {
+        hasUnreadMessages: false,
+      },
+    }),
+  ]);
+
+  return {
+    messages: rows.map((m) => ({
+      id: m.id,
+      createdAt: m.createdAt.toISOString(),
+      direction: m.direction,
+      body: m.body,
+      channel: m.channel,
+      from: m.fromNumber ?? m.fromEmail ?? null,
+      to: m.toNumber ?? m.toEmail ?? null,
+      status: m.status,
+      errorMessage: m.errorMessage,
+    })),
+    clearedUnread: updated.count > 0,
+  };
 }
 
 export async function linkConversationToFamily(conversationId: string, familyId: string) {
@@ -147,7 +165,7 @@ export async function sendToConversation({
   });
   await prisma.conversation.update({
     where: { id: conversation.id },
-    data: { updatedAt: new Date() },
+    data: { hasUnreadMessages: false, updatedAt: new Date() },
   });
 
   try {
