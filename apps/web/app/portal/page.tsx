@@ -15,7 +15,7 @@ export default async function PortalPage() {
   }
 
   if (access.status === "PENDING_APPROVAL") {
-    return <PortalPendingApproval onboarding={access.onboarding} />;
+    return <PortalPendingApproval />;
   }
 
   if (access.status !== "OK") {
