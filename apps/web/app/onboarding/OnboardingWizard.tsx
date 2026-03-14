@@ -55,7 +55,6 @@ Manual test checklist:
 - Warning: Clerk development instances cap Clerk-delivered OTP email/SMS volume, so prefer test mode identifiers for QA.
 */
 
-type LevelOption = { id: string; name: string };
 type StudentExperience = (typeof studentExperienceOptions)[number];
 
 type ContactState = z.infer<typeof onboardingContactSchema>;
@@ -111,7 +110,6 @@ const defaultContact: ContactState = {
 const defaultAvailability: AvailabilityState = {
   preferredDays: [],
   preferredWindows: [],
-  desiredLevelId: null,
   notes: "",
 };
 
@@ -153,7 +151,7 @@ function getMissingClerkFields(signUpAttempt: { missingFields?: string[] | null 
   return Array.from(new Set((signUpAttempt.missingFields ?? []).filter(Boolean)));
 }
 
-export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
+export function OnboardingWizard() {
   const router = useRouter();
   const { signOut } = useClerk();
   const { isLoaded: signInLoaded, signIn, setActive: setActiveSignIn } = useSignIn();
@@ -867,7 +865,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
   }
 
   const selection = selectIdentifier();
-  const maskedSelection = selection ? maskIdentifier(selection.value, selection.type) : "";
+  const selectionDisplay = selection ? selection.value : "";
   const finishLabel = selection ? "Confirm & send code" : "Submit request";
 
   const isBusy = submitting || isStartingOtp || isVerifying;
@@ -1246,28 +1244,6 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
             </div>
 
             <div className="grid gap-2">
-              <Label>Desired level (optional)</Label>
-              <Select
-                value={availability.desiredLevelId ?? "none"}
-                onValueChange={(value) =>
-                  setAvailability((prev) => ({ ...prev, desiredLevelId: value || null }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="No preference" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No preference</SelectItem>
-                  {levels.map((level) => (
-                    <SelectItem key={level.id} value={level.id}>
-                      {level.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-2">
               <Label htmlFor="availability-notes">Constraints or notes (optional)</Label>
               <Textarea
                 id="availability-notes"
@@ -1329,12 +1305,6 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Availability</p>
               <p>Days: {formatList(availability.preferredDays)}</p>
               <p>Times: {formatList(availability.preferredWindows)}</p>
-              <p>
-                Desired level:{" "}
-                {availability.desiredLevelId
-                  ? levels.find((level) => level.id === availability.desiredLevelId)?.name ?? "—"
-                  : "No preference"}
-              </p>
               {availability.notes ? <p className="text-muted-foreground">{availability.notes}</p> : null}
             </div>
 
@@ -1350,7 +1320,7 @@ export function OnboardingWizard({ levels }: { levels: LevelOption[] }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p>
                     We&apos;ll send a 6-digit code to{" "}
-                    <span className="font-medium text-foreground">{maskedSelection}</span>.
+                    <span className="font-medium text-foreground">{selectionDisplay}</span>.
                   </p>
                   <button
                     type="button"

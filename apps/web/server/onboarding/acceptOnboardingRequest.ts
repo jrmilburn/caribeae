@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateUser } from "@/lib/getOrCreateUser";
 import { requireAdmin } from "@/lib/requireAdmin";
-import { onboardingRequestSchema } from "@/lib/onboarding/schema";
+import { storedOnboardingRequestSchema } from "@/lib/onboarding/schema";
 import { createEnrolmentsFromSelection } from "@/server/enrolment/createEnrolmentsFromSelection";
 import { resolveFamilyName } from "@/server/onboarding/resolveFamilyName";
 
@@ -49,7 +49,7 @@ export async function acceptOnboardingRequest(input: z.infer<typeof acceptSchema
     return { ok: false, error: "This request has already been accepted." } as const;
   }
 
-  const parsed = onboardingRequestSchema.parse({
+  const parsed = storedOnboardingRequestSchema.parse({
     contact: {
       guardianName: request.guardianName,
       phone: request.phone ?? "",

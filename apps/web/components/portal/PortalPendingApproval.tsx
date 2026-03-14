@@ -5,7 +5,6 @@ import { formatBrisbaneDate } from "@/lib/dates/formatBrisbaneDate";
 
 type PortalPendingApprovalProps = {
   onboarding: {
-    requestId: string;
     guardianName: string;
     familyName: string;
     submittedAt: Date;
@@ -26,9 +25,6 @@ export function PortalPendingApproval({ onboarding }: PortalPendingApprovalProps
           <p className="mt-2 max-w-3xl text-sm text-gray-600">
             You&apos;re signed in successfully, but the Caribeae team still needs to review and accept your onboarding
             request before your family account can be activated.
-          </p>
-          <p className="mt-2 text-xs font-medium uppercase tracking-[0.24em] text-gray-500">
-            Request {onboarding.requestId}
           </p>
         </div>
 

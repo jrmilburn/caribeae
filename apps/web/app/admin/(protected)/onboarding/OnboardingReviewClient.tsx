@@ -30,9 +30,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { runMutationWithToast } from "@/lib/toast/mutationToast";
 import {
-  onboardingAvailabilitySchema,
+  storedOnboardingAvailabilitySchema,
   onboardingStudentSchema,
-  type OnboardingAvailabilityInput,
+  type StoredOnboardingAvailabilityInput,
   type OnboardingStudentInput,
 } from "@/lib/onboarding/schema";
 import { findMatchingFamilies } from "@/server/onboarding/findMatchingFamilies";
@@ -65,7 +65,7 @@ type OnboardingListView = "pending" | "reviewed";
 
 type OnboardingRequest = Omit<OnboardingRequestSummary, "students" | "availability"> & {
   students: OnboardingStudentInput[];
-  availability: OnboardingAvailabilityInput | null;
+  availability: StoredOnboardingAvailabilityInput | null;
 };
 
 type AssignmentState = {
@@ -86,8 +86,8 @@ function parseStudents(value: unknown): OnboardingStudentInput[] {
   return parsed.success ? parsed.data : [];
 }
 
-function parseAvailability(value: unknown): OnboardingAvailabilityInput | null {
-  const parsed = onboardingAvailabilitySchema.safeParse(value);
+function parseAvailability(value: unknown): StoredOnboardingAvailabilityInput | null {
+  const parsed = storedOnboardingAvailabilitySchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
@@ -466,11 +466,10 @@ function AcceptOnboardingDialog({
   React.useEffect(() => {
     if (!open) return;
     setMode("later");
-    const defaultLevelId = request.availability?.desiredLevelId ?? null;
     setAssignments(
       request.students.map((_, index) => ({
         studentIndex: index,
-        levelId: defaultLevelId,
+        levelId: null,
         planId: "",
         templateIds: [],
         startDate: scheduleDateKey(new Date()),
@@ -478,7 +477,7 @@ function AcceptOnboardingDialog({
         startDateTouched: false,
       }))
     );
-  }, [open, request.availability, request.students]);
+  }, [open, request.students]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -980,11 +979,6 @@ export function OnboardingReviewClient({
                     </p>
                     <p>
                       Time windows: {selected.availability?.preferredWindows?.join(", ") ?? "—"}
-                    </p>
-                    <p>
-                      Desired level: {selected.availability?.desiredLevelId
-                        ? levels.find((level) => level.id === selected.availability?.desiredLevelId)?.name ?? "—"
-                        : "No preference"}
                     </p>
                     {selected.availability?.notes ? (
                       <p className="text-xs text-muted-foreground">{selected.availability.notes}</p>

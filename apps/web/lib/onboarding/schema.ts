@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 export const availabilityDayOptions = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-export const availabilityWindowOptions = ["Morning", "Afternoon", "After school", "Evening"] as const;
+export const availabilityWindowOptions = ["Morning", "Afternoon"] as const;
+const storedAvailabilityWindowOptions = ["Morning", "Afternoon", "After school", "Evening"] as const;
 
 export const studentExperienceOptions = [
   "New to swimming",
@@ -35,7 +36,12 @@ export const onboardingStudentSchema = z.object({
 export const onboardingAvailabilitySchema = z.object({
   preferredDays: z.array(z.enum(availabilityDayOptions)).min(1, "Select at least one day."),
   preferredWindows: z.array(z.enum(availabilityWindowOptions)).min(1, "Select at least one time window."),
-  desiredLevelId: z.string().trim().optional().nullable(),
+  notes: z.string().trim().max(500).optional().nullable(),
+});
+
+export const storedOnboardingAvailabilitySchema = z.object({
+  preferredDays: z.array(z.enum(availabilityDayOptions)).min(1, "Select at least one day."),
+  preferredWindows: z.array(z.enum(storedAvailabilityWindowOptions)).min(1, "Select at least one time window."),
   notes: z.string().trim().max(500).optional().nullable(),
 });
 
@@ -75,6 +81,12 @@ export const onboardingRequestSchema = z.object({
   availability: onboardingAvailabilitySchema,
 });
 
+export const storedOnboardingRequestSchema = z.object({
+  contact: onboardingContactSchema,
+  students: z.array(onboardingStudentSchema).min(1, "Add at least one student."),
+  availability: storedOnboardingAvailabilitySchema,
+});
+
 export const publicOnboardingRequestSchema = onboardingRequestSchema.extend({
   honeypot: z.string().trim().optional().nullable(),
 });
@@ -83,3 +95,4 @@ export type OnboardingRequestInput = z.infer<typeof onboardingRequestSchema>;
 export type PublicOnboardingRequestInput = z.infer<typeof publicOnboardingRequestSchema>;
 export type OnboardingStudentInput = z.infer<typeof onboardingStudentSchema>;
 export type OnboardingAvailabilityInput = z.infer<typeof onboardingAvailabilitySchema>;
+export type StoredOnboardingAvailabilityInput = z.infer<typeof storedOnboardingAvailabilitySchema>;

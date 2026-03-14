@@ -11,7 +11,7 @@ export type FamilyAccessResult =
   | { status: "NO_MATCH" }
   | {
       status: "PENDING_APPROVAL";
-      onboarding: { requestId: string; guardianName: string; familyName: string; submittedAt: Date };
+      onboarding: { guardianName: string; familyName: string; submittedAt: Date };
     }
   | { status: "OK"; family: { id: string; name: string } };
 
@@ -58,7 +58,6 @@ export async function getFamilyForCurrentUser(): Promise<FamilyAccessResult> {
     return {
       status: "PENDING_APPROVAL",
       onboarding: {
-        requestId: pendingRequest.id,
         guardianName: pendingRequest.guardianName,
         familyName: pendingRequest.familyName,
         submittedAt: pendingRequest.createdAt,
