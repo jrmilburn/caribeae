@@ -61,9 +61,9 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export type AdminNavbarAttention = {
-  onboarding?: boolean;
-  messages?: boolean;
-  waitlist?: boolean;
+  onboarding?: number;
+  messages?: number;
+  waitlist?: number;
 };
 
 type AppNavbarProps = {
@@ -137,7 +137,7 @@ function SidebarNav({
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
-        const showAttention = item.attentionKey ? attention?.[item.attentionKey] : false;
+        const attentionCount = item.attentionKey ? attention?.[item.attentionKey] ?? 0 : 0;
 
         return (
           <li key={item.href}>
@@ -157,10 +157,17 @@ function SidebarNav({
                 )}
               />
               <span className="truncate">{item.label}</span>
-              {showAttention ? (
+              {attentionCount > 0 ? (
                 <>
-                  <span className="ml-auto size-2.5 shrink-0 rounded-full bg-rose-500" aria-hidden="true" />
-                  <span className="sr-only">{item.label} has new items requiring attention</span>
+                  <span
+                    className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-5 text-background"
+                    aria-hidden="true"
+                  >
+                    {attentionCount > 99 ? "99+" : attentionCount}
+                  </span>
+                  <span className="sr-only">
+                    {item.label} has {attentionCount} item{attentionCount === 1 ? "" : "s"} requiring attention
+                  </span>
                 </>
               ) : null}
             </Link>

@@ -5,9 +5,9 @@ import { unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export type AdminNavAttention = {
-  onboarding: boolean;
-  messages: boolean;
-  waitlist: boolean;
+  onboarding: number;
+  messages: number;
+  waitlist: number;
 };
 
 export async function getAdminNavAttention(): Promise<AdminNavAttention> {
@@ -26,8 +26,8 @@ export async function getAdminNavAttention(): Promise<AdminNavAttention> {
   ]);
 
   return {
-    onboarding: onboardingCount > 0,
-    messages: unreadConversationCount > 0,
-    waitlist: waitlistCount > 0,
+    onboarding: onboardingCount,
+    messages: unreadConversationCount,
+    waitlist: waitlistCount,
   };
 }
